@@ -22,11 +22,22 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/descriptions/phase2_supply_planning_brief.md` sections 1-3. Status:
   `active`.
 
-- 2026-08-22: Project status is discovery complete and build not started. The
-  repository structure in the engineering brief is proposed architecture, not
-  evidence of already implemented modules. Evidence:
+- 2026-08-22: Project status is discovery and KW34 value-level validation
+  complete; implementation has not started. The repository structure and
+  backlog describe proposed work, not already implemented modules. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` scope/status and section
-  9.3. Status: `active`.
+  9.3, `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+
+- 2026-08-22: The reference source is `Supply_Planning_Rewe.xlsx`, an Office
+  workbook stored in Google Drive with file ID
+  `1W0fwiO_mf7pQ6G0Oqmp6QE92MCljrXQ-`; it was modified 2026-08-21 and inspected
+  read-only on 2026-08-22. `Plan KW34` and `Stock KW34` are the first golden
+  reference, with KW33 needed for bridge demand. Connector validation exposed
+  displayed values rather than the formula AST, so the current evidence is
+  value-level until a raw-formula review or owner walkthrough occurs. Evidence:
+  `docs/descriptions/phase2_supply_planning_brief.md` scope and validation
+  conclusion, `docs/scratchpads/phase2_supply_planning_execution.md`. Status:
+  `active`.
 
 - 2026-08-22: The Phase 2 demand interface is daily and location-aware, with
   `location_id`, stable `dish_id`, `date`, `forecast_portions`, and optional
@@ -41,6 +52,27 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/descriptions/phase2_supply_planning_brief.md` sections 4 and 6. Status:
   `active`.
 
+- 2026-08-22: The KW34 legacy compatibility profile is now precisely
+  reconstructed at displayed-value level: buffered `Daily` is rounded to two
+  decimals; `Need = ceil(Daily × 6)`; the bridge uses **KW33** daily demand ×
+  `2.5` rounded to two decimals; `After` is rounded to one decimal; and
+  `Order = ceil(max(0, Need − After))`. This matches all 27 filled KW34 stocked
+  order cells and all 28 bridge values for continuing stocked items. Legacy
+  rounding must stay isolated from improved-engine precision. Evidence:
+  `docs/descriptions/phase2_supply_planning_brief.md` sections 4.2 and 5.9,
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
+
+- 2026-08-22: KW34 contains material data-quality/audit cases that golden tests
+  must preserve: four stocked rows have a positive gap and blank order cell;
+  `Paprika - big` and `Mischsalat` are in `Plan KW34` but absent from
+  `Stock KW34`; Creme Fraiche is planned with a 1,000 g pack but netted as 5,000
+  g; Schnittlauch appears with 250/500/1,000 g pack sizes; and multiple item/name
+  and storage-label variants exist. The blank/missing rows may have been handled
+  outside the sheet and must be called unexplained rather than proven missed
+  orders. Evidence: `docs/descriptions/phase2_supply_planning_brief.md` sections
+  4.3 and 5.2-5.7, `docs/scratchpads/phase2_supply_planning_execution.md`.
+  Status: `active`.
+
 - 2026-08-22: The current operating model is Monday-Saturday with delivery slots
   Saturday, Monday, Wednesday, and Friday. `Frisch` holds no stock and is planned
   from delivery to delivery; `TK`, `Kuehl`, and `RT` are stocked classes. These
@@ -49,19 +81,34 @@ not a task log or a replacement for the detailed engineering brief.
   4.3. Status: `active`.
 
 - 2026-08-22: The target planning horizon is item-specific lead time plus review
-  period. In-transit/open purchase orders must be included in projected
-  availability. The legacy six-day horizon and missing-delivery regression are
-  known critical defects, not behaviors to preserve in the target policy.
+  period, adjusted to actual supplier order/delivery calendars. Gross demand
+  through that protection period is an inventory-position target, not
+  automatically the new order quantity. Correct netting subtracts on-hand and
+  dated open POs once, then uses a daily projection to detect stockout before the
+  candidate receipt. The earlier target equation double-counted pre-arrival
+  demand and is superseded. It remains unknown whether planners duplicate orders
+  or track the pipeline outside the sheet and suppress visible cells manually.
   Evidence: `docs/descriptions/phase2_supply_planning_brief.md` sections 5.1,
   5.2, and 7. Status: `active`.
 
 - 2026-08-22: Deterministic yield loss and stochastic safety stock are separate
   concepts. The target design replaces the flat spreadsheet `x1.2` factor with
-  an empirically derived/clamped yield factor plus additive variance-based safety
-  stock and a policy floor. OOS-censored demand must be corrected before
-  estimating variance. Evidence:
+  an empirically derived/clamped yield factor plus additive safety stock. For
+  daily forecast-error sigma, statistical stock uses root-sum-of-squares across
+  the protection period with an explicit correlation assumption; do not divide
+  by the review period. OOS-censored demand must be corrected before production
+  calibration. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` sections 5.3, 7, and 8.
   Status: `active`.
+
+- 2026-08-22: Missing waste, OOS, forecast-error, receipt, and lot/expiry data do
+  not block file-based engine development. Fixture/scenario runs use explicit
+  policy placeholders/defaults and carry value provenance into every line.
+  Missing current stock, canonical pack/SKU, lead time, or open-PO visibility is
+  allowed only in non-operational modes and blocks operational approval. Missing
+  data is never silently converted to observed zero. Evidence:
+  `docs/descriptions/phase2_supply_planning_brief.md` sections 7-9,
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
 
 - 2026-08-22: The engine should be pure and deterministic: calculation functions
   have no database or filesystem access, policy is held in validated config, and
@@ -69,10 +116,12 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/descriptions/phase2_supply_planning_brief.md` sections 9.1-9.4. Status:
   `active`.
 
-- 2026-08-22: Target constraints are applied in this order: floor at zero,
-  shelf-life cap, max-cover cap, MOQ, and case-size rounding. Binding caps,
-  MOQ-inflated orders, unavoidable stockouts, and configuration gaps must be
-  visible exceptions with derivation data. Evidence:
+- 2026-08-22: Target constraints floor the raw need, compute shelf-life and
+  max-cover feasibility, cap the unrounded candidate, apply MOQ/case rounding,
+  and then **recheck hard caps**. If supplier rounding and a hard cap conflict,
+  the engine emits an infeasible-constraints exception instead of silently
+  violating a cap or supplier rule. Binding caps, unavoidable stockouts, and
+  config gaps remain visible with derivation/provenance. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` section 7. Status:
   `active`.
 
@@ -83,13 +132,37 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/descriptions/phase2_supply_planning_brief.md` sections 7 and 9. Status:
   `active`.
 
-- 2026-08-22: Delivery should proceed in milestones: first reproduce the legacy
-  KW34 logic as a golden baseline; then add lead-time-aware horizons, in-transit
-  netting, caps, MOQ/case rounding, and exceptions; then calibrate yield/safety
-  stock from SQL history; automate dispatch only after parallel validation; plug
-  in Phase 1 without changing the engine contract. Evidence:
-  `docs/descriptions/phase2_supply_planning_brief.md` section 11. Status:
-  `active`.
+- 2026-08-22: Planning must explicitly handle menu launches and
+  discontinuations. It requires a forward committed menu horizon longer than
+  the longest lead time, item-level last-order offsets and pipeline
+  cancellability, and exceptions for open POs arriving after final service.
+  Evidence: `docs/descriptions/phase2_supply_planning_brief.md` sections 7, 9.4,
+  and 10. Status: `active`.
+
+- 2026-08-22: The implementation architecture is script-first but not
+  throwaway: one Python application service wraps a pure engine; the CLI calls
+  it first, later FastAPI and React/Tailwind call the same use case. Start with
+  validated/versioned CSV/YAML adapters. Add Supabase Postgres only when real SQL
+  integration and durable multi-user config/run/approval storage begin; keep
+  file and database adapters behind the same schemas. Supabase project creation,
+  ownership, region, auth/RLS, retention, and credentials require human approval.
+  Evidence: `docs/descriptions/phase2_supply_planning_brief.md` section 9,
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+
+- 2026-08-22: Delivery order is locked unless a documented blocker changes it:
+  M0 evidence/contracts; M1 exact KW34 Python CLI; M2 improved file-driven engine
+  with labelled placeholders; M3 SQL and optional Supabase persistence; M4
+  backtest/shadow validation with real data; M5 FastAPI + React/Tailwind UI; M6
+  live Phase 1 and operations. Supplier/ERP dispatch is a separate final release
+  gate and remains disabled through the first UI. Evidence:
+  `docs/descriptions/phase2_supply_planning_brief.md` section 11,
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+
+- 2026-08-22: `docs/plans/phase2_supply_planning_master_backlog.md` is the
+  source-of-truth execution backlog; the topic scratchpad is
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Update both during
+  implementation and after meaningful decisions. Evidence: those files and
+  `AGENTS.md`. Status: `active`.
 
 ## Open high-impact questions
 
@@ -101,10 +174,16 @@ implementation assumptions:
 - What is the exact stock-count timestamp and why does the legacy sheet use a
   2.5-day bridge?
 - Are lead times item-specific or supplier-specific, and where are open purchase
-  orders stored?
+  orders stored? Does the planner currently track those orders outside the
+  visible workbook?
 - What constraints explain the differences between calculated and booked orders?
 - Is silo capacity binding, and does sealed or opened shelf life govern each
   item?
+- How many weeks ahead is the menu fixed and committed?
+- Which source systems/tables and read-only credentials will provide stock, open
+  POs, receipts, BOM, menu, sales, waste, and OOS?
+- Which Supabase project/region/owner and which user roles/auth policy should be
+  used when durable storage and the UI begin?
 
 Evidence for all questions:
 `docs/descriptions/phase2_supply_planning_brief.md` section 10. Status: `active`.
