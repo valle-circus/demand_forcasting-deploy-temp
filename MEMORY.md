@@ -141,12 +141,18 @@ not a task log or a replacement for the detailed engineering brief.
 
 - 2026-08-22: The implementation architecture is script-first but not
   throwaway: one Python application service wraps a pure engine; the CLI calls
-  it first, later FastAPI and React/Tailwind call the same use case. Start with
-  validated/versioned CSV/YAML adapters. Add Supabase Postgres only when real SQL
-  integration and durable multi-user config/run/approval storage begin; keep
-  file and database adapters behind the same schemas. Supabase project creation,
+  it first, later FastAPI and React/Tailwind call the same use case. The CLI and
+  CSV/YAML files are a **technical bootstrap interface** for approved fixtures,
+  deterministic tests, local development, initial import, recovery, and export;
+  they are not the intended configuration workflow for non-technical planners.
+  When the operational UI begins, approved Supabase Postgres tables become the
+  system of record for master data, policy versions, runs, proposals, and
+  approvals. Planners edit through React -> FastAPI, not by editing YAML, CSV,
+  or database tables directly. File and database adapters implement the same
+  validated schemas so the engine does not change, and operational mode must not
+  permit competing file/database authorities. Supabase project creation,
   ownership, region, auth/RLS, retention, and credentials require human approval.
-  Evidence: `docs/descriptions/phase2_supply_planning_brief.md` section 9,
+  Evidence: `docs/descriptions/phase2_supply_planning_brief.md` sections 9.1-9.7,
   `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
 
 - 2026-08-22: Delivery order is locked unless a documented blocker changes it:
@@ -157,6 +163,19 @@ not a task log or a replacement for the detailed engineering brief.
   gate and remains disabled through the first UI. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` section 11,
   `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+
+- 2026-08-24: Unanswered planning-process questions are treated as staged
+  promotion gates, not a global development blocker. Repository scaffolding,
+  typed contracts, the pure engine, CLI, synthetic scenario tests, and the
+  `legacy_kw34` displayed-value profile may start immediately with explicit
+  assumptions and provenance. Answers and real source access become mandatory
+  before the affected feature is accepted as business-correct, shadow-tested,
+  or used for operational approval. In particular, unknown current stock,
+  canonical SKU/pack, lead time/calendar, demand semantics, or open-PO pipeline
+  must never pass the operational-mode gate. Evidence:
+  `docs/plans/phase2_supply_planning_master_backlog.md` blocker interpretation
+  and business-question gate matrix; `docs/scratchpads/phase2_supply_planning_execution.md`.
+  Status: `active`.
 
 - 2026-08-22: `docs/plans/phase2_supply_planning_master_backlog.md` is the
   source-of-truth execution backlog; the topic scratchpad is

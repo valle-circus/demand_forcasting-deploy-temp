@@ -1,0 +1,296 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "title": "Build Now, Gate Later",
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# Build Now, Gate Later"
+      },
+      {
+        "id": "executive-summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n- **Start development now.** None of the 13 non-empty business-question groups prevents repository scaffolding, typed contracts, the pure Python engine, CLI, synthetic scenario tests, or the displayed-value `legacy_kw34` profile.\n- **Do not pretend assumptions are answers.** Fixture and scenario runs may use explicit defaults, quarantined rows, and placeholder provenance; they cannot be promoted to operational approval while current stock, open POs, canonical SKUs/packs, lead times, or demand semantics remain unknown.\n- **Ask the questions in parallel.** Prioritize Q1, Q4, Q5, Q6, and Q9 because they determine how the existing process and M1 acceptance are interpreted. The other answers should arrive before their corresponding M2-M5 stage exits—not before the first line of code."
+      },
+      {
+        "id": "start-now",
+        "type": "markdown",
+        "body": "## The unanswered questions do not block the foundation\n\nThe engineering foundation is policy-neutral: validated schemas, stable identifiers, a pure calculation core, adapters, provenance, run modes, exceptions, and deterministic tests can be implemented without knowing the final business values. The KW34 profile can also reproduce the literal spreadsheet behavior while clearly flagging its assumptions.\n\nThe safe boundary is the run mode. `fixture` and `scenario` modes may proceed with labelled assumptions. `shadow` requires real snapshots and enough confirmed policy to compare meaningfully with the planner. `operational` must fail closed when current stock, open purchase orders, canonical SKU/pack mapping, demand semantics, or scheduling policy is missing."
+      },
+      {
+        "id": "priority-chart-intro",
+        "type": "markdown",
+        "body": "## Five questions should be answered first, not awaited before coding\n\nThe chart groups the 13 non-empty questions by when their answers become decision-critical. Tier A clarifies the current spreadsheet and M1 acceptance. Tier B is needed before the improved engine can be treated as business-valid. Tier C primarily gates calibration, data integration, and final workflow design. Every tier can be pursued in parallel with implementation."
+      },
+      {
+        "id": "priority-chart",
+        "type": "chart",
+        "chartId": "question-priority"
+      },
+      {
+        "id": "priority-chart-implication",
+        "type": "markdown",
+        "body": "The distribution is deliberately a sequencing tool rather than a risk score. A Tier C question can still be essential before launch; it simply does not need to delay M0/M1 work today."
+      },
+      {
+        "id": "gate-matrix-intro",
+        "type": "markdown",
+        "body": "## Each answer gates a specific outcome\n\nThe table separates reversible implementation work from claims or actions that would be unsafe without owner confirmation. This is the working contract for deciding whether a missing answer produces a warning, a quarantined fixture row, or a hard run-mode failure."
+      },
+      {
+        "id": "gate-matrix",
+        "type": "table",
+        "tableId": "question-gates"
+      },
+      {
+        "id": "next-steps",
+        "type": "markdown",
+        "body": "## Recommended next steps\n\n1. Start M0/M1 now: scaffold Python, define contracts and run modes, add validation and exceptions, and implement BOM explosion plus the `legacy_kw34` calculation path.\n2. Use synthetic/minimal local fixtures first. Commit real KW34-derived fixture rows only after confirming that the data is safe for the repository.\n3. Send Q1, Q4, Q5, Q6, and Q9 to the planner first and request concrete artifacts where possible: an open-PO example, final order/confirmation, stock-count timestamp, and master-item list.\n4. Implement M2 features behind configurable interfaces and scenario tests while Q2, Q3, Q7, Q8, Q10, and Q11 are answered.\n5. Do not begin real SQL integration, backtesting, or shadow approval until Q12 yields source owners, schemas, historical coverage, and read-only access.\n6. Keep the final UI after shadow validation, while allowing information architecture and API contracts to mature earlier."
+      },
+      {
+        "id": "further-questions",
+        "type": "markdown",
+        "body": "## Further questions\n\nThe supplied list ends with an empty Q14; it creates no gate. Separate infrastructure decisions still remain for the relevant milestones: whether Supabase is a new or shared project, its owner/region/retention, authentication roles, and any later ERP or supplier-dispatch channel."
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats and assumptions\n\nThis recommendation distinguishes ability to write and test code from permission to trust or operate its output. The source workbook was validated at displayed-value level; its formula AST and the planner's off-sheet decisions remain unverified. Missing waste, OOS, forecast-error, and lot data are calibration gaps, while missing current stock, open POs, canonical SKU/pack data, or scheduling semantics are operational blockers."
+      }
+    ],
+    "charts": [
+      {
+        "id": "question-priority",
+        "title": "Open question groups by answer priority",
+        "description": "Thirteen non-empty question groups, classified by the first milestone where an answer materially affects acceptance.",
+        "dataset": "priority_counts",
+        "type": "horizontalBar",
+        "intent": "comparison",
+        "question": "How many question groups should be answered now versus before later stage exits?",
+        "rationale": "Horizontal bars make the three long priority labels easy to scan while preserving exact counts.",
+        "comparisonContext": {
+          "denominator": "13 non-empty business-question groups",
+          "grain": "question group",
+          "unit": "groups"
+        },
+        "encodings": {
+          "x": {
+            "field": "priority",
+            "type": "nominal",
+            "label": "Answer priority"
+          },
+          "y": {
+            "field": "question_count",
+            "type": "quantitative",
+            "label": "Question groups"
+          }
+        },
+        "palette": {
+          "kind": "sequential",
+          "name": "blue"
+        },
+        "labels": {
+          "values": "all"
+        },
+        "sourceId": "question-priority-source"
+      }
+    ],
+    "tables": [
+      {
+        "id": "question-gates",
+        "title": "Question-to-stage gate matrix",
+        "description": "What can be implemented under explicit assumptions and what cannot be accepted until the owner answers.",
+        "dataset": "question_gates",
+        "columns": [
+          { "field": "question", "label": "Question" },
+          { "field": "topic", "label": "Topic" },
+          { "field": "priority", "label": "Priority" },
+          { "field": "build_now", "label": "Build now" },
+          { "field": "must_wait", "label": "Must wait" },
+          { "field": "gate", "label": "Gate" }
+        ],
+        "defaultSort": {
+          "field": "question",
+          "direction": "asc"
+        },
+        "sourceId": "question-gates-source"
+      }
+    ],
+    "sources": [
+      {
+        "id": "question-priority-source",
+        "label": "Question-priority classification query",
+        "path": "docs/reports/build-sequencing-decision/question_priority.sql",
+        "description": "Reviewed classification of the 13 non-empty business-question groups by first decision-critical stage."
+      },
+      {
+        "id": "question-gates-source",
+        "label": "Question-to-gate classification query",
+        "path": "docs/reports/build-sequencing-decision/question_gates.sql",
+        "description": "Reviewed question-level mapping from reversible implementation work to stage-exit gates."
+      },
+      {
+        "id": "engineering-brief",
+        "label": "Phase 2 engineering brief",
+        "path": "docs/descriptions/phase2_supply_planning_brief.md",
+        "description": "Verified KW34 logic, target policy, data requirements, architecture, and staged delivery plan."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "status": "ready",
+    "generatedAt": "2026-08-24T00:00:00+02:00",
+    "datasets": {
+      "priority_counts": [
+        {
+          "priority": "Tier A — ask now",
+          "question_count": 5,
+          "questions": "Q1, Q4, Q5, Q6, Q9",
+          "first_gate": "M1 interpretation and M2 netting"
+        },
+        {
+          "priority": "Tier B — before M2/M4 exit",
+          "question_count": 5,
+          "questions": "Q2, Q3, Q7, Q10, Q11",
+          "first_gate": "Improved-policy sign-off and shadow design"
+        },
+        {
+          "priority": "Tier C — before M3/M5 completion",
+          "question_count": 3,
+          "questions": "Q8, Q12, Q13",
+          "first_gate": "Calibration, live data, and final workflow"
+        }
+      ],
+      "question_gates": [
+        {
+          "question": "Q1",
+          "topic": "In-transit",
+          "priority": "A",
+          "build_now": "Dated PO schema, empty/manual fixtures, pipeline netting and exceptions",
+          "must_wait": "Operational netting and explanation of blank orders",
+          "gate": "M2/M4"
+        },
+        {
+          "question": "Q2",
+          "topic": "Lead times",
+          "priority": "B",
+          "build_now": "Item/supplier overrides, calendars, defaults and scenarios",
+          "must_wait": "Trusted order and receipt dates",
+          "gate": "M2/M4"
+        },
+        {
+          "question": "Q3",
+          "topic": "Shelf life",
+          "priority": "B",
+          "build_now": "Policy fields, approximate caps, lot-ready interface and conflict tests",
+          "must_wait": "Trusted expiry and max-cover enforcement",
+          "gate": "M2/M4"
+        },
+        {
+          "question": "Q4",
+          "topic": "S/M/W/Fr columns",
+          "priority": "A",
+          "build_now": "Reproduce calculated Order and preserve manual columns as observations",
+          "must_wait": "Replication of actual placed quantity and weekday split",
+          "gate": "M1/M4"
+        },
+        {
+          "question": "Q5",
+          "topic": "Demand/Silo Load",
+          "priority": "A",
+          "build_now": "Treat as daily demand in legacy mode and define daily input contract",
+          "must_wait": "Final Phase 1 semantics and silo-capacity behavior",
+          "gate": "M1/M6"
+        },
+        {
+          "question": "Q6",
+          "topic": "Stock count",
+          "priority": "A",
+          "build_now": "Reproduce 2.5-day bridge and implement timestamped inventory input",
+          "must_wait": "Correct opening projection for real runs",
+          "gate": "M2/M4"
+        },
+        {
+          "question": "Q7",
+          "topic": "Menu changes",
+          "priority": "B",
+          "build_now": "Forward menu schema plus launch and discontinuation scenarios",
+          "must_wait": "Operational transition dates and menu-horizon validation",
+          "gate": "M2/M4"
+        },
+        {
+          "question": "Q8",
+          "topic": "20% buffer",
+          "priority": "C",
+          "build_now": "Keep 1.20 in legacy and separate configurable yield and safety policies",
+          "must_wait": "Calibrated replacement policy",
+          "gate": "M4"
+        },
+        {
+          "question": "Q9",
+          "topic": "Master data",
+          "priority": "A",
+          "build_now": "Stable IDs, aliases, quarantine rules and KW34 quality cases",
+          "must_wait": "Complete coverage and safe operational joins",
+          "gate": "M1/M3"
+        },
+        {
+          "question": "Q10",
+          "topic": "Fresh products",
+          "priority": "B",
+          "build_now": "Configurable delivery-slot coverage with fixture calendars",
+          "must_wait": "Correct live fresh consumption windows",
+          "gate": "M2/M4"
+        },
+        {
+          "question": "Q11",
+          "topic": "Weekly process",
+          "priority": "B",
+          "build_now": "Run and approval objects with mandatory human approval",
+          "must_wait": "Final cadence, urgent-order path, ownership and UI workflow",
+          "gate": "M4/M5"
+        },
+        {
+          "question": "Q12",
+          "topic": "Other data",
+          "priority": "C",
+          "build_now": "File adapters, SQL ports, provenance and unavailable metrics",
+          "must_wait": "Real connectors, calibration, backtests and shadow runs",
+          "gate": "M3/M4"
+        },
+        {
+          "question": "Q13",
+          "topic": "Planner experience",
+          "priority": "C",
+          "build_now": "Explanations, exceptions, overrides and auditability as baseline",
+          "must_wait": "Final UX priority and automation boundary",
+          "gate": "M5"
+        }
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    {
+      "id": "question-priority-source",
+      "label": "Question-priority classification query",
+      "path": "docs/reports/build-sequencing-decision/question_priority.sql",
+      "description": "Reviewed classification of the 13 non-empty business-question groups by first decision-critical stage."
+    },
+    {
+      "id": "question-gates-source",
+      "label": "Question-to-gate classification query",
+      "path": "docs/reports/build-sequencing-decision/question_gates.sql",
+      "description": "Reviewed question-level mapping from reversible implementation work to stage-exit gates."
+    },
+    {
+      "id": "engineering-brief",
+      "label": "Phase 2 engineering brief",
+      "path": "docs/descriptions/phase2_supply_planning_brief.md",
+      "description": "Verified KW34 logic, target policy, data requirements, architecture, and staged delivery plan."
+    }
+  ]
+}

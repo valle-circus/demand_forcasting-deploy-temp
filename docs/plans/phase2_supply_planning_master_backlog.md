@@ -15,14 +15,14 @@ Replace the manual weekly workbook process with a trustworthy Phase 2 planning s
 - nets dated stock and open POs;
 - handles fresh and stocked items, supplier calendars, shelf life, MOQ/case, and menu transitions;
 - produces auditable proposals and exceptions for human approval;
-- starts as a deterministic Python CLI and later supports non-technical users through FastAPI, React, Tailwind, and durable storage.
+- starts with a deterministic Python CLI plus file fixtures as a technical validation path, then supports non-technical users through FastAPI, React, Tailwind, and authoritative durable storage.
 
 ## Delivery order
 
 1. Freeze and clean the KW34 evidence.
-2. Reproduce the workbook exactly with a file-driven Python script.
-3. Implement the improved engine using files and labelled placeholders.
-4. Connect real SQL inputs and durable storage.
+2. Reproduce the workbook exactly with a file-driven Python script; this is a technical bootstrap, not the final planner interface.
+3. Implement the improved engine using file fixtures and labelled placeholders.
+4. Connect real SQL inputs and migrate approved configuration to authoritative durable storage.
 5. Backtest and shadow-run with real data.
 6. Build the non-technical UI.
 7. Connect Phase 1 and only then consider operational dispatch.
@@ -67,6 +67,34 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 | `H-13` | Agree shadow-run duration, service/waste thresholds, override rules, and sign-off owners | M4 | Produce comparison reports only | Operational acceptance |
 | `H-14` | Approve output channel and any ERP/Xentral/supplier API credentials and dispatch controls | M6 | CSV export only | Automated dispatch |
 
+### How to interpret the blockers
+
+The register is a set of **stage-exit and promotion gates**, not a reason to pause all development. As of 2026-08-24, no unanswered business question blocks starting the repository scaffold, typed contracts, pure engine, CLI, or the `legacy_kw34` compatibility profile. Those paths must use fixture/scenario mode, explicit assumption flags, and non-sensitive synthetic or locally held fixture data until the corresponding gate is cleared.
+
+- **Start now:** project scaffold, contracts, validation, exception catalog, pure calculation functions, CLI/application service, synthetic scenario tests, and KW34 displayed-value reproduction.
+- **May be built with labelled assumptions:** improved inventory projection, pipeline netting, lead-time calendars, shelf-life caps, menu transitions, fresh-slot logic, safety/yield placeholders, SQL adapter interfaces, and preliminary UI information architecture.
+- **Must not be claimed as business-validated yet:** final Phase 1 semantics, complete canonical item coverage, placed-order/weekday replication, calibrated lead/shelf-life/buffer policies, and fresh-delivery coverage.
+- **Must wait for real inputs/access:** production SQL connectors, real-data backtests, shadow runs, Supabase/auth rollout, live proposal approval, and any supplier/ERP dispatch.
+
+### Business-question gate matrix
+
+| Question | Work that can proceed while unanswered | What must wait for the answer | Primary gate |
+|---|---|---|---|
+| Q1 + Q4 — in-transit and `S/M/W/Fr` | Implement dated PO schema, empty/manual PO fixtures, pipeline netting, exception reporting, and the spreadsheet's calculated `Order` column | Explain blank/reduced orders, reproduce actual placed quantities/weekday split, and approve operational netting | M2 business validation; M4 shadow |
+| Q2 — lead times and calendars | Implement item/supplier overrides and calendar engine with labelled defaults and scenario tests | Production-ready order/receipt dates and stockout risk | M2 exit; M4 shadow |
+| Q3 — shelf life | Implement sealed/opened fields, lot-ready interfaces, approximate caps, and infeasible-constraint tests | Trusted expiry/max-cover caps, especially for chilled/fresh items | M2 policy approval; M4 shadow |
+| Q5 — Demand/Silo Load | Reproduce KW34 by treating it as daily demand under a legacy assumption; define a daily Phase 1 contract | Final semantic mapping, silo-capacity constraints, and live Phase 1 integration | M1 business sign-off; M6 live input |
+| Q6 — stock count | Reproduce the literal 2.5-day bridge and implement timestamped inventory inputs/projection | Correct opening inventory timing and operational removal of the hard-coded bridge | M2 business validation; M4 shadow |
+| Q7 — menu changes | Implement forward menu schema and launch/discontinuation scenarios | Production transition dates, late-PO flags, and menu-horizon validation against reality | M2 exit; M4 shadow |
+| Q8 — 20% buffer | Keep exact `1.20` only in `legacy_kw34`; implement separate configurable yield and safety policies | Calibrated policy and replacement of provisional defaults | M4 calibration |
+| Q9 — master data | Build stable-ID schemas, alias validation, quarantine rules, and explicit KW34 quality cases | Complete BOM/order coverage and automated operational joins | M1 fixture acceptance; M3 integration |
+| Q10 — fresh products | Build configurable delivery-slot coverage with fixture calendars | Correct fresh order dates and consumption windows | M2 fresh-module sign-off; M4 shadow |
+| Q11 — weekly process | Build run/approval domain objects and retain human approval as a hard invariant | Final cadence, urgent-order workflow, ownership, notifications, and UI workflow | M4 operations design; M5 UI |
+| Q12 — other data | Build file adapters, SQL ports, provenance, placeholders, and `unavailable` metrics | Actual connectors, calibration, backtests, waste/OOS evaluation, and real-data shadowing | M3–M4 |
+| Q13 — planner experience | Continue with proposal explanations, exceptions, overrides, and auditability as baseline requirements | Final UI priority, automation boundary, and acceptance workflow | M5 product design |
+
+Question 14 in the supplied list is empty and creates no additional gate.
+
 ## Milestone 0 — Evidence, contracts, and fixture readiness
 
 **Outcome:** a clean, approved, reproducible definition of what KW34 does and which gaps are unknown.
@@ -81,7 +109,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 - [x] Document four positive-gap blank order cells.
 - [x] Document two plan ingredients absent from `Stock KW34`.
 - [x] Correct target netting, safety-stock grain, and post-rounding cap logic in the brief.
-- [ ] **HUMAN BLOCKER `H-01`:** approve the fixture extraction/commit policy.
+- [ ] **HUMAN GATE `H-01`:** approve the fixture extraction/commit policy. This does not block scaffolding or synthetic tests; it blocks committing a real-data golden fixture.
 - [ ] Obtain an approved raw workbook copy or formula walkthrough to confirm formula AST/cell references.
 - [ ] Create a source manifest with workbook ID, modified timestamp, relevant tabs, extraction date, checksum, and caveats.
 
@@ -94,7 +122,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 - [ ] Define provenance enum: `observed`, `manual`, `policy_default`, `empty_placeholder`, `unavailable`.
 - [ ] Define run modes: `fixture`, `scenario`, `shadow`, `operational` and their placeholder gates.
 - [ ] Define exception-code catalog and severity (`blocker`, `warning`, `info`).
-- [ ] **HUMAN BLOCKERS `H-02`–`H-05`:** resolve semantics/master-data questions or approve documented fixture assumptions.
+- [ ] **HUMAN GATES `H-02`–`H-05`:** resolve semantics/master-data questions or approve documented fixture assumptions before accepting M1 as business-complete. Implementation may start with assumption flags and quarantined rows.
 
 ### P1 — Fixture preparation
 
@@ -108,7 +136,8 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 
 - [ ] Record an ADR for script-first/application-service architecture.
 - [ ] Record an ADR for separate `legacy_kw34` and `improved` policies.
-- [ ] Record an ADR for files first and Supabase at M3, not before.
+- [ ] Record an ADR that CLI/CSV/YAML are bootstrap, test, import/export, and fallback interfaces—not the non-technical planner workflow.
+- [ ] Record an ADR for files first and authoritative Supabase persistence at M3 once approved, with no dual operational configuration authority.
 - [ ] Select Python/runtime and core libraries; likely Python 3.12, Pydantic, pandas or Polars, openpyxl, pytest, and a CLI library.
 - [ ] Decide numeric representation and improved-engine precision/rounding boundaries.
 
@@ -154,6 +183,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 ### P0 — CLI and outputs
 
 - [ ] Implement `plan validate` and `plan run --policy legacy_kw34` commands.
+- [ ] Document the CLI as a developer/analyst, batch, troubleshooting, and recovery interface—not the final configuration UI.
 - [ ] Write `order_proposals.csv`, `exceptions.csv`, `planning_lines.csv`, and `run_summary.json`.
 - [ ] Include input hashes, config hash, code version, run timestamp, and run mode.
 - [ ] Include every legacy intermediate and comparison-to-sheet field.
@@ -227,9 +257,10 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 - [ ] Add scenario fixtures for long lead, open pipeline, empty pipeline, short shelf life, MOQ conflict, and menu retirement.
 - [ ] Prove same inputs/config/code produce byte-stable normalized outputs apart from run metadata.
 
-### P1 — Policy administration via files
+### P1 — Bootstrap policy schemas and offline administration
 
 - [ ] Finalize documented `policy.yaml`, `items.csv`, and `suppliers.csv` templates.
+- [ ] Label templates as fixture/development/import/fallback artifacts; do not describe them as the permanent non-technical planner workflow.
 - [ ] Support supplier defaults plus item overrides and value provenance.
 - [ ] Add dry-run config diff showing which proposal lines change.
 - [ ] Add config version/hash to every run and line.
@@ -250,7 +281,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 
 ## Milestone 3 — SQL adapters and durable Supabase storage
 
-**Outcome:** real operational inputs replace file placeholders, and runs/config are persistently auditable.
+**Outcome:** real operational inputs replace file placeholders, reviewed configuration migrates to one authoritative store, and runs/config are persistently auditable.
 
 ### P0 — Source discovery and access
 
@@ -277,6 +308,9 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 - [ ] Implement audit tables: planning runs/inputs/lines, proposals, exceptions, approvals.
 - [ ] Add immutable or append-only rules for run snapshots and approvals.
 - [ ] Add seed data for local development; never seed private production data.
+- [ ] Build and verify a one-time import path from reviewed CSV/YAML bootstrap configuration.
+- [ ] Designate Supabase configuration versions as authoritative for operational runs and reject ambiguous file-plus-database authority.
+- [ ] Keep file adapters for fixtures, controlled imports/exports, tests, and recovery only.
 
 ### P1 — Calibration sources
 
@@ -303,7 +337,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 ### Milestone 3 exit criteria
 
 - [ ] Stock and open-PO inputs run from real read-only sources with freshness checks.
-- [ ] Supabase persistence is approved, migrated, documented, and replayable if selected.
+- [ ] Supabase persistence is approved, migrated, documented, authoritative, and replayable; using another operational store requires an explicit superseding architecture decision.
 - [ ] File adapters remain usable for fixtures and fallback.
 - [ ] No SQL/source credential is stored in git or output artifacts.
 
@@ -395,6 +429,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 - [ ] BOM/menu page with stable IDs, effective dates, alias warnings, and transition horizon.
 - [ ] Inventory/open-PO manual entry/import as a temporary integration fallback.
 - [ ] Policy version page with dry-run impact diff before activation.
+- [ ] Route planner configuration changes through the authenticated API with audit records; require no direct CSV/YAML or Supabase-table editing.
 - [ ] Prevent activation when operational blockers remain.
 
 ### P1 — UI quality
@@ -413,6 +448,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 ### Milestone 5 exit criteria
 
 - [ ] A non-technical test user completes config → validate → run → review → approve → CSV export without developer help.
+- [ ] The tested planner workflow requires neither repository-file editing nor direct database-table access.
 - [ ] Permissions and audit readback are verified.
 - [ ] UI and CLI produce the same normalized result for the same run inputs.
 - [ ] Supplier dispatch remains disabled.
@@ -479,14 +515,14 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 
 ## Immediate next execution slice
 
-1. [ ] Resolve or explicitly defer `H-01`–`H-05`.
-2. [ ] Create the normalized schema definitions and exception-code catalog.
-3. [ ] Extract the approved KW33/KW34 fixture and source manifest.
-4. [ ] Scaffold the Python package and test tooling.
+1. [ ] Send Tier A questions Q1/Q4/Q5/Q6/Q9 to the planner and track answers in parallel; do not pause scaffolding.
+2. [ ] Create storage-neutral normalized schema definitions, run-mode gates, and the exception-code catalog; mark files as bootstrap adapters and Supabase as the planned operational store.
+3. [ ] Scaffold the Python package and test tooling.
+4. [ ] Create synthetic/minimal local fixtures and a source manifest; keep real KW34-derived rows uncommitted until `H-01` is cleared.
 5. [ ] Implement BOM explosion and legacy rounding.
-6. [ ] Land the 27-cell KW34 golden test plus gap/missing-row assertions.
+6. [ ] After fixture approval, land the 27-cell KW34 golden test plus gap/missing-row assertions.
 7. [ ] Add CLI validation/run and audit exports.
-8. [ ] Review Milestone 1 output with the current planner before starting improved policy.
+8. [ ] Resolve or explicitly accept assumptions for `H-02`–`H-05`, then review Milestone 1 output with the current planner before accepting M1 or starting improved-policy sign-off.
 
 ## Dated progress log
 
@@ -494,3 +530,5 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 - 2026-08-22: Linked workbook inspected read-only; KW34 legacy values independently reconciled.
 - 2026-08-22: Brief corrected for bridge behavior, rounding, target netting, safety-stock grain, constraints, placeholders, script-first architecture, Supabase/UI boundary, and delivery sequence.
 - 2026-08-22: Master backlog and execution scratchpad created. Implementation remains unstarted.
+- 2026-08-22: Clarified that CLI/CSV/YAML are technical bootstrap and fallback interfaces; the planned non-technical workflow is React/FastAPI backed by authoritative Supabase persistence after approval.
+- 2026-08-24: Reclassified unanswered business questions as stage-exit/promotion gates rather than a global start blocker. M0/M1 scaffolding and scenario-safe engine work may begin while answers are collected in parallel.

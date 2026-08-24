@@ -344,49 +344,43 @@ Assign each order to the latest supplier order date that still lands before stoc
 ### 9.1 Principles
 
 1. **The engine is pure.** Core calculation functions take validated typed/tabular inputs and return typed/tabular outputs, with no database or filesystem access. Concrete adapters may use dataframes, CSV, SQL, or API payloads. This makes the whole thing testable against the KW34 numbers as a golden fixture.
-2. **All policy is explicit data, not code.** Start with versioned config files; when the UI exists, persist the same validated schemas in the database. Anything a non-technical admin might change is never a scattered constant.
+2. **All policy is explicit data, not code.** Start with versioned config files as a technical bootstrap and test interface; when operational persistence begins, store the same validated schemas in the database and manage them through the UI/API. Anything a non-technical admin might change is never a scattered constant or dependent on hand-editing repository files.
 3. **Nothing is ordered without a human approving it.** At least until the numbers have been trusted for several cycles.
 4. **Every run is reproducible.** Snapshot the inputs; a run can be re-executed months later and produce identical output.
-5. **CLI and UI call the same application service.** The script is the first interface, not a throwaway implementation. A later API wraps the same validated run use case and pure engine.
+5. **CLI and UI call the same application service.** The CLI is the first technical interface for development, validation, batch runs, and recovery—not the final planner experience. A later API wraps the same validated run use case and pure engine for the React UI.
 6. **Missing data is visible.** Placeholder/default provenance is carried into line-level audit output, and run mode determines whether it warns or blocks.
 
 ### 9.2 Components
 
+There are two interfaces over time; CSV/YAML is not the end-user alternative to Supabase.
+
+**Bootstrap and engine validation (Milestones 1-2):**
+
+```text
+approved KW34 fixture + CSV master/input data + policy.yaml
+                              ↓
+                  CLI (technical interface)
+                              ↓
+                    application service
+                              ↓
+       validation → pure engine → CSV/JSON audit outputs
 ```
-┌─ INPUT ADAPTERS ──────────────────────────────────────────┐
-│  File first           KW34 fixture, CSV/config            │
-│  SQL later            stock, POs, sales, waste, OOS       │
-│  Phase 1              hardcoded/CSV now → table/API later │
-└───────────────────────┬───────────────────────────────────┘
-                        ▼
-┌─ VALIDATION ──────────────────────────────────────────────┐
-│  schema, units, IDs, joins, provenance, run-mode gates     │
-│  human-readable errors and warnings                       │
-└───────────────────────┬───────────────────────────────────┘
-                        ▼
-┌─ ENGINE (pure functions, no I/O) ─────────────────────────┐
-│  explode_bom → apply_yield → project_inventory →          │
-│  safety_stock → net_requirements → apply_constraints →    │
-│  schedule_orders                                          │
-└───────────────────────┬───────────────────────────────────┘
-                        ▼
-┌─ APPLICATION SERVICE ─────────────────────────────────────┐
-│  snapshot inputs → validate → run → persist/export        │
-│  one use case called by CLI now and API later             │
-└───────────────────────┬───────────────────────────────────┘
-                        ▼
-┌─ OUTPUTS ─────────────────────────────────────────────────┐
-│  order proposal (per supplier, per order date)            │
-│  exception report (capped / MOQ-inflated / unavoidable    │
-│    stockout / config gaps)                                │
-│  audit trail (every intermediate value, persisted)        │
-└───────────────────────┬───────────────────────────────────┘
-                        ▼
-┌─ APPROVAL & DISPATCH ─────────────────────────────────────┐
-│  CLI export first → React/Tailwind review UI later        │
-│  approve → export; supplier/ERP dispatch remains gated    │
-└───────────────────────────────────────────────────────────┘
+
+This path exists for golden tests, local development, deterministic batch runs, initial data import, and recovery. A developer or analyst may edit these files; a planner is not expected to maintain the production system this way.
+
+**Operational application (Milestones 3-5):**
+
+```text
+Phase 1/API + read-only source SQL ──┐
+                                    ├─→ input adapters ─┐
+Supabase master data and policy ─────┘                  │
+                                                       ▼
+React/Tailwind UI ↔ FastAPI ↔ application service → validation → pure engine
+       ▲                 │                                      │
+       └─ review/config ─┴─ Supabase runs, proposals, approvals ┘
 ```
+
+The React UI is the planner-facing interface. FastAPI validates and authorizes changes. Once approved and deployed, Supabase is the operational system of record for editable configuration and audit history; direct CSV/YAML or table editing is not the normal workflow. The CLI remains useful for tests, controlled batch execution, troubleshooting, and fallback, while calling the exact same application service.
 
 ### 9.3 Repository layout
 
@@ -394,10 +388,10 @@ Assign each order to the latest supplier order date that still lands before stoc
 supply-planning/
 ├── pyproject.toml
 ├── config/
-│   ├── policy.yaml           # global policy, commented
-│   ├── items.csv             # per-item overrides — the admin's main file
-│   ├── suppliers.csv         # lead times, delivery calendars, MOQ defaults
-│   └── bom.csv               # dish → silo → item → grams per portion
+│   ├── policy.yaml           # bootstrap/test policy; later maps to policy_versions
+│   ├── items.csv             # bootstrap/test item master; not the final planner UI
+│   ├── suppliers.csv         # bootstrap/test supplier master
+│   └── bom.csv               # bootstrap/test dish → silo → item contract
 ├── src/supply_planning/
 │   ├── adapters/             # Excel/CSV first; SQL and persistence later
 │   ├── validation/           # schema, referential integrity, run-mode gates
@@ -423,11 +417,11 @@ supply-planning/
 
 The production workbook itself should not be committed by default. Extract the minimum approved KW34 fixture, preserve a checksum/source note, and confirm whether item/supplier details need anonymization.
 
-### 9.4 Config design — the part the admin touches
+### 9.4 Bootstrap configuration schemas
 
-Two files, deliberately split by who edits them and how often.
+The files below define the first validated schemas and allow the engine to be built before database access and UI work. During Milestones 1-2 they are maintained by a developer or analyst and can be reviewed in Excel/Sheets. They are **not** the intended long-term editing workflow for non-technical planners. At the database milestone, the same fields migrate to versioned Supabase tables and are edited through validated UI/API forms.
 
-**`config/items.csv`** — per-item, edited in Excel or Sheets, one row per item. Round-trips cleanly, diffs readably in git.
+**`config/items.csv`** — bootstrap per-item schema, one row per item. It round-trips cleanly, diffs readably in git, and can seed the future database.
 
 | column | example | meaning |
 |---|---|---|
@@ -450,7 +444,7 @@ Two files, deliberately split by who edits them and how often.
 | `value_source` | `manual` | provenance for defaults/overrides until source systems are connected |
 | `active` | `TRUE` | soft delete |
 
-**`config/policy.yaml`** — global rules, edited rarely, commented for a non-technical reader.
+**`config/policy.yaml`** — bootstrap global-policy schema, edited rarely during engine development and later represented as versioned database policy records.
 
 ```yaml
 operating_days: [mon, tue, wed, thu, fri, sat]
@@ -482,7 +476,7 @@ run_modes:
   operational: { allow_unknown_stock: false, allow_unknown_open_pos: false }
 ```
 
-Three things that make this safe for a non-technical admin:
+Three properties must survive when these schemas move behind the UI:
 
 - **Validation with human-readable errors.** `"items.csv row 43: shelf_life_days (5) is shorter than lead_time (28) for Roasted Sesame Sauce — this item can never be ordered safely. Set a shorter lead time or flag for supplier renegotiation."` Not a stack trace.
 - **Dry-run diff mode.** Change a config value, re-run, see exactly which order lines moved and by how much, before anything is sent.
@@ -498,13 +492,13 @@ The first deliverable is a Python CLI/script. Design the application service now
 - **Pipeline and stock:** view or manually maintain open POs and timestamped inventory until integrations replace manual entry.
 - **Run history:** immutable input/config snapshots, result comparison, approval status, and audit trail.
 
-CSV/YAML is sufficient while only the script edits configuration. Once multiple users edit config or run history must be durable, Supabase Postgres is appropriate. Keep file and database adapters behind the same schemas. A minimal persistent model is:
+CSV/YAML is sufficient only for fixtures, tests, local development, controlled initial imports, and fallback/export. It is not the final configuration experience. When operational persistence begins, approved Supabase Postgres tables become the single system of record for editable master data, active policy versions, run history, proposals, and approvals. Non-technical users work through React/FastAPI; they do not edit repository files or Supabase tables directly. Keep file and database adapters behind the same schemas, and prohibit an operational run from combining competing active configuration authorities. A minimal persistent model is:
 
 - master/config: `locations`, `items`, `suppliers`, `supplier_items`, `bom_lines`, `policy_versions`;
 - operational inputs: `menu_calendar`, `forecast_daily`, `inventory_snapshots`, `purchase_orders`;
 - audit/output: `planning_runs`, `planning_run_inputs`, `planning_lines`, `order_proposals`, `exceptions`, `approvals`.
 
-Create the Supabase project and migrations only at the database milestone; access, project ownership, region, auth policy, and environment variables are explicit human-input blockers in the backlog.
+Create the Supabase project and migrations only at the database milestone; access, project ownership, region, auth policy, and environment variables are explicit human-input blockers in the backlog. Migrate/seed reviewed file configuration into Supabase once, verify it, then designate the database version as authoritative. Files remain fixtures and import/export artifacts rather than a second production configuration store.
 
 ### 9.6 Run cadence
 
@@ -516,7 +510,7 @@ Create the Supabase project and migrations only at the database milestone; acces
 
 ### 9.7 Hosting
 
-Start locally as a deterministic CLI with CSV/JSON outputs. After database integration, expose the same application service through FastAPI and run it in a scheduled container or job. The React/Tailwind UI reads through the API; Supabase can provide Postgres, auth, and storage. Read-only SQL credentials are used for source systems. Keep CSV export as a fallback so planning can continue during UI or integration outages.
+Start locally as a deterministic CLI with CSV/JSON outputs for engineering validation. After database integration, expose the same application service through FastAPI and run it in a scheduled container or job. The React/Tailwind UI reads and writes through the API; approved Supabase infrastructure provides the operational Postgres store, auth, and storage. Read-only SQL credentials are used for source systems. Keep the CLI and CSV export as controlled fallback/recovery capabilities, not as a parallel planner configuration workflow.
 
 ---
 
@@ -548,11 +542,11 @@ Start locally as a deterministic CLI with CSV/JSON outputs. After database integ
 
 **Milestone 2 — Implement the improved engine with file inputs.** Add daily time-phased demand, lead-time/review protection, open-PO netting, pre-arrival stockout detection, shelf-life/max-cover constraints, MOQ/case feasibility, delivery scheduling, menu transitions, and explicit placeholder provenance. Use manual/hardcoded files for missing data; do not call placeholder output production-calibrated.
 
-**Milestone 3 — Connect SQL and durable storage.** Confirm source schemas and credentials, implement read-only adapters, create Supabase only if approved, persist versioned config/run snapshots, and replace placeholders source by source. Waste and OOS can arrive after stock/open-PO integration because they calibrate rather than enable core netting.
+**Milestone 3 — Connect SQL and durable storage.** Confirm source schemas and credentials, implement read-only adapters, create Supabase only if approved, migrate reviewed bootstrap configuration into authoritative versioned tables, persist run snapshots, and replace placeholders source by source. Waste and OOS can arrive after stock/open-PO integration because they calibrate rather than enable core netting.
 
 **Milestone 4 — Backtest and shadow-run with real data.** Backtest the improved policy, compare legacy versus improved outputs, calibrate yield/safety stock when data permits, and run beside the planner for multiple cycles. Define signed acceptance thresholds before any operational approval/export.
 
-**Milestone 5 — Build the user interface.** Add FastAPI, React, Tailwind, Supabase auth/RLS if used, configuration forms, proposal review, exceptions, history, approval, and CSV export. Keep supplier dispatch disabled.
+**Milestone 5 — Build the user interface.** Add FastAPI, React, Tailwind, approved Supabase auth/RLS, configuration forms, proposal review, exceptions, history, approval, and CSV export. This becomes the non-technical planner workflow; direct YAML/CSV/database edits are not required. Keep supplier dispatch disabled.
 
 **Milestone 6 — Integrate Phase 1 and operational outputs.** Swap the hardcoded forecast for the Phase 1 daily contract, add scheduling/monitoring, then separately approve any ERP/supplier dispatch integration. No engine changes should be required if the interface in §3 is respected.
 
