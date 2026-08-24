@@ -532,3 +532,4 @@ Question 14 in the supplied list is empty and creates no additional gate.
 - 2026-08-22: Master backlog and execution scratchpad created. Implementation remains unstarted.
 - 2026-08-22: Clarified that CLI/CSV/YAML are technical bootstrap and fallback interfaces; the planned non-technical workflow is React/FastAPI backed by authoritative Supabase persistence after approval.
 - 2026-08-24: Reclassified unanswered business questions as stage-exit/promotion gates rather than a global start blocker. M0/M1 scaffolding and scenario-safe engine work may begin while answers are collected in parallel.
+- 2026-08-24: Added the root README as the concise engineer handover for project purpose, planned architecture, logic, data/config boundaries, delivery order, safeguards, and the documentation reading path.
