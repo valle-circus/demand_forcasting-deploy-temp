@@ -11,6 +11,7 @@ Nothing here writes to Snowflake — read-only.
 Google SSO opens a browser window on first connect.
 """
 
+import os
 import sys
 import pandas as pd
 import snowflake.connector
@@ -19,11 +20,13 @@ pd.set_option("display.max_rows", 200)
 pd.set_option("display.max_columns", 50)
 pd.set_option("display.width", 200)
 
-ACCOUNT = "LCMNVKB-DW49132"
-USER = "valentin.hornung@circuskitchens.com"
-ROLE = "CIRCUS_MODELS_READER"
-WAREHOUSE = "DEVELOP"
-DATABASE = "ANALYTICS"
+ENVIRONMENT_FIELDS = {
+    "account": "SNOWFLAKE_ACCOUNT",
+    "user": "SNOWFLAKE_USER",
+    "role": "SNOWFLAKE_ROLE",
+    "warehouse": "SNOWFLAKE_WAREHOUSE",
+    "database": "SNOWFLAKE_DATABASE",
+}
 
 # KW34 2026 = Mon 17 Aug .. Sat 22 Aug
 KW34_START, KW34_END = "2026-08-17", "2026-08-22"
@@ -43,13 +46,28 @@ KEY_TABLES = [
 
 
 def connect():
+    values = {
+        name: os.environ.get(environment_name, "").strip()
+        for name, environment_name in ENVIRONMENT_FIELDS.items()
+    }
+    missing = [
+        environment_name
+        for name, environment_name in ENVIRONMENT_FIELDS.items()
+        if not values[name]
+    ]
+    if missing:
+        raise RuntimeError(
+            "Missing Snowflake environment variables: "
+            + ", ".join(missing)
+            + ". Copy .env.example or set them in the current shell; do not commit values."
+        )
     return snowflake.connector.connect(
-        account=ACCOUNT,
-        user=USER,
+        account=values["account"],
+        user=values["user"],
         authenticator="externalbrowser",
-        role=ROLE,
-        warehouse=WAREHOUSE,
-        database=DATABASE,
+        role=values["role"],
+        warehouse=values["warehouse"],
+        database=values["database"],
     )
 
 

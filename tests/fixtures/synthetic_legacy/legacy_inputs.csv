@@ -1,0 +1,4 @@
+item_id,grams_per_day,pack_size_g,previous_daily_units,stock_units,observed_order_units
+ITEM_A,1000,1000,1.20,4,7
+ITEM_B,333,1000,0.40,0,
+ITEM_C,0,500,0,5,0

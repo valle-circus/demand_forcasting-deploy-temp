@@ -1,0 +1,248 @@
+# Phase 2 Canonical Data Contracts
+
+**Status:** v1 foundation implemented on 2026-08-24
+
+**Code:** `src/supply_planning/domain/models.py`
+
+**Purpose:** define the stable data shapes consumed by the planning engine without assuming Snowflake, Xentral, Supabase, CSV, or API table layouts.
+
+## 1. Boundary and mapping rule
+
+These are **engine contracts**, not claims about physical source schemas.
+
+```text
+Snowflake / ERP / API / CSV / XLSX
+                 ↓ source-specific adapter
+       canonical contracts in this document
+                 ↓
+          pure planning engine
+```
+
+When a source uses different names or grains, its adapter must transform, validate, and document that mapping. The engine must not import a database client or reference source-specific table/column names.
+
+## 2. Shared conventions
+
+- Stable IDs are strings and are the only join keys. Names are display fields.
+- Daily demand uses `service_date`; an upstream `date` column maps to it explicitly.
+- Timestamps must be timezone-aware at adapter boundaries. Locations and suppliers carry IANA timezone names.
+- Grams are the internal requirement unit. Packs/cases use explicit `_units` fields.
+- Planning arithmetic uses `Decimal`; floats are not used for order calculations.
+- Field suffixes state the unit or grain: `_g`, `_units`, `_days`, `_date`, `_at`.
+- Every source carries provenance: `observed`, `manual`, `policy_default`, `empty_placeholder`, or `unavailable`.
+- Effective-dated records use inclusive `effective_from` and optional inclusive `effective_to`.
+- Source adapters must validate keys, units, duplicates, allowed values, and referential coverage before engine calls.
+
+## 3. Canonical input datasets
+
+### 3.1 `locations`
+
+**Key:** `location_id`
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `location_id` | string | yes | Stable kitchen/site ID |
+| `location_name` | string | yes | Display name only |
+| `timezone` | string | yes | IANA timezone, e.g. `Europe/Berlin` |
+| `active` | boolean | yes | Soft-delete flag |
+
+### 3.2 `forecast_daily`
+
+**Unique grain:** `location_id + dish_id + service_date + forecast_version`
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `location_id` | string | yes | FK to `locations` |
+| `dish_id` | string | yes | Stable dish ID |
+| `service_date` | date | yes | Daily service date |
+| `forecast_portions` | decimal | yes | Expected portions, non-negative |
+| `forecast_sigma` | decimal | no | Daily forecast-error standard deviation |
+| `forecast_version` | string | yes | Manual/file/model version |
+| `provenance` | enum | yes | Value provenance |
+
+For the KW34 fixture, the weekly manual value is repeated across applicable service dates under an explicit legacy assumption. This does not decide whether `Demand/Silo Load` ultimately means sales demand, loading, or a capacity-constrained plan.
+
+### 3.3 `menu_calendar`
+
+**Unique grain:** `location_id + dish_id + service_date + menu_version`
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `location_id` | string | yes | FK to `locations` |
+| `dish_id` | string | yes | Stable dish ID |
+| `service_date` | date | yes | Date the dish is planned for service |
+| `menu_version` | string | yes | Committed menu snapshot/version |
+| `active` | boolean | yes | Whether the dish is served that day |
+
+### 3.4 `bom_lines`
+
+**Key:** `bom_line_id`; business grain is effective-dated `dish_id + silo_id + item_id`.
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `bom_line_id` | string | yes | Stable line ID |
+| `dish_id` | string | yes | Parent dish |
+| `silo_id` | string | yes | Physical silo or named pre-mix |
+| `item_id` | string | yes | Purchasable ingredient/component |
+| `grams_per_portion` | decimal | yes | Positive ingredient grams per portion |
+| `effective_from` | date | yes | First valid service date |
+| `effective_to` | date | no | Last valid service date |
+
+The engine preserves the `Dish -> Silo -> Item` path during explosion. It may aggregate only after this derivation exists.
+
+### 3.5 `items`
+
+**Key:** `item_id`
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `item_id` | string | yes | Stable internal item/SKU key |
+| `item_name` | string | yes | Display name |
+| `storage_class` | enum | yes | `TK`, `Kuehl`, `RT`, or `Frisch` |
+| `pack_size_g` | decimal | yes | Positive grams per purchasable pack |
+| `shelf_life_days` | integer | no | Sealed/opened meaning still requires business confirmation |
+| `min_safety_days` | decimal | no | Item override; otherwise policy default |
+| `max_cover_days` | decimal | no | Hard cover cap |
+| `last_order_date_offset_days` | integer | yes | Non-negative days before final service to stop ordering |
+| `pipeline_cancellable` | boolean | yes | Whether an open PO can be cancelled or pulled |
+| `active` | boolean | yes | Soft-delete flag |
+| `provenance` | enum | yes | Source/default status |
+
+Aliases and supplier article numbers belong in mapping/supplier-item data, not in `item_id`.
+
+### 3.6 `suppliers`
+
+**Key:** `supplier_id`
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `supplier_id` | string | yes | Stable supplier key |
+| `supplier_name` | string | yes | Display name |
+| `timezone` | string | yes | Timezone used for cut-offs |
+| `default_production_lead_days` | integer | no | Non-negative supplier default |
+| `default_transport_lead_days` | integer | no | Non-negative supplier default |
+| `active` | boolean | yes | Soft-delete flag |
+
+### 3.7 `supplier_items`
+
+**Business key:** `supplier_id + item_id`; effective dating can be added when the first source requires it.
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `supplier_id` | string | yes | FK to `suppliers` |
+| `item_id` | string | yes | FK to `items` |
+| `supplier_item_id` | string | no | Supplier article/SKU |
+| `production_lead_days` | integer | no | Item override |
+| `transport_lead_days` | integer | no | Item override |
+| `moq_units` | decimal | yes | Minimum order, zero means none |
+| `case_size_units` | decimal | yes | Positive rounding multiple |
+| `order_cutoff_local` | time | no | Item-specific cut-off override |
+| `active` | boolean | yes | Soft-delete flag |
+| `provenance` | enum | yes | Source/default status |
+
+### 3.8 `supplier_calendars`
+
+**Key:** `supplier_calendar_id`
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `supplier_calendar_id` | string | yes | Stable rule ID |
+| `supplier_id` | string | yes | FK to `suppliers` |
+| `location_id` | string | yes | FK to `locations` |
+| `order_weekday` | integer | yes | Monday `0` through Sunday `6` |
+| `order_cutoff_local` | time | yes | Supplier-local order cut-off |
+| `delivery_weekday` | integer | yes | Monday `0` through Sunday `6` |
+| `active` | boolean | yes | Soft-delete flag |
+
+Holiday and one-off exceptions will be a separate effective-dated dataset when required by a real source.
+
+### 3.9 `inventory_snapshots`
+
+**Unique grain:** `location_id + item_id + counted_at`
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `location_id` | string | yes | Stock location |
+| `item_id` | string | yes | Stocked item |
+| `counted_at` | timestamp | yes | Exact count timestamp |
+| `usable_on_hand_units` | decimal | yes | Usable full packs; excludes known unusable stock |
+| `partial_pack_g` | decimal | yes | Usable partial-pack grams, default zero |
+| `provenance` | enum | yes | Observed/manual/default status |
+
+Lot/expiry inventory is intentionally separate and optional until a source is available.
+
+### 3.10 `purchase_orders`
+
+**Key:** `po_line_id`; `po_id` groups lines.
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `po_id` | string | yes | Purchase-order ID |
+| `po_line_id` | string | yes | Stable PO-line ID |
+| `location_id` | string | yes | Receiving location |
+| `supplier_id` | string | yes | Supplier |
+| `item_id` | string | yes | Ordered item |
+| `ordered_at` | timestamp | yes | Order placement time |
+| `expected_receipt_at` | timestamp | yes | Current expected receipt time |
+| `open_qty_units` | decimal | yes | Outstanding purchasable units |
+| `status` | string | yes | Source status mapped to an approved status set |
+| `provenance` | enum | yes | Observed/manual/default status |
+
+An observed query returning zero rows is valid. An unavailable source represented by an empty placeholder is not equivalent and blocks shadow/operational use.
+
+## 4. Run modes and gates
+
+| Mode | Placeholder policy | Intended use |
+|---|---|---|
+| `fixture` | allowed with warnings | Golden/synthetic tests |
+| `scenario` | allowed with warnings | Offline what-if development |
+| `shadow` | unknown critical sources block | Comparison with real planner runs |
+| `operational` | unknown critical sources block | Proposal approval/export |
+
+Critical sources currently enforced in code are `forecast_daily`, `bom_lines`, `items`, `inventory_snapshots`, and `purchase_orders`. Field-level policy gates for canonical pack size and lead time are added with the improved engine.
+
+## 5. Canonical output contracts
+
+The v1 typed output records are implemented in `domain/models.py`. They define persistence and API boundaries now, even though the improved engine does not populate them yet.
+
+### 5.1 `planning_runs`
+
+One record per reproducible execution: `run_id`, `schema_version`, `policy_profile`, `policy_version`, `run_mode`, `planning_as_of_at`, `created_at`, `input_hash`, `config_hash`, `code_version`, and `status`. Timestamps are supplied by orchestration and must be timezone-aware; pure engine code does not read the clock.
+
+### 5.2 `planning_run_inputs`
+
+One record per dataset snapshot used by a run: `run_id`, `dataset`, `source_version`, `content_hash`, `provenance`, and `record_count`. This distinguishes a verified zero-row result from a missing or empty placeholder.
+
+### 5.3 `planning_lines`
+
+One derivation record per run/location/item/supplier candidate. It retains stable IDs, `order_date`, `expected_delivery_date`, `gross_requirement_g`, yield and safety values plus provenance, `usable_on_hand_g`, `open_po_due_g`, `raw_order_g`, shelf-life/max-cover caps, `capped_order_g`, `proposed_order_units`, and `rounding_delta_g`.
+
+### 5.4 `order_proposals`, `exceptions`, and `approvals`
+
+- `order_proposals` contain proposal/run/line IDs, location, supplier, item, `order_date`, `expected_delivery_date`, proposed purchasable units, and a status that begins as `proposed`.
+- `exceptions` persist a structured code, severity, message, remedy, and optional planning-line reference.
+- `approvals` persist an explicit `approved` or `rejected` decision, actor, timezone-aware timestamp, and reason. An approval record is distinct from calculation and is required before any later export/dispatch workflow.
+
+The current CLI does not create approvals and cannot dispatch an order.
+
+### 5.5 Current legacy audit envelope
+
+The current `legacy_kw34/v1` CLI emits deterministic JSON containing:
+
+- `schema_version`, `profile`, `run_id`, `run_mode`, and SHA-256 `input_hash`;
+- a run summary;
+- every legacy intermediate (`daily_units`, `need_units`, `bridge_units`, `after_units`, calculated and observed order);
+- source row references; and
+- structured issue codes, severity, message, and remedy.
+
+## 6. SQL/source discovery deliverable
+
+For each real source, obtain a read-only schema/DDL or column catalog, primary/stable keys, grain, timezone semantics, update cadence, retention, allowed statuses, and a small approved sample. The adapter mapping must then document:
+
+1. source table/view and columns;
+2. canonical target fields;
+3. transformations and unit conversions;
+4. key/join coverage;
+5. freshness and duplicate rules; and
+6. fields that remain manual, defaulted, or unavailable.
+
+Candidate sources and current gaps are tracked in `docs/descriptions/data_requirements.md`. Human timing and ownership are tracked in `docs/plans/human_action_register.md`.

@@ -2,7 +2,7 @@
 
 This project will replace a manual Excel-based supply-planning process for autonomous robot kitchens with a deterministic, auditable planning service. It converts daily dish demand into ingredient-level order proposals while considering recipes, stock, open purchase orders, supplier constraints, shelf life, delivery schedules, and menu changes.
 
-> **Current status:** discovery, spreadsheet reverse-engineering, and KW34 displayed-value validation are complete. Implementation has not started. The repository currently contains the engineering brief, data requirements, decisions, and prioritized build backlog needed for an engineer to take over.
+> **Current status:** discovery and KW34 displayed-value validation are complete. The first M0/M1 implementation tranche is runnable: canonical typed contracts, provenance/run-mode gates, pure BOM explosion, the isolated `legacy_kw34/v1` calculation, a synthetic fixture, deterministic audit JSON, and automated tests. The real KW34 golden fixture and broader file adapters remain gated/in progress.
 
 ## Scope
 
@@ -133,10 +133,34 @@ See the backlog's blocker register and question-to-gate matrix for the current d
 | [`docs/descriptions/phase2_supply_planning_brief.md`](docs/descriptions/phase2_supply_planning_brief.md) | Primary domain and architecture specification, including the verified Excel logic and improved target logic |
 | [`docs/plans/phase2_supply_planning_master_backlog.md`](docs/plans/phase2_supply_planning_master_backlog.md) | Source-of-truth implementation backlog, priorities, human gates, exit criteria, and immediate next slice |
 | [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Candidate source systems, known tables, gaps, access context, and data-discovery sequence |
+| [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Implemented canonical input/output contracts, provenance, run-mode gates, and source-mapping rules |
+| [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Manual actions and information needed from the user, with the milestone where each becomes blocking |
 | [`MEMORY.md`](MEMORY.md) | Durable decisions and verified facts that must survive handovers and context compaction |
 | [`docs/scratchpads/phase2_supply_planning_execution.md`](docs/scratchpads/phase2_supply_planning_execution.md) | Short-lived execution context, risks, open questions, and next actions |
 
-The immediate engineering work is listed under **Immediate next execution slice** in the master backlog. There is currently no runnable application, dependency setup, or deployment process to follow; the first implementation task is the M0/M1 Python scaffold and canonical contracts.
+The immediate engineering work is listed under **Immediate next execution slice** in the master backlog. There is now a runnable Python CLI foundation; SQL, persistence, API, UI, and deployment are not implemented.
+
+## Quick start
+
+The current core has no third-party runtime dependencies and targets Python 3.12.
+
+PowerShell:
+
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+python -m unittest discover -s tests -v
+python -m supply_planning legacy-run `
+  --input tests\fixtures\synthetic_legacy\legacy_inputs.csv `
+  --output output\synthetic_legacy_audit.json
+```
+
+Or run the checked-in verification wrapper with an explicit Python executable when `python` is not on `PATH`:
+
+```powershell
+.\scripts\check.ps1 -PythonExecutable "C:\path\to\python.exe"
+```
+
+The CLI is deliberately restricted to `fixture` and `scenario` modes. It calculates proposals only; it cannot approve or dispatch an order.
 
 ## Non-negotiable safeguards
 

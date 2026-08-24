@@ -1,6 +1,6 @@
 # Phase 2 — Data Requirements and Sourcing
 
-**Sources available:** Snowflake (`ANALYTICS` database, role `CIRCUS_MODELS_READER`, account `LCMNVKB-DW49132`, Google SSO) and Lightdash (`eu1.lightdash.cloud`).
+**Sources available:** Snowflake via Google SSO and Lightdash. Connection identifiers belong in local environment variables, not this repository; see `.env.example`.
 **Table names below** come from Joel Aftreth's Slack message of 20 Aug 2026. Schemas are not confirmed — discover them before hardcoding anything (see `explore_snowflake.py`).
 
 **Important access caveat from Joel:** Lightdash currently exposes only the high-level models that business users need. `base_*` and `int_*` models are **not** available there — those require Snowflake, and full developer-level access to base/intermediate models needs a separate permission set that Joel still has to create. Since several things we need sit in `base_*`, expect to ask for that.
@@ -44,9 +44,9 @@ Everything in the sheet is either the manual demand number or master data. Almos
 
 ## 3. The gaps, in priority order
 
-**G4 — Open purchase orders (blocking).** Without this the engine repeats the spreadsheet's worst bug: re-ordering the same shortage every week for the length of the lead time. Joel's list contains nothing resembling a PO table. Ask him directly whether purchasing data lands in Snowflake at all, and ask the planner where orders are recorded. If the answer is "in email", that is a prerequisite project, not a detail.
+**G4 — Open purchase orders (blocks shadow/operational use, not engine development).** Without this the engine repeats the spreadsheet's worst bug: re-ordering the same shortage every week for the length of the lead time. Joel's list contains nothing resembling a PO table. Ask him directly whether purchasing data lands in Snowflake at all, and ask the planner where orders are recorded. If the answer is "in email", creating an auditable PO source is a prerequisite for operational use, while fixture/scenario development continues with explicit placeholders.
 
-**G1 — Recipes / BOM (blocking).** Everything starts with grams per portion. The spreadsheet is currently the only machine-readable copy I have seen. It may exist in the kitchen system (the `ucs` prefix in `base_ucs_menu` suggests a unit control system) — worth checking whether recipes live there. Fallback: extract the BOM from the KW34 Plan tab once, clean it, and hold it as versioned master data in the repo. That is a fine Milestone 1 answer.
+**G1 — Recipes / BOM (blocks real-data coverage, not synthetic development).** Everything starts with grams per portion. The spreadsheet is currently the only machine-readable copy I have seen. It may exist in the kitchen system (the `ucs` prefix in `base_ucs_menu` suggests a unit control system) — worth checking whether recipes live there. Fallback: extract the BOM from the KW34 Plan tab once, clean it, and hold an approved/anonymized version as master data. Synthetic BOM fixtures already allow the engine path to be developed and tested.
 
 **G2 / G3 / G5 — Item and supplier master data.** Pack size, shelf life, lead time, MOQ, case size. Xentral ERP is in your connector list and is the obvious candidate. If it is not there or not complete, this becomes the admin-editable `items.csv` from the architecture — which is where it probably belongs anyway, since a planner can maintain it and a data pipeline cannot invent it.
 
@@ -79,23 +79,25 @@ Count OOS events per dish per day in `fact_cg_oos_ingredient`. If a meaningful s
 pip install "snowflake-connector-python[pandas]" pandas
 ```
 
-Connection (Google SSO opens a browser window):
+Connection values are read from the environment; Google SSO opens a browser window:
 
 ```python
+import os
+
 import snowflake.connector
 conn = snowflake.connector.connect(
-    account="LCMNVKB-DW49132",
-    user="valentin.hornung@circuskitchens.com",
+    account=os.environ["SNOWFLAKE_ACCOUNT"],
+    user=os.environ["SNOWFLAKE_USER"],
     authenticator="externalbrowser",
-    role="CIRCUS_MODELS_READER",
-    warehouse="DEVELOP",
-    database="ANALYTICS",
+    role=os.environ["SNOWFLAKE_ROLE"],
+    warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+    database=os.environ["SNOWFLAKE_DATABASE"],
 )
 ```
 
 For the hosted script later, Joel offered a service account with key-pair authentication — request that at Milestone 2, not now.
 
-The Snowsight web UI at `LCMNVKB-DW49132.snowflakecomputing.com` is faster than Python for browsing schemas. Use it for orientation, then the script for anything repeatable.
+The Snowsight web UI is faster than Python for browsing schemas. Use it for orientation, then the script for anything repeatable.
 
 ### Lightdash
 

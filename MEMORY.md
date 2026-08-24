@@ -22,11 +22,30 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/descriptions/phase2_supply_planning_brief.md` sections 1-3. Status:
   `active`.
 
-- 2026-08-22: Project status is discovery and KW34 value-level validation
-  complete; implementation has not started. The repository structure and
-  backlog describe proposed work, not already implemented modules. Evidence:
-  `docs/descriptions/phase2_supply_planning_brief.md` scope/status and section
-  9.3, `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+- 2026-08-22: Project status was discovery and KW34 value-level validation
+  complete; implementation had not started. This status was replaced by the
+  first implementation tranche on 2026-08-24. Evidence:
+  `docs/descriptions/phase2_supply_planning_brief.md` scope/status,
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `superseded`.
+
+- 2026-08-24: The first M0/M1 foundation tranche is implemented. It includes a
+  Python 3.12 package, canonical typed input/output contracts, provenance and
+  run-mode gates, pure daily BOM explosion preserving pre-mixes, the isolated
+  `legacy_kw34/v1` displayed-value calculation, a compatibility CSV adapter,
+  deterministic audit JSON/CLI, a safe synthetic fixture, and 17 passing
+  tests. Real KW34 golden fixtures, full canonical/XLSX adapters, improved
+  planning, SQL, persistence, API, and UI remain open. Evidence:
+  `src/supply_planning/`, `tests/`, `README.md`,
+  `docs/descriptions/canonical_data_contracts.md`, and
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+
+- 2026-08-24: The first core and CLI intentionally use only the Python 3.12
+  standard library and `Decimal`; Ruff/mypy are configured but are not installed
+  in the current bundled runtime. Canonical contracts are storage-neutral engine
+  boundaries and do not assume future Snowflake/ERP/Supabase schemas. Source
+  adapters must map real schemas into these contracts. Evidence: `pyproject.toml`,
+  `src/supply_planning/domain/models.py`,
+  `docs/descriptions/canonical_data_contracts.md`. Status: `active`.
 
 - 2026-08-22: The reference source is `Supply_Planning_Rewe.xlsx`, an Office
   workbook stored in Google Drive with file ID
@@ -40,8 +59,9 @@ not a task log or a replacement for the detailed engineering brief.
   `active`.
 
 - 2026-08-22: The Phase 2 demand interface is daily and location-aware, with
-  `location_id`, stable `dish_id`, `date`, `forecast_portions`, and optional
-  `forecast_sigma`. The engine must not be designed around one flat weekly
+  `location_id`, stable `dish_id`, `service_date`, `forecast_portions`, and
+  optional `forecast_sigma`. An upstream `date` column must be mapped explicitly.
+  The engine must not be designed around one flat weekly
   demand number. Evidence: `docs/descriptions/phase2_supply_planning_brief.md`
   section 3. Status: `active`.
 
@@ -182,6 +202,14 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/scratchpads/phase2_supply_planning_execution.md`. Update both during
   implementation and after meaningful decisions. Evidence: those files and
   `AGENTS.md`. Status: `active`.
+
+- 2026-08-24: `docs/plans/human_action_register.md` is the source of truth for
+  manual actions, requested information, owners, timing, allowed fallback, and
+  the exact milestone each item blocks. The current M1 actions are process
+  answers/evidence (`HA-01`), the KW34 fixture commit policy (`HA-02`), and raw
+  formula evidence if available (`HA-03`); none blocks continued synthetic
+  engineering. Evidence: that register and the backlog's question-to-gate
+  matrix. Status: `active`.
 
 ## Open high-impact questions
 

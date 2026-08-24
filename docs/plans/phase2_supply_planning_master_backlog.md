@@ -1,10 +1,11 @@
 # Phase 2 Supply Planning — Master Backlog
 
 **Created:** 2026-08-22
-**Status:** planning and KW34 validation complete; implementation not started
+**Status:** planning and KW34 validation complete; first M0/M1 foundation tranche implemented, real KW34 golden fixture and remaining adapters open
 **Source of truth:** this file controls cross-session execution order and progress.
 **Detailed context:** `docs/descriptions/phase2_supply_planning_brief.md`
 **Working notes:** `docs/scratchpads/phase2_supply_planning_execution.md`
+**Human actions:** `docs/plans/human_action_register.md`
 
 ## Goal
 
@@ -115,13 +116,13 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 ### P0 — Canonical contracts
 
-- [ ] Define typed schemas for `forecast_daily`, `menu_calendar`, `bom_lines`, `items`, `suppliers`, `inventory_snapshots`, and `purchase_orders`.
-- [ ] Define output schemas for `planning_runs`, `planning_lines`, `order_proposals`, `exceptions`, and `approvals`.
-- [ ] Add explicit unit suffixes (`_g`, `_units`, `_days`, `_at`, `_date`) and forbid ambiguous quantity fields.
-- [ ] Define stable `location_id`, `dish_id`, `silo_id`, `item_id`, `supplier_id`, and optional `supplier_item_id` rules.
-- [ ] Define provenance enum: `observed`, `manual`, `policy_default`, `empty_placeholder`, `unavailable`.
-- [ ] Define run modes: `fixture`, `scenario`, `shadow`, `operational` and their placeholder gates.
-- [ ] Define exception-code catalog and severity (`blocker`, `warning`, `info`).
+- [x] Define typed schemas for `locations`, `forecast_daily`, `menu_calendar`, `bom_lines`, `items`, `suppliers`, `supplier_items`, `supplier_calendars`, `inventory_snapshots`, and `purchase_orders`.
+- [x] Define typed output schemas for `planning_runs`, `planning_run_inputs`, `planning_lines`, `order_proposals`, `exceptions`, and `approvals`.
+- [x] Add explicit unit suffixes (`_g`, `_units`, `_days`, `_at`, `_date`) and forbid ambiguous quantity fields.
+- [x] Define stable `location_id`, `dish_id`, `silo_id`, `item_id`, `supplier_id`, and optional `supplier_item_id` rules.
+- [x] Define provenance enum: `observed`, `manual`, `policy_default`, `empty_placeholder`, `unavailable`.
+- [x] Define run modes: `fixture`, `scenario`, `shadow`, `operational` and initial critical-source placeholder gates.
+- [x] Define exception-code catalog and severity (`blocker`, `warning`, `info`).
 - [ ] **HUMAN GATES `H-02`–`H-05`:** resolve semantics/master-data questions or approve documented fixture assumptions before accepting M1 as business-complete. Implementation may start with assumption flags and quarantined rows.
 
 ### P1 — Fixture preparation
@@ -138,8 +139,8 @@ Question 14 in the supplied list is empty and creates no additional gate.
 - [ ] Record an ADR for separate `legacy_kw34` and `improved` policies.
 - [ ] Record an ADR that CLI/CSV/YAML are bootstrap, test, import/export, and fallback interfaces—not the non-technical planner workflow.
 - [ ] Record an ADR for files first and authoritative Supabase persistence at M3 once approved, with no dual operational configuration authority.
-- [ ] Select Python/runtime and core libraries; likely Python 3.12, Pydantic, pandas or Polars, openpyxl, pytest, and a CLI library.
-- [ ] Decide numeric representation and improved-engine precision/rounding boundaries.
+- [x] Select Python/runtime and core libraries: Python 3.12 standard library for the pure core and first CLI, with no third-party runtime dependency; add adapter/API dependencies only at their owning milestone.
+- [x] Decide numeric representation and improved-engine precision/rounding boundaries: `Decimal` for planning quantities, no early improved-engine rounding, explicit legacy quantization only in `legacy_kw34`.
 
 ### Milestone 0 exit criteria
 
@@ -154,40 +155,42 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 ### P0 — Repository and quality scaffold
 
-- [ ] Create `pyproject.toml`, package layout, Python version, locked dependencies, and `.env.example` if needed.
-- [ ] Configure formatting/linting, type checking, and pytest.
+- [x] Create `pyproject.toml`, package layout, Python version, zero-runtime-dependency declaration, and `.env.example`.
+- [x] Configure Ruff/mypy project metadata and a standard-library `unittest` verification wrapper. Ruff/mypy executables are not installed in the current runtime and remain a CI/tooling task.
 - [ ] Add CI for lint/type/unit/integration tests.
-- [ ] Add README quick start and setup instructions.
-- [ ] Add fixture/data paths to `.gitignore` where production exports could land.
+- [x] Add README quick start and setup instructions.
+- [x] Add fixture/data paths and workbook formats to `.gitignore` where production exports could land.
 
 ### P0 — File adapters and validation
 
-- [ ] Implement XLSX/CSV loaders with no calculation logic.
+- [ ] Implement XLSX and canonical multi-dataset CSV loaders with no calculation logic.
+- [x] Implement the compatibility-specific legacy CSV loader with required-column/type checks and no calculation logic.
 - [ ] Implement forward-fill parsing of hierarchical `Dish -> Silo -> Ingredient` rows.
 - [ ] Validate required columns, types, positive pack sizes, allowed storage classes, and date/location grain.
 - [ ] Validate stable-ID joins, alias coverage, duplicate IDs, orphan BOM lines, and conflicting pack sizes.
-- [ ] Emit human-readable errors with source file, row, field, value, and remedy.
+- [x] Emit human-readable legacy CSV errors with source file, row, field, value, and remedy; extend the same contract to canonical/XLSX adapters.
 - [ ] Preserve raw source values and normalized values for audit.
 
 ### P0 — Legacy calculation profile
 
-- [ ] Implement BOM explosion and aggregation across dishes.
-- [ ] Implement the legacy `1.20` factor separately from future yield/safety stock.
-- [ ] Implement exact KW34 `Daily`, `Need`, bridge, `After`, and `Order` rounding.
-- [ ] Use KW33 demand for the KW34 bridge.
+- [x] Implement BOM explosion and aggregation across dishes while preserving the silo/pre-mix path.
+- [x] Implement the legacy `1.20` factor separately from future yield/safety stock.
+- [x] Implement exact documented KW34 `Daily`, `Need`, bridge, `After`, and `Order` rounding.
+- [x] Use the explicit previous-week daily input for the KW34 bridge.
 - [ ] Implement stocked paths for `TK`, `Kuehl`, and `RT`.
 - [ ] Implement fresh Sa/Mo/We/Fr average-day multiplier path.
-- [ ] Preserve blank/manual booking cells as source evidence; do not invent placed orders.
+- [x] Preserve blank/observed Order values as source evidence and emit structured difference exceptions; do not invent placed orders.
 - [ ] Detect planned items missing from stock/order output.
 
 ### P0 — CLI and outputs
 
 - [ ] Implement `plan validate` and `plan run --policy legacy_kw34` commands.
-- [ ] Document the CLI as a developer/analyst, batch, troubleshooting, and recovery interface—not the final configuration UI.
+- [x] Implement the first `supply-plan legacy-run` / `python -m supply_planning legacy-run` fixture command with CSV input and audit JSON output.
+- [x] Document the CLI as a developer/analyst, batch, troubleshooting, and recovery interface—not the final configuration UI.
 - [ ] Write `order_proposals.csv`, `exceptions.csv`, `planning_lines.csv`, and `run_summary.json`.
 - [ ] Include input hashes, config hash, code version, run timestamp, and run mode.
-- [ ] Include every legacy intermediate and comparison-to-sheet field.
-- [ ] Exit non-zero on schema blockers; allow quality warnings with explicit summary.
+- [x] Include every currently implemented legacy intermediate and calculated-versus-observed comparison field.
+- [x] Exit non-zero on input/schema blockers; allow quality warnings with explicit summary.
 
 ### P0 — Golden tests
 
@@ -196,7 +199,7 @@ Question 14 in the supplied list is empty and creates no additional gate.
 - [ ] Assert the two missing fresh rows are reported.
 - [ ] Assert all 28 continuing bridge rows use the prior-week rate.
 - [ ] Assert Creme Fraiche/Schnittlauch master conflicts fail or quarantine deterministically.
-- [ ] Add unit tests for rounding boundaries and zero/negative availability.
+- [x] Add synthetic unit tests for rounding boundaries, zero demand, availability floor, determinism, blank-order exceptions, BOM aggregation/pre-mixes, and run-mode gates.
 
 ### P1 — Legacy usability
 
@@ -516,12 +519,12 @@ Question 14 in the supplied list is empty and creates no additional gate.
 ## Immediate next execution slice
 
 1. [ ] Send Tier A questions Q1/Q4/Q5/Q6/Q9 to the planner and track answers in parallel; do not pause scaffolding.
-2. [ ] Create storage-neutral normalized schema definitions, run-mode gates, and the exception-code catalog; mark files as bootstrap adapters and Supabase as the planned operational store.
-3. [ ] Scaffold the Python package and test tooling.
-4. [ ] Create synthetic/minimal local fixtures and a source manifest; keep real KW34-derived rows uncommitted until `H-01` is cleared.
-5. [ ] Implement BOM explosion and legacy rounding.
+2. [x] Create storage-neutral normalized schema definitions, initial run-mode gates, and the exception-code catalog; mark files as bootstrap adapters and Supabase as the planned operational store.
+3. [x] Scaffold the Python package and test tooling.
+4. [x] Create a documented synthetic fixture and private-data ignore paths; keep real KW34-derived rows uncommitted until `H-01`/`HA-02` is cleared.
+5. [x] Implement BOM explosion and legacy rounding.
 6. [ ] After fixture approval, land the 27-cell KW34 golden test plus gap/missing-row assertions.
-7. [ ] Add CLI validation/run and audit exports.
+7. [x] Add the first compatibility CSV validation/run command and deterministic audit JSON; multi-file canonical validation and CSV report bundle remain open above.
 8. [ ] Resolve or explicitly accept assumptions for `H-02`–`H-05`, then review Milestone 1 output with the current planner before accepting M1 or starting improved-policy sign-off.
 
 ## Dated progress log
@@ -533,3 +536,4 @@ Question 14 in the supplied list is empty and creates no additional gate.
 - 2026-08-22: Clarified that CLI/CSV/YAML are technical bootstrap and fallback interfaces; the planned non-technical workflow is React/FastAPI backed by authoritative Supabase persistence after approval.
 - 2026-08-24: Reclassified unanswered business questions as stage-exit/promotion gates rather than a global start blocker. M0/M1 scaffolding and scenario-safe engine work may begin while answers are collected in parallel.
 - 2026-08-24: Added the root README as the concise engineer handover for project purpose, planned architecture, logic, data/config boundaries, delivery order, safeguards, and the documentation reading path.
+- 2026-08-24: Implemented the first M0/M1 tranche: Python 3.12 package, canonical input/output dataclasses, provenance/run modes and critical-source gates, pure BOM explosion, isolated `legacy_kw34/v1`, legacy CSV adapter, deterministic audit CLI, synthetic fixture, and 17 passing tests. Added canonical-contract and human-action documentation; real KW34 golden tests remain gated.

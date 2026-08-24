@@ -1,7 +1,7 @@
 # Supply Planning Automation — Phase 2 Engineering Brief
 
 **Scope:** replace the manual weekly Excel supply-planning process with a hosted Python service.
-**Status:** discovery and KW34 value-level validation complete; build not started.
+**Status:** discovery and KW34 value-level validation complete; first M0/M1 foundation implemented on 2026-08-24. Canonical contracts, run-mode source gates, pure BOM explosion, the isolated legacy calculation, synthetic tests, and a deterministic audit CLI are runnable. Real KW34 fixture acceptance and the full legacy workbook adapter remain open.
 **Source analysed:** [`Supply_Planning_Rewe.xlsx`](https://docs.google.com/spreadsheets/d/1W0fwiO_mf7pQ6G0Oqmp6QE92MCljrXQ-/edit?gid=844782362#gid=844782362) (Excel workbook stored in Google Drive), tabs `Plan KW34` / `Stock KW34`, cross-checked against adjacent weeks. Revalidated read-only on 2026-08-22 against the workbook modified on 2026-08-21.
 **Audience:** the engineer who will build and own the Phase 2 service.
 
@@ -16,6 +16,8 @@ This is the context pack for building Phase 2. It explains what the current manu
 The overall direction is sound: reproduce the manual process first, isolate a pure engine behind file adapters, then introduce improved planning, real data, shadow testing, and a UI. The original brief was **not implementation-ready** in three places that are corrected here: it mischaracterised the KW34 bridge as using the new week's demand, its target netting equation double-counted pre-arrival demand, and its safety-stock equation was ambiguous about the grain of `σ`.
 
 Confidence is **high** for the displayed KW34 legacy arithmetic and **medium** for the operational meaning of blank/booking cells, lead times, shelf life, and pipeline handling. The source is an Office workbook in Drive; the connector exposed displayed cell values but not a formula AST. The reconstruction was therefore independently reconciled at value level. Preserve this caveat until the raw workbook formulas or an owner walkthrough confirm the exact cell implementation.
+
+The implemented canonical field definitions and source-mapping boundary are maintained in `docs/descriptions/canonical_data_contracts.md`. The engine contracts do not assume physical Snowflake, ERP, or Supabase table names. Current code uses Python 3.12 standard-library dataclasses and `Decimal` with no third-party runtime dependency; source/UI frameworks remain adapter-boundary decisions for later milestones.
 
 ---
 
@@ -57,7 +59,7 @@ Phase 2 consumes a demand signal shaped like:
 |---|---|---|
 | `location_id` | string | single site today, must scale to N |
 | `dish_id` | string | stable key, not display name |
-| `date` | date | **daily granularity, not weekly** |
+| `service_date` | date | **daily granularity, not weekly**; adapters may map an upstream `date` field explicitly |
 | `forecast_portions` | float | expected portions sold |
 | `forecast_sigma` | float | optional; std. deviation of the forecast error. Feeds safety stock. Null → fall back to config default |
 
@@ -384,6 +386,8 @@ The React UI is the planner-facing interface. FastAPI validates and authorizes c
 
 ### 9.3 Repository layout
 
+The layout below remains the target. The implemented subset currently includes `pyproject.toml`, `src/supply_planning/{domain,validation,engine,application,adapters}`, the CLI, synthetic fixtures, and unit/integration-style tests. Config templates, the improved engine modules, web app, and Supabase migrations are not yet present.
+
 ```
 supply-planning/
 ├── pyproject.toml
@@ -515,6 +519,8 @@ Start locally as a deterministic CLI with CSV/JSON outputs for engineering valid
 ---
 
 ## 10. Open questions for the business
+
+The exact manual actions, owners, fallbacks, and milestone due dates are tracked in `docs/plans/human_action_register.md`; these questions are promotion gates rather than a global development pause.
 
 1. **Is `Demand/Silo Load` portions sold per day, or silo fill level per day?** The arithmetic works either way, but it determines whether Phase 1 forecasts demand or forecasts refills. Blocking for the Phase 1 interface.
 2. **When exactly is the stock count taken, and by whom?** Needed to replace the hardcoded 2.5-day bridge with a real timestamp.

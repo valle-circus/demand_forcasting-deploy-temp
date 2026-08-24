@@ -26,3 +26,9 @@ Thumbs.db
 # Local output
 output/
 *.log
+
+# Private/source data (committed fixtures must be explicitly reviewed)
+data/private/
+tests/fixtures/private/
+*.xlsx
+*.xls
