@@ -69,8 +69,8 @@ class ImprovedRunTests(unittest.TestCase):
             scenario = run_improved_plan(
                 bundle, planning_as_of_at=AS_OF, run_mode=RunMode.SCENARIO
             )
-            operational = run_improved_plan(
-                bundle, planning_as_of_at=AS_OF, run_mode=RunMode.OPERATIONAL
+            production = run_improved_plan(
+                bundle, planning_as_of_at=AS_OF, run_mode=RunMode.PRODUCTION
             )
 
             self.assertEqual(scenario.status, RunStatus.COMPLETED)
@@ -79,10 +79,10 @@ class ImprovedRunTests(unittest.TestCase):
                 issue for issue in scenario.issues if issue.dataset == "purchase_orders"
             )
             self.assertEqual(po_warning.severity, Severity.WARNING)
-            self.assertEqual(operational.status, RunStatus.BLOCKED)
-            self.assertEqual(operational.netting_results, ())
+            self.assertEqual(production.status, RunStatus.BLOCKED)
+            self.assertEqual(production.netting_results, ())
             po_blocker = next(
-                issue for issue in operational.issues if issue.dataset == "purchase_orders"
+                issue for issue in production.issues if issue.dataset == "purchase_orders"
             )
             self.assertEqual(po_blocker.severity, Severity.BLOCKER)
             self.assertEqual(po_blocker.code, ExceptionCode.UNKNOWN_CRITICAL_SOURCE)
@@ -113,7 +113,7 @@ class ImprovedRunTests(unittest.TestCase):
             self.assertEqual(payload["summary"]["netting_line_count"], 3)
             self.assertEqual(payload["summary"]["net_requirement_g"], "2600")
 
-    def test_stale_inventory_warns_in_scenario_and_blocks_operational(self) -> None:
+    def test_stale_inventory_warns_in_scenario_and_blocks_production(self) -> None:
         bundle = load_canonical_bundle(FIXTURE)
         stale_bundle = replace(
             bundle,
@@ -126,8 +126,8 @@ class ImprovedRunTests(unittest.TestCase):
         scenario = run_improved_plan(
             stale_bundle, planning_as_of_at=AS_OF, run_mode=RunMode.SCENARIO
         )
-        operational = run_improved_plan(
-            stale_bundle, planning_as_of_at=AS_OF, run_mode=RunMode.OPERATIONAL
+        production = run_improved_plan(
+            stale_bundle, planning_as_of_at=AS_OF, run_mode=RunMode.PRODUCTION
         )
 
         stale_scenario_issues = [
@@ -140,8 +140,8 @@ class ImprovedRunTests(unittest.TestCase):
             all(issue.severity is Severity.WARNING for issue in stale_scenario_issues)
         )
         self.assertEqual(scenario.status, RunStatus.COMPLETED)
-        self.assertEqual(operational.status, RunStatus.BLOCKED)
-        self.assertEqual(operational.netting_results, ())
+        self.assertEqual(production.status, RunStatus.BLOCKED)
+        self.assertEqual(production.netting_results, ())
 
     def test_improved_cli_returns_blocked_exit_for_unknown_po_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -171,7 +171,7 @@ class ImprovedRunTests(unittest.TestCase):
                         "--planning-as-of",
                         AS_OF.isoformat(),
                         "--run-mode",
-                        "operational",
+                        "production",
                     ]
                 )
 

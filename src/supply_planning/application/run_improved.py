@@ -259,7 +259,7 @@ def run_improved_plan(
     demand_keys = sorted(
         {(demand.location_id, demand.item_id) for demand in daily_item_demand}
     )
-    strict = run_mode in {RunMode.SHADOW, RunMode.OPERATIONAL}
+    strict = run_mode in {RunMode.SHADOW, RunMode.PRODUCTION}
     selected_snapshots: dict[tuple[str, str], InventorySnapshot] = {}
     for location_id, item_id in demand_keys:
         candidates = [

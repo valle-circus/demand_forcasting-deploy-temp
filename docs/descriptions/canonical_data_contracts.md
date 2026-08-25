@@ -4,14 +4,16 @@
 
 **Code:** `src/supply_planning/domain/models.py`
 
-**Purpose:** define the stable data shapes consumed by the planning engine without assuming Snowflake, Xentral, Supabase, CSV, or API table layouts.
+**Purpose:** define stable engine shapes while keeping physical storage separate:
+Snowflake supplies operational inputs and receives results; Supabase supplies
+application-owned editable planning rules; CSV remains a fixture/test adapter.
 
 ## 1. Boundary and mapping rule
 
 These are **engine contracts**, not claims about physical source schemas.
 
 ```text
-Snowflake / ERP / API / CSV / XLSX
+Snowflake / CSV / XLSX
                  ↓ source-specific adapter
        canonical contracts in this document
                  ↓
@@ -55,7 +57,6 @@ When a source uses different names or grains, its adapter must transform, valida
 | `dish_id` | string | yes | Stable dish ID |
 | `service_date` | date | yes | Daily service date |
 | `forecast_portions` | decimal | yes | Expected portions, non-negative |
-| `forecast_sigma` | decimal | no | Daily forecast-error standard deviation |
 | `forecast_version` | string | yes | Manual/file/model version |
 | `provenance` | enum | yes | Value provenance |
 
@@ -104,8 +105,6 @@ The engine preserves the `Dish -> Silo -> Item` path during explosion. It may ag
 | `shelf_life_days` | integer | no | Sealed/opened meaning still requires business confirmation |
 | `min_safety_days` | decimal | no | Item override; otherwise policy default |
 | `max_cover_days` | decimal | no | Hard cover cap |
-| `last_order_date_offset_days` | integer | yes | Non-negative days before final service to stop ordering |
-| `pipeline_cancellable` | boolean | yes | Whether an open PO can be cancelled or pulled |
 | `active` | boolean | yes | Soft-delete flag |
 | `provenance` | enum | yes | Source/default status |
 
@@ -120,8 +119,7 @@ Aliases and supplier article numbers belong in mapping/supplier-item data, not i
 | `supplier_id` | string | yes | Stable supplier key |
 | `supplier_name` | string | yes | Display name |
 | `timezone` | string | yes | Timezone used for cut-offs |
-| `default_production_lead_days` | integer | no | Non-negative supplier default |
-| `default_transport_lead_days` | integer | no | Non-negative supplier default |
+| `default_planning_lead_time_days` | integer | no | Non-negative supplier default used by Phase 2 |
 | `active` | boolean | yes | Soft-delete flag |
 
 ### 3.7 `supplier_items`
@@ -133,21 +131,20 @@ Aliases and supplier article numbers belong in mapping/supplier-item data, not i
 | `supplier_id` | string | yes | FK to `suppliers` |
 | `item_id` | string | yes | FK to `items` |
 | `supplier_item_id` | string | no | Supplier article/SKU |
-| `production_lead_days` | integer | no | Item override |
-| `transport_lead_days` | integer | no | Item override |
+| `planning_lead_time_days` | integer | no | Item override used by Phase 2 |
 | `moq_units` | decimal | yes | Minimum order, zero means none |
 | `case_size_units` | decimal | yes | Positive rounding multiple |
 | `order_cutoff_local` | time | no | Item-specific cut-off override |
 | `active` | boolean | yes | Soft-delete flag |
 | `provenance` | enum | yes | Source/default status |
 
-### 3.8 `supplier_calendars`
+### 3.8 `delivery_schedule_rules`
 
-**Key:** `supplier_calendar_id`
+**Key:** `delivery_schedule_id`
 
 | Field | Type | Required | Meaning |
 |---|---|---:|---|
-| `supplier_calendar_id` | string | yes | Stable rule ID |
+| `delivery_schedule_id` | string | yes | Stable rule ID |
 | `supplier_id` | string | yes | FK to `suppliers` |
 | `location_id` | string | yes | FK to `locations` |
 | `order_weekday` | integer | yes | Monday `0` through Sunday `6` |
@@ -155,7 +152,9 @@ Aliases and supplier article numbers belong in mapping/supplier-item data, not i
 | `delivery_weekday` | integer | yes | Monday `0` through Sunday `6` |
 | `active` | boolean | yes | Soft-delete flag |
 
-Holiday and one-off exceptions will be a separate effective-dated dataset when required by a real source.
+This is simple Phase 2 configuration such as weekly order/delivery weekdays. It
+is not an external calendar integration. Holiday or one-off exception support
+is deferred until a real requirement proves it necessary.
 
 ### 3.9 `inventory_snapshots`
 
@@ -189,7 +188,7 @@ Lot/expiry inventory is intentionally separate and optional until a source is av
 | `status` | enum | yes | `open`, `confirmed`, `partially_received`, `closed`, or `cancelled` |
 | `provenance` | enum | yes | Observed/manual/default status |
 
-An observed query returning zero rows is valid. An unavailable source represented by an empty placeholder is not equivalent and blocks shadow/operational use.
+An observed query returning zero rows is valid. An unavailable source represented by an empty placeholder is not equivalent and blocks shadow/production use.
 
 ### 3.11 Implemented canonical CSV package
 
@@ -226,18 +225,20 @@ private operational extracts must not be committed.
 | `fixture` | allowed with warnings | Golden/synthetic tests |
 | `scenario` | allowed with warnings | Offline what-if development |
 | `shadow` | unknown critical sources block | Comparison with real planner runs |
-| `operational` | unknown critical sources block | Proposal approval/export |
+| `production` | unknown critical sources block | Scheduled internal Snowflake result generation |
 
 Critical sources currently enforced in code are `forecast_daily`,
 `menu_calendar`, `bom_lines`, `items`, `inventory_snapshots`, and
 `purchase_orders`. Pack size is validated by the item contract. Unknown or
 placeholder critical sources warn in fixture/scenario mode and block before any
-netting result is emitted in shadow/operational mode. Lead-time/calendar policy
+netting result is emitted in shadow/production mode. Lead-time/delivery-rule policy
 gates remain open until scheduling is implemented.
 
 ## 5. Canonical output contracts
 
-The v1 typed output records are implemented in `domain/models.py`. They define persistence and API boundaries now, even though the improved engine does not populate them yet.
+The v1 typed output records define the calculation-to-Snowflake boundary even
+though the improved engine does not populate every record yet. Supabase is not
+the result store.
 
 ### 5.1 `planning_runs`
 
@@ -251,13 +252,16 @@ One record per dataset snapshot used by a run: `run_id`, `dataset`, `source_vers
 
 One derivation record per run/location/item/supplier candidate. It retains stable IDs, `order_date`, `expected_delivery_date`, `gross_requirement_g`, yield and safety values plus provenance, `usable_on_hand_g`, `open_po_due_g`, `raw_order_g`, shelf-life/max-cover caps, `capped_order_g`, `proposed_order_units`, and `rounding_delta_g`.
 
-### 5.4 `order_proposals`, `exceptions`, and `approvals`
+### 5.4 `planning_recommendations` and `exceptions`
 
-- `order_proposals` contain proposal/run/line IDs, location, supplier, item, `order_date`, `expected_delivery_date`, proposed purchasable units, and a status that begins as `proposed`.
+- `planning_recommendations` contain recommendation/run/line IDs, location,
+  supplier where known, item, calculated `order_date`, expected delivery date,
+  and recommended purchasable units.
 - `exceptions` persist a structured code, severity, message, remedy, and optional planning-line reference.
-- `approvals` persist an explicit `approved` or `rejected` decision, actor, timezone-aware timestamp, and reason. An approval record is distinct from calculation and is required before any later export/dispatch workflow.
 
-The current CLI does not create approvals and cannot dispatch an order.
+These are internal planning outputs, not placed purchase orders. Approval,
+supplier send, ERP export, assignment, and comment workflows are outside the
+current contract.
 
 ### 5.5 Current legacy audit envelope
 
@@ -280,16 +284,17 @@ and the unrounded net requirement in grams.
 
 The selected snapshot is treated as the opening balance at the projection
 start. If its calendar date is older, the assumption is a warning in
-fixture/scenario mode and a blocker in shadow/operational mode unless a current
+fixture/scenario mode and a blocker in shadow/production mode unless a current
 snapshot or complete dated event bridge is supplied. Receipts dated on a
 service day are available before that day's demand. Stale POs dated before the
 start are reported but not silently counted; POs after the horizon are reported
 separately. Candidate receipts are scenario inputs and remain separate from
 open POs and from the net-requirement calculation.
 
-This tranche deliberately stops before yield/safety policy, protection-period
+This tranche deliberately stops before configured yield/safety policy, protection-period
 selection, shelf-life/max-cover constraints, MOQ/case rounding, supplier
-scheduling, proposal approval, persistence, or dispatch.
+scheduling, recommendation rounding, Snowflake persistence, Supabase
+configuration, or the internal UI.
 
 ## 6. SQL/source discovery deliverable
 

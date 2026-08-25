@@ -29,8 +29,8 @@ class RunModeGateTests(unittest.TestCase):
         self.assertEqual(issues[0].severity, Severity.WARNING)
         self.assertEqual(issues[0].code, ExceptionCode.PLACEHOLDER_SOURCE)
 
-    def test_shadow_and_operational_fail_closed_on_unknown_po_source(self) -> None:
-        for mode in (RunMode.SHADOW, RunMode.OPERATIONAL):
+    def test_shadow_and_production_fail_closed_on_unknown_po_source(self) -> None:
+        for mode in (RunMode.SHADOW, RunMode.PRODUCTION):
             with self.subTest(mode=mode):
                 issues = evaluate_run_mode(
                     mode,
@@ -41,7 +41,7 @@ class RunModeGateTests(unittest.TestCase):
 
     def test_observed_empty_po_result_is_known_not_missing(self) -> None:
         issues = evaluate_run_mode(
-            RunMode.OPERATIONAL,
+            RunMode.PRODUCTION,
             _statuses(Provenance.OBSERVED),
         )
         self.assertEqual(issues, ())

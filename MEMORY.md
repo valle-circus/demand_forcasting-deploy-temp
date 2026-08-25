@@ -15,6 +15,24 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-25: **Architecture and scope correction.** Phase 1 is an independent
+  upstream input that produces forecast portions by location/dish/service day.
+  This repository is Phase 2: BOM explosion, stock/open-PO netting, and internal
+  purchase recommendations using lead/review, shelf life/max cover, pack/MOQ/
+  case, storage behaviour, simple delivery rules, and explicit safety/yield
+  config. Snowflake owns operational inputs and calculated result tables.
+  Supabase owns only application-managed editable planning rules and their
+  change history; an internal React/Python UI exists so non-technical users can
+  maintain those rules. The UI is not a proposal-approval, supplier-send, ERP,
+  comments, or assignment workflow. Delivery schedules are simple config data,
+  not an external calendar integration. CSV/JSON remain fixture/test/recovery
+  adapters. The displayed KW33/KW34 formula is implemented and reconciles 27/27
+  filled orders plus 28/28 bridge values, but the real workbook golden fixture
+  is not yet automated; current tests are synthetic. Evidence: `README.md`,
+  `docs/descriptions/phase2_supply_planning_brief.md` sections 3-4 and 9,
+  `docs/plans/phase2_supply_planning_master_backlog.md`, and
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
+
 - 2026-08-24: **A correction notice supersedes four earlier same-day entries.**
   Findings first recorded on 2026-08-24 were produced under the Lightdash
   service role, which reads 1 of 4 accessible schemas, and several were then
@@ -97,9 +115,10 @@ not a task log or a replacement for the detailed engineering brief.
   the current source/process, with Deepali likely knowing the details. After
   discovery, Joel's team can establish ingestion—potentially with Fivetran—and
   a normalized model. This blocks real PO adapter acceptance, shadow runs, and
-  operational netting; it does not block the pure engine, manual/file PO
-  fixtures, or scenario tests. MOQ, case size and supplier calendars remain
-  controlled manual-policy inputs unless an authoritative source is found.
+  production netting; it does not block the pure engine, manual/file PO
+  fixtures, or scenario tests. MOQ, case size, and simple delivery weekdays
+  remain controlled manual-policy inputs unless an authoritative source is
+  found.
   Evidence:
   `docs/descriptions/data_requirements.md` D10-D12;
   `scripts/snowflake_verification.sql` block V7. Status: `active`.
@@ -204,12 +223,13 @@ not a task log or a replacement for the detailed engineering brief.
   a dated event ledger and signed daily inventory projection, nets in-horizon
   open POs once, and reports overdue, post-horizon, post-final-demand, and
   stockout conditions. Unknown critical inputs warn in fixture/scenario mode
-  and fail closed with zero netting results in shadow/operational mode. The
+  and fail closed with zero netting results in shadow/production mode. The
   deterministic `improved-run` CLI and synthetic multi-location fixture are
-  covered by the repository's 33 passing tests. Yield/safety policy,
+  covered by the repository's 32 passing tests after scope cleanup. Yield/safety policy,
   protection-period selection, constraints, supplier/fresh scheduling,
-  proposal rounding/approval, SQL adapters, persistence, API, UI, and dispatch
-  remain open. Evidence: `src/supply_planning/adapters/canonical_csv.py`,
+  recommendation rounding, Snowflake adapters/result writing, Supabase config,
+  and the internal configuration UI remain open. Evidence:
+  `src/supply_planning/adapters/canonical_csv.py`,
   `src/supply_planning/engine/netting.py`,
   `src/supply_planning/application/run_improved.py`,
   `tests/fixtures/synthetic_improved/`,
@@ -235,9 +255,9 @@ not a task log or a replacement for the detailed engineering brief.
   conclusion, `docs/scratchpads/phase2_supply_planning_execution.md`. Status:
   `active`.
 
-- 2026-08-22: The Phase 2 demand interface is daily and location-aware, with
-  `location_id`, stable `dish_id`, `service_date`, `forecast_portions`, and
-  optional `forecast_sigma`. An upstream `date` column must be mapped explicitly.
+- 2026-08-22: The minimum Phase 2 demand interface is daily and location-aware,
+  with `location_id`, stable `dish_id`, `service_date`, and
+  `forecast_portions`. An upstream `date` column must be mapped explicitly.
   The engine must not be designed around one flat weekly
   demand number. Evidence: `docs/descriptions/phase2_supply_planning_brief.md`
   section 3. Status: `active`.
@@ -289,20 +309,19 @@ not a task log or a replacement for the detailed engineering brief.
   5.2, and 7. Status: `active`.
 
 - 2026-08-22: Deterministic yield loss and stochastic safety stock are separate
-  concepts. The target design replaces the flat spreadsheet `x1.2` factor with
-  an empirically derived/clamped yield factor plus additive safety stock. For
-  daily forecast-error sigma, statistical stock uses root-sum-of-squares across
-  the protection period with an explicit correlation assumption; do not divide
-  by the review period. OOS-censored demand must be corrected before production
-  calibration. Evidence:
-  `docs/descriptions/phase2_supply_planning_brief.md` sections 5.3, 7, and 8.
-  Status: `active`.
+  concepts, but statistical calibration is not a first-release requirement.
+  Keep the spreadsheet `x1.2` only in the legacy profile. The minimum improved
+  profile uses simple explicit, versioned yield and safety-day settings edited
+  through the Phase 2 configuration UI. Forecast-error sigma, OOS uncensoring,
+  and empirical waste calibration are later work. Evidence:
+  `docs/descriptions/phase2_supply_planning_brief.md` sections 5.3, 7, and 8 and
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
 
 - 2026-08-22: Missing waste, OOS, forecast-error, receipt, and lot/expiry data do
   not block file-based engine development. Fixture/scenario runs use explicit
   policy placeholders/defaults and carry value provenance into every line.
   Missing current stock, canonical pack/SKU, lead time, or open-PO visibility is
-  allowed only in non-operational modes and blocks operational approval. Missing
+  allowed only in fixture/scenario modes and blocks trusted production output. Missing
   data is never silently converted to observed zero. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` sections 7-9,
   `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
@@ -322,19 +341,21 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/descriptions/phase2_supply_planning_brief.md` section 7. Status:
   `active`.
 
-- 2026-08-22: Phase 2 produces order proposals with item, quantity, order date,
-  expected delivery date, and supplier. Nothing is dispatched until a human has
-  reviewed and approved it. Every line must retain intermediate calculation
-  values so the planner can explain the result. Evidence:
-  `docs/descriptions/phase2_supply_planning_brief.md` sections 7 and 9. Status:
-  `active`.
+- 2026-08-22: Phase 2 was originally described as producing proposals followed
+  by a coded approval workflow. The derivation requirement remains valid, but
+  the workflow scope is superseded: outputs are internal Snowflake planning
+  recommendations and approval/dispatch features are not part of this project.
+  Evidence: `docs/descriptions/phase2_supply_planning_brief.md` sections 7 and
+  9. Status: `superseded`.
 
 - 2026-08-22: Planning must explicitly handle menu launches and
   discontinuations. It requires a forward committed menu horizon longer than
   the longest lead time, item-level last-order offsets and pipeline
   cancellability, and exceptions for open POs arriving after final service.
   Evidence: `docs/descriptions/phase2_supply_planning_brief.md` sections 7, 9.4,
-  and 10. Status: `active`.
+  and 10. Status: `superseded` as a first-release requirement. Basic
+  forecast/menu coverage and late-PO flags remain active; advanced transition
+  optimization is later work.
 
 - 2026-08-22: The implementation architecture is script-first but not
   throwaway: one Python application service wraps a pure engine; the CLI calls
@@ -350,7 +371,8 @@ not a task log or a replacement for the detailed engineering brief.
   permit competing file/database authorities. Supabase project creation,
   ownership, region, auth/RLS, retention, and credentials require human approval.
   Evidence: `docs/descriptions/phase2_supply_planning_brief.md` sections 9.1-9.7,
-  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `superseded`
+  by the 2026-08-25 Snowflake-results/Supabase-config correction.
 
 - 2026-08-22: Delivery order is locked unless a documented blocker changes it:
   M0 evidence/contracts; M1 exact KW34 Python CLI; M2 improved file-driven engine
@@ -359,7 +381,8 @@ not a task log or a replacement for the detailed engineering brief.
   live Phase 1 and operations. Supplier/ERP dispatch is a separate final release
   gate and remains disabled through the first UI. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` section 11,
-  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `superseded`
+  by the simplified 2026-08-25 master backlog.
 
 - 2026-08-24: Unanswered planning-process questions are treated as staged
   promotion gates, not a global development blocker. Repository scaffolding,
@@ -367,9 +390,9 @@ not a task log or a replacement for the detailed engineering brief.
   `legacy_kw34` displayed-value profile may start immediately with explicit
   assumptions and provenance. Answers and real source access become mandatory
   before the affected feature is accepted as business-correct, shadow-tested,
-  or used for operational approval. In particular, unknown current stock,
+  or used for trusted production results. In particular, unknown current stock,
   canonical SKU/pack, lead time/calendar, demand semantics, or open-PO pipeline
-  must never pass the operational-mode gate. Evidence:
+  must never pass the production-mode gate. Evidence:
   `docs/plans/phase2_supply_planning_master_backlog.md` blocker interpretation
   and business-question gate matrix; `docs/scratchpads/phase2_supply_planning_execution.md`.
   Status: `active`.
@@ -443,8 +466,10 @@ implementation assumptions:
 - Which catalogued Snowflake models are authoritative and operationally fit for
   stock, BOM, menu, sales, waste and OOS, and how should the newly identified
   Ops PO/receipt source be ingested and modeled? Read access itself is resolved.
-- Which Supabase project/region/owner and which user roles/auth policy should be
-  used when durable storage and the UI begin?
+- Which Snowflake schema/table/write pattern owns run history and the latest
+  Phase 2 result, and will Joel's service account have the required grants?
+- Which Supabase project/region/owner and minimal internal authentication
+  approach should be used when editable config and the UI begin?
 
 Evidence for all questions:
 `docs/descriptions/phase2_supply_planning_brief.md` section 10. Status: `active`.

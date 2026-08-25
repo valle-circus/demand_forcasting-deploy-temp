@@ -36,7 +36,6 @@ FORECAST_FIELDS = (
     "dish_id",
     "service_date",
     "forecast_portions",
-    "forecast_sigma",
     "forecast_version",
 )
 MENU_FIELDS = ("location_id", "dish_id", "service_date", "menu_version", "active")
@@ -57,8 +56,6 @@ ITEM_FIELDS = (
     "shelf_life_days",
     "min_safety_days",
     "max_cover_days",
-    "last_order_date_offset_days",
-    "pipeline_cancellable",
     "active",
 )
 INVENTORY_FIELDS = (
@@ -309,13 +306,6 @@ def load_forecast_daily_csv(path: Path, provenance: Provenance) -> tuple[Forecas
                 forecast_portions=_decimal(
                     path, row_number, "forecast_portions", row["forecast_portions"]
                 ),  # type: ignore[arg-type]
-                forecast_sigma=_decimal(
-                    path,
-                    row_number,
-                    "forecast_sigma",
-                    row["forecast_sigma"],
-                    optional=True,
-                ),
                 forecast_version=_text(
                     path, row_number, "forecast_version", row["forecast_version"]
                 ),
@@ -435,17 +425,6 @@ def load_items_csv(path: Path, provenance: Provenance) -> tuple[Item, ...]:
                     "max_cover_days",
                     row["max_cover_days"],
                     optional=True,
-                ),
-                last_order_date_offset_days=_integer(
-                    path,
-                    row_number,
-                    "last_order_date_offset_days",
-                    row["last_order_date_offset_days"],
-                    optional=True,
-                    default=0,
-                ),  # type: ignore[arg-type]
-                pipeline_cancellable=_boolean(
-                    path, row_number, "pipeline_cancellable", row["pipeline_cancellable"]
                 ),
                 active=_boolean(path, row_number, "active", row["active"]),
                 provenance=provenance,

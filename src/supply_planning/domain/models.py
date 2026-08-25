@@ -47,7 +47,7 @@ class RunMode(StrEnum):
     FIXTURE = "fixture"
     SCENARIO = "scenario"
     SHADOW = "shadow"
-    OPERATIONAL = "operational"
+    PRODUCTION = "production"
 
 
 class RunStatus(StrEnum):
@@ -55,13 +55,6 @@ class RunStatus(StrEnum):
     COMPLETED = "completed"
     BLOCKED = "blocked"
     FAILED = "failed"
-
-
-class ProposalStatus(StrEnum):
-    PROPOSED = "proposed"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    CANCELLED = "cancelled"
 
 
 class PurchaseOrderStatus(StrEnum):
@@ -78,11 +71,6 @@ class PurchaseOrderStatus(StrEnum):
             PurchaseOrderStatus.CONFIRMED,
             PurchaseOrderStatus.PARTIALLY_RECEIVED,
         }
-
-
-class ApprovalDecision(StrEnum):
-    APPROVED = "approved"
-    REJECTED = "rejected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,7 +92,6 @@ class ForecastDaily:
     dish_id: str
     service_date: date
     forecast_portions: Decimal
-    forecast_sigma: Decimal | None = None
     forecast_version: str = "manual"
     provenance: Provenance = Provenance.MANUAL
 
@@ -113,8 +100,6 @@ class ForecastDaily:
         _require_text(self.dish_id, "dish_id")
         _require_text(self.forecast_version, "forecast_version")
         _require_non_negative(self.forecast_portions, "forecast_portions")
-        if self.forecast_sigma is not None:
-            _require_non_negative(self.forecast_sigma, "forecast_sigma")
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,8 +150,6 @@ class Item:
     shelf_life_days: int | None = None
     min_safety_days: Decimal | None = None
     max_cover_days: Decimal | None = None
-    last_order_date_offset_days: int = 0
-    pipeline_cancellable: bool = False
     active: bool = True
     provenance: Provenance = Provenance.MANUAL
 
@@ -180,10 +163,6 @@ class Item:
             _require_non_negative(self.min_safety_days, "min_safety_days")
         if self.max_cover_days is not None:
             _require_positive(self.max_cover_days, "max_cover_days")
-        if self.last_order_date_offset_days < 0:
-            raise ValueError(
-                "last_order_date_offset_days must be greater than or equal to zero"
-            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,18 +170,20 @@ class Supplier:
     supplier_id: str
     supplier_name: str
     timezone: str
-    default_production_lead_days: int | None = None
-    default_transport_lead_days: int | None = None
+    default_planning_lead_time_days: int | None = None
     active: bool = True
 
     def __post_init__(self) -> None:
         _require_text(self.supplier_id, "supplier_id")
         _require_text(self.supplier_name, "supplier_name")
         _require_text(self.timezone, "timezone")
-        for name in ("default_production_lead_days", "default_transport_lead_days"):
-            value = getattr(self, name)
-            if value is not None and value < 0:
-                raise ValueError(f"{name} must be greater than or equal to zero")
+        if (
+            self.default_planning_lead_time_days is not None
+            and self.default_planning_lead_time_days < 0
+        ):
+            raise ValueError(
+                "default_planning_lead_time_days must be greater than or equal to zero"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,8 +191,7 @@ class SupplierItem:
     supplier_id: str
     item_id: str
     supplier_item_id: str | None = None
-    production_lead_days: int | None = None
-    transport_lead_days: int | None = None
+    planning_lead_time_days: int | None = None
     moq_units: Decimal = Decimal("0")
     case_size_units: Decimal = Decimal("1")
     order_cutoff_local: time | None = None
@@ -221,15 +201,18 @@ class SupplierItem:
     def __post_init__(self) -> None:
         _require_non_negative(self.moq_units, "moq_units")
         _require_positive(self.case_size_units, "case_size_units")
-        for name in ("production_lead_days", "transport_lead_days"):
-            value = getattr(self, name)
-            if value is not None and value < 0:
-                raise ValueError(f"{name} must be greater than or equal to zero")
+        if (
+            self.planning_lead_time_days is not None
+            and self.planning_lead_time_days < 0
+        ):
+            raise ValueError(
+                "planning_lead_time_days must be greater than or equal to zero"
+            )
 
 
 @dataclass(frozen=True, slots=True)
-class SupplierCalendarRule:
-    supplier_calendar_id: str
+class DeliveryScheduleRule:
+    delivery_schedule_id: str
     supplier_id: str
     location_id: str
     order_weekday: int
@@ -238,7 +221,7 @@ class SupplierCalendarRule:
     active: bool = True
 
     def __post_init__(self) -> None:
-        for field_name in ("supplier_calendar_id", "supplier_id", "location_id"):
+        for field_name in ("delivery_schedule_id", "supplier_id", "location_id"):
             _require_text(getattr(self, field_name), field_name)
         for field_name in ("order_weekday", "delivery_weekday"):
             value = getattr(self, field_name)
@@ -420,8 +403,8 @@ class PlanningLine:
 
 
 @dataclass(frozen=True, slots=True)
-class OrderProposal:
-    proposal_id: str
+class PlanningRecommendation:
+    recommendation_id: str
     planning_line_id: str
     run_id: str
     location_id: str
@@ -430,11 +413,10 @@ class OrderProposal:
     order_date: date
     expected_delivery_date: date
     proposed_qty_units: Decimal
-    status: ProposalStatus = ProposalStatus.PROPOSED
 
     def __post_init__(self) -> None:
         for field_name in (
-            "proposal_id",
+            "recommendation_id",
             "planning_line_id",
             "run_id",
             "location_id",
@@ -462,25 +444,3 @@ class PlanningExceptionRecord:
             _require_text(getattr(self, field_name), field_name)
         if self.planning_line_id is not None:
             _require_text(self.planning_line_id, "planning_line_id")
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalRecord:
-    approval_id: str
-    proposal_id: str
-    run_id: str
-    decision: ApprovalDecision
-    decided_by: str
-    decided_at: datetime
-    reason: str
-
-    def __post_init__(self) -> None:
-        for field_name in (
-            "approval_id",
-            "proposal_id",
-            "run_id",
-            "decided_by",
-            "reason",
-        ):
-            _require_text(getattr(self, field_name), field_name)
-        _require_aware_datetime(self.decided_at, "decided_at")

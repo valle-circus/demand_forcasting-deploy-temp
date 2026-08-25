@@ -25,11 +25,28 @@ and must not be used to prove that data is absent elsewhere.
 
 ## Current decision
 
+### Phase ownership and storage
+
+- **Phase 1, outside this repository:** produces forecast portions at
+  `location × dish × service_date` grain. Historical sales, OOS, and related
+  demand signals belong primarily to forecasting.
+- **Phase 2, this repository:** consumes that forecast and calculates
+  ingredient/purchase requirements from menu/BOM, stock, open POs, lead time,
+  shelf life, pack/MOQ/case, storage behaviour, and simple delivery rules.
+- Waste/consumption and forecast-error history are optional later calibration
+  inputs. They do not block the first Phase 2 calculation.
+
+Operational inputs and Phase 2 results belong in Snowflake. Application-owned
+rules that non-technical users must edit belong in Supabase and are managed
+through the internal UI/API. Every Snowflake result run must retain the active
+Supabase config version/hash. Supabase is not a duplicate warehouse or result
+store.
+
 Nothing blocks continued work on the pure engine, typed contracts, synthetic
 tests, or the isolated `legacy_kw34` profile. Do not yet treat the discovered
 Snowflake tables as authoritative production inputs. Source ownership,
 completeness, grain, units, and lineage must be resolved before their adapters
-are accepted for shadow or operational runs.
+are accepted for shadow or production runs.
 
 The first canonical file path is now implemented: a required source manifest
 plus daily forecast, menu, BOM, item, inventory, and `open_pos.csv` inputs feed
@@ -37,7 +54,7 @@ the pure dated netting engine. This is the approved development/scenario bridge
 while real adapters are unavailable. It does not change any source-status
 finding below. An explicit manual or observed zero-row PO file is a known empty
 result; `empty_placeholder` or `unavailable` provenance is an unknown pipeline
-and blocks shadow/operational runs before netting output.
+and blocks shadow/production runs before netting output.
 
 Joel confirmed on 2026-08-25 that
 `REPORTING.FACT_CG_PURCHASE_ORDERS`, `FACT_CG_DISH_DEMAND_FORECASTS`,
@@ -64,7 +81,7 @@ ingested into Snowflake**. Source discovery has moved to Ops: Deepali, Dor, and
 Ilona can identify how POs and expected deliveries are currently tracked;
 Deepali is the likely detailed process owner. Once the source is known, Joel's
 team can establish ingestion, potentially with Fivetran, and publish a tested
-normalized model. This is an **operational-netting/M4 blocker**, not a blocker
+normalized model. This is a **production-netting/M4 blocker**, not a blocker
 to the pure engine or to manual/file PO scenarios.
 
 Joel will create a stable Snowflake service account authenticated with RSA
@@ -165,6 +182,16 @@ key, token, or 1Password secret in this repository or its documentation.
 
 ## Data-source matrix
 
+How this matrix is used:
+
+- `D0` is the independent Phase 1 forecast input contract; Phase 2 consumes it
+  but does not build the forecast.
+- `D5`, `D6`, `D8`, `D9`, and `D11` are core Phase 2 runtime inputs.
+- `D10` is primarily editable Phase 2 configuration until a trusted master
+  source exists.
+- `D1`-`D4`, `D7`, and historical receipt analysis in `D12` are reference or
+  later calibration work; they do not block the minimum Phase 2 engine.
+
 | # | Planning need | Best current candidate | Status and remaining proof |
 |---|---|---|---|
 | D0 | Daily dish-demand forecast input | `REPORTING.FACT_CG_DISH_DEMAND_FORECASTS`; ingredient forecast as derived/reference output | **MEASURED/ABANDONED OUTPUT; reference only.** Five current dates, one location, 23 PLUs/day; tested candidate-key checks are clean. Ingredient follow-up finds placeholder rows and one stable ID mixing `g`/`ml`, so it is not a canonical engine input. A replacement's method, owner, coverage, cutoff/timezone, freshness SLA, unit contract, and acceptance remain open; Phase 1 stays pluggable |
@@ -173,12 +200,12 @@ key, token, or 1Password secret in this repository or its documentation.
 | D3 | Physical ingredient disposal | `REPORTING.FACT_CG_WASTE` | **MEASURED FIELD SUM/CANDIDATE; semantics OPEN.** V4 reproduces 3,750.3 kg and EUR 31,339 across six units, 63 ingredients, and 2026-06-01 through 2026-08-22. Row ratios are strongly bounded, so derivation is possible. `WASTE_QTY_G`, `STRANDED_QTY_G`, `SILO_END_OF_DAY_QTY_G`, and valuation require definitions/lineage before the figures are called physical disposal or used for calibration |
 | D4 | Out-of-stock exposure | `REPORTING.FACT_CG_OOS_SILO` plus product/ingredient views | **CATALOGUED/CANDIDATE**. Validate event grain, hard-OOS semantics, duration overlap, and menu join coverage |
 | D5 | Current unit stock and expiry observation | `REPORTING.FACT_UNIT_SILO_STOCK_DAILY`; raw `BASE_STOCK_UPDATES` | **MEASURED/CANDIDATE.** V10 found expiry on all 6,497 tested silo-days; the V3 200-row key sample had no composite duplicates. Validate snapshot cutoff/unit semantics, all-class coverage, transition handling, and expiry outliers before adapter acceptance |
-| D6 | Menu by unit and day | `INTERMEDIATE.INT_UNIT_DAY_MENU`; `BASE_UCS_MENU` | **MEASURED/CANDIDATE for history; forward horizon OPEN.** All 763 materialized unit-days/26 menu keys resolve to the BOM, but the materialized table ended on 2026-08-24 when queried on 2026-08-25. Base rows extend later but mix operational-looking menus with training/demo/pilot, far-future, long-running, and terminated records. Identify the operational-unit filter, committed forward-menu source, publication timing, and business commitment rule before transition planning |
+| D6 | Menu by unit and day | `INTERMEDIATE.INT_UNIT_DAY_MENU`; `BASE_UCS_MENU` | **MEASURED/CANDIDATE for history; forward horizon OPEN.** All 763 materialized unit-days/26 menu keys resolve to the BOM, but the materialized table ended on 2026-08-24 when queried on 2026-08-25. Base rows extend later but mix operational-looking menus with training/demo/pilot, far-future, long-running, and terminated records. Identify the operational-unit filter, committed forward-menu source, publication timing, and business commitment rule before production planning |
 | D7 | Loaded and consumed grams per day | Daily silo snapshots plus raw stock-update events | **OPEN.** The lagged profile confirms a high-frequency state stream with 12.0% ingredient changes, 62.1% unchanged transitions, gross positive/negative changes above 15 tonnes, and jumps above 7 kg. It does not reconcile to daily net depletion. Filter same-ingredient transitions and confirm event semantics only when calibration is in scope |
 | D8 | Versioned `Dish → Silo → Ingredient` BOM in grams | Flattened `FACT_CG_MENU_DISH_INGREDIENTS`, history dimension, raw `BASE_RECIPE_*`, and active-menu/resource stock context | **MEASURED/CANDIDATE for flattened grams and versioning.** 1,193 current rows have complete keys/positive grams/no tested revision-key duplicates; all materialized menu keys resolve; 11,990 valid history intervals and pre-mix decomposition exist. Physical silo/slot topology is still **OPEN**. Corrected V3B found 1,636/2,576 stock keys with menu context through `INGREDIENT_KEY`, but zero resource-position or exact-slot matches; the direct `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` hypothesis is rejected. Inspect upstream lineage or obtain the authoritative unit/resource/dock-to-effective-slot bridge before using physical capacity |
 | D9 | Item/SKU master, pack size, EAN, storage class | `BASE_INGREDIENT_LIST`; `STORAGE_TYPE` is visible on the abandoned generated-recommendation model | **MEASURED/CANDIDATE for pack quantity and unit; partial identity/metadata.** V5 returned 76 rows/75 non-null IDs: one blank ID, zero bad pack quantities, zero missing units, seven missing EANs, and ten missing `APICBASE_ID`s. No non-null duplicate/conflict exception was returned. The abandoned recommendation model's `FRESH`/`FROZEN` values are lineage clues only; resolve the blank record, authoritative storage-class source, ownership, freshness, and whether EAN/Apicbase are required for each adapter |
-| D10 | Supplier identity and purchasing terms | Supplier names occur in `BASE_INVENTORY`; article numbers occur in `BASE_STOCKS` | **MEASURED but unsuitable:** three supplier names occur in the stale closed-order extract, while all 21 `BASE_STOCKS` rows lack supplier article numbers. No authoritative supplier-terms master is confirmed. Lead time, MOQ, case size, calendars, and cutoffs remain **POLICY/OPEN** |
-| D11 | Open POs and dated in-transit receipts | No current Snowflake source; operational source to be identified with Deepali/Dor/Ilona | **CONFIRMED MISSING FROM SNOWFLAKE / operational blocker.** V7 proves `BASE_INVENTORY` is not the feed, and Joel confirmed no PO data is currently ingested to his knowledge. Ops must identify the system/sheet/process and owner; then data platform must ingest it and publish a normalized source with PO/line ID, item/SKU, location, supplier, ordered and remaining quantities/units, status, order date, expected receipt date, partial receipts, cancellations/date changes, and source update timestamp. Until then, file/manual PO inputs are allowed only with explicit provenance and operational mode fails closed |
+| D10 | Supplier identity and purchasing terms | Supplier names occur in `BASE_INVENTORY`; article numbers occur in `BASE_STOCKS` | **MEASURED but unsuitable:** three supplier names occur in the stale closed-order extract, while all 21 `BASE_STOCKS` rows lack supplier article numbers. No authoritative supplier-terms master is confirmed. Lead time, MOQ, case size, delivery weekdays, and cutoffs remain **POLICY/OPEN** |
+| D11 | Open POs and dated in-transit receipts | No current Snowflake source; operational source to be identified with Deepali/Dor/Ilona | **CONFIRMED MISSING FROM SNOWFLAKE / production Phase 2 blocker.** V7 proves `BASE_INVENTORY` is not the feed, and Joel confirmed no PO data is currently ingested to his knowledge. Ops must identify the system/sheet/process and owner; then data platform must ingest it and publish a normalized source with PO/line ID, item/SKU, location, supplier, ordered and remaining quantities/units, status, order date, expected receipt date, partial receipts, cancellations/date changes, and source update timestamp. Until then, file/manual PO inputs are allowed only with explicit provenance and production mode fails closed |
 | D12 | Goods receipts | No current trusted source; stale `BASE_INVENTORY` is reference only | **OPEN in the same Ops/ingestion workstream.** The old extract is stale (last sync 2025-10-20), all 106 delivery strings failed `TRY_TO_DATE`, and no order timestamp exists. The target source/model must preserve actual and partial receipt events, units, timestamps, cancellations/corrections, and linkage to PO line; completeness and history retention must be tested before lead-time or supplier-performance analysis |
 
 `BASE_INGREDIENT_LIST.APICBASE_ID` makes Apicbase a plausible upstream master
@@ -186,20 +213,20 @@ system. It does not prove authority; Joel must confirm the source and owner.
 
 ## Configuration entered by a planner or purchasing owner for now
 
-These values belong in validated, versioned configuration until an approved
-system integration replaces manual maintenance. “Manual for now” does not mean
-they can never have an external source.
+These values belong in validated, versioned Supabase configuration and are
+edited through the internal UI once that tranche exists. CSV/YAML are temporary
+fixtures/imports until then. “Manual for now” does not mean they can never have
+an external source.
 
 | Configuration | Current approach | Evidence that may inform it |
 |---|---|---|
 | Planning lead time | Item/supplier default plus explicit override | Future order and receipt history once a complete source with both timestamps is found |
 | Shelf-life rule and safety margin | Sealed/opened rule, conservative days, and override owner | Observed expiration timestamps; observations do not define the policy |
 | MOQ and case/order multiple | Supplier-item configuration | Supplier contract, ERP, or approved purchasing record if later connected |
-| Supplier order/delivery calendar, cutoffs, split rules | Supplier/location configuration | Planner and supplier operating process |
-| Service level and safety-stock target | Versioned policy by storage class/item | Backtests and service/waste trade-offs |
-| Yield-factor bounds and overrides | Versioned policy with provenance | Calibrated consumption and physical-disposal history once available |
+| Simple delivery weekdays/cutoffs | Supplier/location configuration; no external calendar integration | Planner and supplier operating process |
+| Safety days | Simple versioned default by storage class with item override | Backtests may refine it later |
+| Yield factor | Simple versioned default/override with provenance | Consumption and physical-disposal history may calibrate it later |
 | Which classes are stocked vs delivery-to-delivery | Versioned storage policy | Current operating practice; today `Frisch` is treated delivery-to-delivery |
-| Approval, export, and dispatch permissions | Versioned workflow policy | Named business owners and four-eyes requirements |
 
 ## Question ownership and timing
 
@@ -231,10 +258,11 @@ delivery process, source system/sheet, ownership, history, and export/API
 capability. After the source is identified, return to Joel to agree ingestion—
 potentially via Fivetran—and a normalized, quality-tested Snowflake model.
 
-The data platform is responsible for ingestion/publication; Ops explains and
-owns the operational process/source; this repository consumes a read-only
-canonical adapter and retains the pure planning calculation. Do not ask Ops to
-design the Snowflake model or embed Phase 2 calculation logic in ingestion.
+The data platform is responsible for source ingestion/publication; Ops explains
+and owns the operational process/source; this repository consumes those inputs,
+retains the pure planning calculation, and writes only to an agreed internal
+Snowflake result schema. Do not ask Ops to design the Snowflake model or embed
+Phase 2 calculation logic in ingestion.
 
 After repository access is granted, inspect the existing definitions and agree
 with Joel on the ownership boundary between Snowflake transformations/publication
@@ -261,10 +289,10 @@ warehouse field sums as physical waste or use them to calibrate yield.
 | Stage | Can continue now? | Required before acceptance/promotion |
 |---|---|---|
 | M0/M1 foundation and legacy reproduction | Yes | Planner interpretation is needed for business sign-off, not for synthetic engineering |
-| M2 improved file-driven engine | Yes; canonical inputs and policy-free dated netting are implemented | Complete and approve demand semantics, protection periods, yield/safety, constraints, supplier/fresh scheduling, and transition policies before M2 business acceptance |
-| M3 Snowflake adapters | Discovery can continue | Owner/lineage, grain, units, coverage, freshness, and three-level BOM mapping for each accepted source |
+| M2 improved file-driven engine | Yes; canonical inputs and policy-free dated netting are implemented | Complete and approve demand semantics, protection periods, simple yield/safety settings, constraints, and fresh delivery rules before M2 business acceptance |
+| M3 Snowflake/Supabase integration | Discovery can continue | Accepted source grain/units/freshness, service account, target result schema/write pattern, and approved Supabase config ownership |
 | M4 shadow run | Not yet | Trustworthy current stock, open POs with expected receipt dates, forward menu, canonical IDs/packs, and comparable planner outputs |
-| Operational approval/export | Not yet | All M4 gates plus approval roles and an explicit human approval; no supplier dispatch |
+| Scheduled production result | Not yet | All M4 source/config gates plus reliable internal Snowflake write and monitoring; supplier/ERP dispatch is out of scope |
 
 ## Tooling and execution order
 

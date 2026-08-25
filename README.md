@@ -1,151 +1,164 @@
 # Phase 2 Supply Planning
 
-This project will replace a manual Excel-based supply-planning process for autonomous robot kitchens with a deterministic, auditable planning service. It converts daily dish demand into ingredient-level order proposals while considering recipes, stock, open purchase orders, supplier constraints, shelf life, delivery schedules, and menu changes.
+This repository automates the ingredient and purchasing-demand calculation
+currently maintained in `Supply_Planning_Rewe.xlsx`.
 
-> **Current status:** KW34 displayed-value validation and all required Snowflake verification queries are complete. The M0/M1 foundation and first unblocked M2 file-engine tranche are runnable: canonical multi-file CSV validation, daily menu-aware BOM explosion, a pure dated inventory/open-PO ledger, time-phased netting, explicit source provenance, fail-closed shadow/operational gates, deterministic audit JSON, and 33 automated tests. Joel confirmed that the discovered forecast/recommendation models are abandoned and that live PO data is not ingested. Ops source discovery and later ingestion/modeling with Joel are required before a real PO adapter or shadow run, but do not block further pure policy-engine work. The real KW34 fixture, policy/constraint/scheduling layers, source adapters, persistence, API, and UI remain gated or open.
+> **Current status:** the displayed KW33/KW34 stocked-item arithmetic is
+> independently reconciled and implemented as `legacy_kw34/v1`. The real
+> workbook rows are not yet an automated golden fixture; current tests use safe
+> synthetic data. The first improved file path can validate daily forecast,
+> menu, BOM, item, inventory, and open-PO inputs, explode demand, and project
+> inventory through time. All 32 tests pass. Required Snowflake verification is
+> complete, but the live forecast source, current PO source, production stock
+> mapping, and editable policy values still require the recorded follow-ups.
 
-## Scope
+## Phase boundary
 
-This repository implements **Phase 2: supply planning and ordering**.
-
-- **Phase 1, forecasting:** supplies expected portions per dish, location, and day. It remains a pluggable upstream input and is not implemented here; the discovered Snowflake forecast models are abandoned and may be replaced, not accepted as a live forecast source.
-- **Phase 2, this project:** explodes dish demand through the BOM, projects inventory, nets open purchase orders, applies planning constraints, and produces explainable order proposals for human approval.
-
-The first reference case is the manually maintained `Supply_Planning_Rewe.xlsx` workbook, primarily `Plan KW34` and `Stock KW34`, with KW33 used for the legacy bridge calculation.
-
-## Planned architecture
-
-The project starts as a Python CLI, but the calculation engine is designed as a reusable library rather than a throwaway script. File inputs prove the logic first; SQL adapters, Supabase persistence, FastAPI, and the React UI are added in later milestones without moving business logic out of the engine.
+Phase 1 and Phase 2 are separate:
 
 ```text
-SOURCE SYSTEMS
-┌──────────────────────┐  Snowflake: sales, stock movements, menu, waste, OOS
-├──────────────────────┤  ERP / ordering source: POs, receipts, supplier terms
-├──────────────────────┤  Phase 1: daily forecast, initially a file fixture
-├──────────────────────┤  Supabase: approved configuration and master data
-└──────────────────────┘  XLSX / CSV / YAML: development fixtures and fallback
-             │
-             ▼
-┌──────────────────────────────────────────┐
-│ Source adapters                          │
-│ Map source-specific fields into stable   │
-│ canonical planning contracts             │
-└────────────────────┬─────────────────────┘
-                     ▼
-┌──────────────────────────────────────────┐
-│ Application service                      │
-│ Validate → snapshot → run → persist       │
-└────────────────────┬─────────────────────┘
-                     ▼
-┌──────────────────────────────────────────┐
-│ Pure Python planning engine              │
-│ No database, filesystem, network, UI,    │
-│ or clock dependencies                    │
-└────────────────────┬─────────────────────┘
-                     ▼
-┌──────────────────────────────────────────┐
-│ Supabase                                 │
-│ Config versions, runs, proposals,        │
-│ exceptions, approvals, and audit history │
-└─────────────┬───────────────────┬────────┘
-              ▼                   ▼
-       React planner UI     Approved-order API/export
-                            for a later ordering tool
+Phase 1: forecast portions by location, dish, and service day
+                              ↓
+Phase 2: convert that forecast into ingredient requirements and recommended
+         purchase quantities using BOM, stock, open POs, and planning rules
 ```
 
-Both the first CLI and the later FastAPI backend call the same application service. Source adapters may change as real schemas are discovered; the canonical contracts and engine should not.
+Phase 1 may initially be a manually entered forecast and later a Snowflake
+model. This repository consumes the forecast; it does not create it.
 
-## Planning logic
+Lead time, shelf life, pack size, delivery weekdays, MOQ/case size, current
+stock, and open POs are Phase 2 inputs because they determine how much needs to
+be available or purchased. Sales, OOS, and waste are mainly Phase 1 or later
+calibration inputs; they are not required to reproduce the first Phase 2 flow.
 
-At a high level, each run will:
+## Verified workbook baseline
 
-1. Load daily dish demand by location.
-2. Check the forward menu calendar.
-3. Explode `Dish → Silo / pre-mix → Ingredient` into grams required per day.
-4. Apply an explicit yield factor and safety-stock policy.
-5. Project timestamped inventory and dated open-PO receipts through the protection period.
-6. Net demand against usable on-hand stock and the inbound pipeline.
-7. Apply shelf-life and maximum-cover caps.
-8. Apply MOQ and case-size rounding, then recheck hard caps.
-9. Schedule order and expected delivery dates using supplier calendars.
-10. Produce proposals, derivation fields, warnings, and exceptions for human review.
+For stocked items, the displayed KW34 calculation is:
 
-Two policies remain intentionally separate:
+```text
+Daily  = round(grams_per_day / pack_size_g × 1.20, 2)
+Need   = ceil(Daily × 6)
+Bridge = round(KW33_Daily × 2.5, 2)
+After  = round(max(0, Stock - Bridge), 1)
+Order  = ceil(max(0, Need - After))
+```
 
-- `legacy_kw34` reproduces the spreadsheet's displayed-value arithmetic and rounding as the Milestone 1 acceptance baseline.
-- `improved` uses daily time-phased demand, item-specific lead times, open-PO netting, safety stock, shelf life, supplier constraints, and menu transitions.
+This reproduces all 27 filled KW34 `Order` cells and all 28 continuing-item
+bridge values at displayed precision. Four positive calculated gaps have blank
+order cells, two planned fresh ingredients are absent from the stock tab, and
+several item/pack mappings conflict. Those cases remain explicit evidence, not
+assumptions to silently repair.
 
-## Data, menu, BOM, and configuration
+Fresh products use the workbook's Saturday/Monday/Wednesday/Friday
+delivery-to-delivery pattern. The exact operational meaning of those columns is
+still one of the questions already sent to the Excel owner.
 
-The engine consumes canonical datasets rather than depending on guessed SQL table names. Initial CSV/XLSX fixtures and later Snowflake, ERP, API, or Supabase adapters all map into the same contracts.
+## Target architecture
 
-Core inputs are:
+```text
+Snowflake operational inputs ─┐
+                              ├─> Python Phase 2 job ─> Snowflake result tables
+Supabase planning rules ──────┘
+          ↑
+internal React UI + Python API
+```
 
-- `forecast_daily`: location, dish, date, expected portions, and optional uncertainty;
-- `menu_calendar`: which dish is served at each location and date;
-- `bom_lines`: dish, silo/pre-mix, ingredient, and grams per portion;
-- item and supplier master data: pack size, storage class, shelf life, lead time, MOQ, case size, and delivery rules;
-- `inventory_snapshots`: timestamped usable stock;
-- `purchase_orders`: open quantities and expected receipt dates.
+- **Snowflake inputs:** forecast, menu/BOM, item identity/pack data, stock, and
+  eventually normalized open POs.
+- **Supabase:** application-owned editable rules such as lead time, shelf life,
+  storage-class defaults, safety settings, MOQ/case size, and simple delivery
+  weekday/cut-off rules.
+- **Internal UI:** lets non-technical users validate and edit those rules. It is
+  not a supplier-ordering or approval application.
+- **Python job:** reads the active inputs/configuration, performs the pure
+  calculation, and writes recommendations, derivations, warnings, run ID, and
+  input/config versions to internal Snowflake result tables.
 
-The menu may initially be represented by a fixture and later mapped from an authoritative Snowflake model or menu API. Snowflake's flattened/versioned BOM now passes the tested key, gram, history, and materialized-menu coverage checks, while its physical silo/recipe-slot mapping and ownership remain open. Until those are resolved, the cleaned workbook remains the approved legacy reference; application-owned versioned master data is a fallback only if no authoritative recipe source is accepted.
+CSV files remain useful for fixtures, deterministic tests, local development,
+and controlled recovery. They are not the long-term editing workflow.
 
-During early development, policy and master data are represented through validated CSV/YAML files. These files are engineering fixtures, imports/exports, and fallback—not the intended workflow for non-technical planners. The eventual React UI will manage approved configuration through FastAPI and versioned Supabase records.
+## Phase 2 calculation scope
 
-Configuration applies at the appropriate level:
+The intended calculation is:
 
-- item: pack size, storage class, shelf life, safety or yield override;
-- supplier-item: supplier SKU, MOQ, case size, lead-time override, cancellability;
-- supplier/location: order cut-offs and delivery calendar;
-- global/storage class: policy defaults;
-- dish/location/date: menu availability;
-- dish/silo/item: recipe quantities.
+1. Read daily dish forecast by location.
+2. Validate that the dish is active in the menu and select the effective BOM.
+3. Explode `Dish → Silo / pre-mix → Ingredient` into daily grams.
+4. Aggregate shared ingredients by location and day.
+5. Select timestamped usable stock.
+6. Include open PO quantities on their expected receipt dates.
+7. Determine the demand coverage period from the configured lead time and
+   review/delivery cadence.
+8. Calculate the remaining ingredient requirement without double-counting
+   demand.
+9. Apply only confirmed Phase 2 rules: pack rounding and, where configured,
+   shelf-life/max-cover, MOQ/case, fresh delivery coverage, and safety policy.
+10. Write internal recommendations and visible exceptions to Snowflake.
 
-## Persistence and downstream ordering
+“Delivery schedule” means simple planning-rule data such as delivery weekdays;
+it does not mean an external calendar integration. There is no supplier or ERP
+write in this project.
 
-Supabase is planned as the operational store for application-owned configuration and audit history, not as a replacement for all source systems. Relevant source snapshots, versions, hashes, planning lines, proposals, exceptions, and approvals are persisted so a run can be reproduced and explained.
+## What is implemented
 
-A future ordering application should consume only **approved** proposals through a controlled API, view, or export. Calculating or storing a proposal is not permission to order. Supplier or ERP dispatch remains a separate final release gate.
+- typed canonical contracts and stable-ID validation;
+- provenance for observed, manual, defaulted, placeholder, and unavailable data;
+- pure three-level BOM explosion and shared-item aggregation;
+- exact displayed-value `legacy_kw34/v1` arithmetic;
+- canonical multi-file CSV adapters with actionable errors;
+- timestamped inventory and dated open-PO event ledger;
+- daily projected balance and late/stale/stockout exceptions;
+- deterministic audit JSON and strict shadow/production source gates;
+- synthetic legacy and multi-location improved scenarios.
 
-## Missing data and open decisions
+The improved path currently stops at unrounded net requirement. It does not yet
+apply the full configurable Phase 2 policy or persist to Snowflake/Supabase.
 
-Unanswered business questions are stage-exit gates, not a reason to pause initial development. Fixture and scenario runs may use explicit placeholders with provenance such as `policy_default`, `empty_placeholder`, or `unavailable`.
+## Delivery order
 
-Operational mode must fail closed when critical inputs are unknown, especially current stock, canonical SKU/pack size, lead time/calendar, demand semantics, or the open-PO pipeline. Missing waste, OOS, forecast-error, receipt, and lot data delays calibration and confidence, but does not block building the file-based engine.
+1. Complete the real KW33/KW34 golden validation and planner interpretation.
+2. Finish the minimum improved Phase 2 calculation with explicit config inputs.
+3. Connect verified Snowflake inputs/results and establish Supabase config
+   storage for the same validated rule contract.
+4. Compare automated results with the Excel owner over representative runs.
+5. Add the small internal config UI for non-technical users.
+6. Schedule and monitor the internal job.
+7. Add advanced calibration only when it proves useful.
 
-See the backlog's blocker register and question-to-gate matrix for the current decisions and allowed fallbacks.
+## What is blocked and what can continue
 
-## Delivery plan
+There is no blocker to the next engineering tranche: real KW parity work and
+the small parameterized Phase 2 calculation can continue now. The items below
+block only the named later outcome.
 
-1. **M0 — Evidence and contracts:** approve fixtures, define canonical schemas, run modes, exceptions, and architecture decisions.
-2. **M1 — Legacy CLI:** reproduce KW34 in Python with golden tests and auditable outputs.
-3. **M2 — Improved file engine:** add time-phased planning, open POs, constraints, scheduling, transitions, and labelled placeholders.
-4. **M3 — SQL and persistence:** map real source schemas, add read-only adapters, and introduce approved Supabase storage.
-5. **M4 — Validation:** backtest and shadow-run against the planner with real data.
-6. **M5 — Planner UI:** add FastAPI, React/Tailwind, authentication, configuration, proposal review, and approval.
-7. **M6 — Operations:** integrate live Phase 1 and separately approve any ERP or supplier dispatch path.
+- The 13 Excel-owner answers block business interpretation and final parity
+  sign-off, not continued engineering.
+- A real committed KW33/KW34 golden fixture needs the recorded data-handling
+  decision; a private/local fixture can still be used.
+- Joel's service account, `data-transformation` access, and the target Snowflake
+  output schema/write pattern are needed for live integration.
+- Ops must identify the actual PO source before complete production netting.
+- Supabase ownership/access is needed only when the configuration UI tranche
+  begins.
 
-## Engineer handover: start here
+No further required V1-V12 Snowflake verification query remains.
+
+## Engineer handover
 
 | File | Purpose |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | Repository rules, domain invariants, safety boundaries, and verification expectations |
-| [`docs/descriptions/phase2_supply_planning_brief.md`](docs/descriptions/phase2_supply_planning_brief.md) | Primary domain and architecture specification, including the verified Excel logic and improved target logic |
-| [`docs/plans/phase2_supply_planning_master_backlog.md`](docs/plans/phase2_supply_planning_master_backlog.md) | Source-of-truth implementation backlog, priorities, human gates, exit criteria, and immediate next slice |
-| [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Candidate source systems, known tables, gaps, access context, and data-discovery sequence |
-| [`docs/scratchpads/snowflake_verification_evidence.md`](docs/scratchpads/snowflake_verification_evidence.md) | Durable measured V1-V12 counts, zero-row diagnostics, interpretations, and remaining SQL without committing the private exports |
-| [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Implemented canonical input/output contracts, provenance, run-mode gates, and source-mapping rules |
-| [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Manual actions and information needed from the user, with the milestone where each becomes blocking |
-| [`MEMORY.md`](MEMORY.md) | Durable decisions and verified facts that must survive handovers and context compaction |
-| [`docs/scratchpads/phase2_supply_planning_execution.md`](docs/scratchpads/phase2_supply_planning_execution.md) | Short-lived execution context, risks, open questions, and next actions |
-
-The immediate engineering work is listed under **Immediate next execution slice** in the master backlog. The legacy and improved file CLIs are runnable; SQL adapters, persistence, API, UI, and deployment are not implemented.
+| [`AGENTS.md`](AGENTS.md) | Repository implementation boundaries |
+| [`docs/descriptions/phase2_supply_planning_brief.md`](docs/descriptions/phase2_supply_planning_brief.md) | Workbook evidence, target logic, and architecture |
+| [`docs/plans/phase2_supply_planning_master_backlog.md`](docs/plans/phase2_supply_planning_master_backlog.md) | Prioritized implementation backlog |
+| [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Phase ownership and source status |
+| [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Stable engine contracts and file schemas |
+| [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Exact human/access actions and their impact |
+| [`docs/scratchpads/snowflake_verification_evidence.md`](docs/scratchpads/snowflake_verification_evidence.md) | Durable V1-V12 evidence without private CSVs |
+| [`MEMORY.md`](MEMORY.md) | Durable decisions that survive handovers |
 
 ## Quick start
 
-The current core has no third-party runtime dependencies and targets Python 3.12.
-
-PowerShell:
+The core targets Python 3.12 and has no third-party runtime dependencies.
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
@@ -160,26 +173,21 @@ python -m supply_planning improved-run `
   --run-mode scenario
 ```
 
-Or run the checked-in verification wrapper with an explicit Python executable when `python` is not on `PATH`:
+Or run:
 
 ```powershell
 .\scripts\check.ps1 -PythonExecutable "C:\path\to\python.exe"
 ```
 
-The legacy CLI is deliberately restricted to `fixture` and `scenario` modes.
-The improved CLI also accepts `shadow` and `operational` so its critical-source
-gates can be tested; unknown/placeholder critical inputs block those modes
-before netting output. The current improved output is an auditable netting
-result, not a purchasable order proposal. Neither CLI can approve or dispatch
-an order.
+## Safeguards
 
-## Non-negotiable safeguards
-
-- Keep the engine pure and deterministic; I/O belongs in adapters.
-- Use grams internally and explicit units in all field names.
-- Preserve the three-level BOM and stable IDs; never join operational data by display name.
-- Keep legacy spreadsheet compatibility isolated from the improved policy.
+- Keep calculation functions pure; Snowflake, Supabase, files, and UI remain
+  adapters.
+- Use daily demand, stable IDs, grams internally, and explicit pack units.
+- Preserve `Dish → Silo → Ingredient`, including pre-mixes.
 - Never silently treat missing data as observed zero.
-- Preserve derivations, input/config versions, and exception codes for every proposal.
-- Never dispatch an order without explicit human approval.
-- Never commit credentials, raw production extracts, or unapproved KW34 data.
+- Keep KW33/KW34 compatibility separate from corrected Phase 2 policy.
+- Persist enough input/config version information to reproduce a result.
+- Do not commit credentials, private production extracts, or an unapproved
+  workbook fixture.
+- Do not add supplier/ERP dispatch to this scope.

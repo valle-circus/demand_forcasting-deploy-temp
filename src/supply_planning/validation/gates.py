@@ -25,7 +25,7 @@ def evaluate_run_mode(
 
     by_dataset = {status.dataset: status for status in source_statuses}
     issues: list[PlanningIssue] = []
-    strict = run_mode in {RunMode.SHADOW, RunMode.OPERATIONAL}
+    strict = run_mode in {RunMode.SHADOW, RunMode.PRODUCTION}
 
     for dataset in CRITICAL_DATASETS:
         status = by_dataset.get(dataset)
@@ -46,11 +46,11 @@ def evaluate_run_mode(
                 severity=severity,
                 dataset=dataset,
                 message=(
-                    f"{dataset} is {provenance}; this is not verified operational input."
+                    f"{dataset} is {provenance}; this is not verified production input."
                 ),
                 remedy=(
                     "Provide an observed or manually verified snapshot before shadow or "
-                    "operational use."
+                    "production use."
                 ),
             )
         )

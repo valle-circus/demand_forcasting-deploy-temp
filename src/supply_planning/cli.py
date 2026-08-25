@@ -35,7 +35,7 @@ def _parser() -> argparse.ArgumentParser:
         "--run-mode",
         choices=[RunMode.FIXTURE.value, RunMode.SCENARIO.value],
         default=RunMode.FIXTURE.value,
-        help="Compatibility runs are restricted to non-operational modes.",
+        help="Compatibility runs are restricted to fixture and scenario modes.",
     )
     improved = subparsers.add_parser(
         "improved-run",
@@ -57,7 +57,7 @@ def _parser() -> argparse.ArgumentParser:
         "--run-mode",
         choices=[mode.value for mode in RunMode],
         default=RunMode.SCENARIO.value,
-        help="Shadow and operational modes fail closed on unknown critical sources.",
+        help="Shadow and production modes fail closed on unknown critical sources.",
     )
     return parser
 

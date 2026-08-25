@@ -1,579 +1,346 @@
 # Phase 2 Supply Planning — Master Backlog
 
 **Created:** 2026-08-22
-**Status:** planning and KW34 validation complete; first M0/M1 foundation tranche implemented, real KW34 golden fixture and remaining adapters open
-**Source of truth:** this file controls cross-session execution order and progress.
-**Detailed context:** `docs/descriptions/phase2_supply_planning_brief.md`
-**Working notes:** `docs/scratchpads/phase2_supply_planning_execution.md`
-**Human actions:** `docs/plans/human_action_register.md`
+**Reconciled:** 2026-08-25 after scope correction
+**Source of truth:** this file controls implementation order and status.
+**Detailed evidence:** `docs/descriptions/phase2_supply_planning_brief.md` and
+`docs/scratchpads/snowflake_verification_evidence.md`.
 
-## Goal
+## Goal and boundary
 
-Replace the manual weekly workbook process with a trustworthy Phase 2 planning system that:
+Automate the Phase 2 calculation currently performed in the KW33/KW34 Excel
+workbook:
 
-- consumes daily dish/location forecasts from Phase 1;
-- explodes the three-level BOM into ingredient demand;
-- nets dated stock and open POs;
-- handles fresh and stocked items, supplier calendars, shelf life, MOQ/case, and menu transitions;
-- produces auditable proposals and exceptions for human approval;
-- starts with a deterministic Python CLI plus file fixtures as a technical validation path, then supports non-technical users through FastAPI, React, Tailwind, and authoritative durable storage.
+```text
+Phase 1 daily dish forecast
+        + menu/BOM + stock + open POs + editable Phase 2 rules
+        ↓
+internal ingredient and purchase recommendations in Snowflake
+```
 
-## Delivery order
+Phase 1 produces forecast portions by `location_id × dish_id × service_date`.
+It is an independent upstream input and is not implemented in this repository.
 
-1. Freeze and clean the KW34 evidence.
-2. Reproduce the workbook exactly with a file-driven Python script; this is a technical bootstrap, not the final planner interface.
-3. Implement the improved engine using file fixtures and labelled placeholders.
-4. Connect real SQL inputs and migrate approved configuration to authoritative durable storage.
-5. Backtest and shadow-run with real data.
-6. Build the non-technical UI.
-7. Connect Phase 1 and only then consider operational dispatch.
+Phase 2, this repository, determines ingredient requirements and recommended
+purchase quantities. Stock, open POs, lead time, shelf life, pack size,
+delivery cadence, MOQ/case, and storage class belong to Phase 2 because they
+change what must be available or purchased.
 
-Do not skip directly to the UI or database. The engine and its audit contract must be proven first.
+Sales, OOS, waste, and forecast error are useful for Phase 1 or later Phase 2
+calibration. They are not required to reproduce the initial workbook logic.
 
-## Priority definitions
+## Target architecture
 
-- **P0:** required for the milestone exit; blocks dependent work.
-- **P1:** required for a trustworthy first release but can follow the core path within the milestone.
-- **P2:** hardening, scale, convenience, or optimization after the milestone's P0/P1 path works.
-- **HUMAN BLOCKER:** needs an owner decision, credentials, source access, or approval. Development may continue with an explicitly documented placeholder only where stated.
+| Component | Responsibility |
+|---|---|
+| Snowflake source models | Forecast, menu/BOM, item identity/pack data, stock, and open POs |
+| Supabase | Versioned application-owned rules editable by internal users |
+| Internal React UI + Python API | Validate and edit lead time, shelf life, storage-class defaults, safety settings, MOQ/case, and simple delivery rules |
+| Pure Python engine | Deterministic Phase 2 calculation with no database/UI code |
+| Snowflake result tables | Run metadata, recommendation lines, derivations, and exceptions |
 
-## Global definition of done
+CSV/JSON remain fixture, test, development, import, and recovery formats. They
+are not the final non-technical workflow.
 
-- [ ] Input/output schemas, units, grain, IDs, and provenance are explicit.
-- [ ] Pure engine code has no database, filesystem, API, UI, or clock dependency.
-- [ ] Tests cover normal, boundary, missing-data, transition, and infeasible-constraint cases.
-- [ ] Every proposal line contains derivation fields and exception codes.
-- [ ] Placeholder/default values are labelled and run-mode validation is enforced.
-- [ ] Input/config/code versions make a run reproducible.
-- [ ] No real order is dispatched without a separate human approval and readback.
-- [ ] Relevant brief, backlog, scratchpad, memory, README, and setup docs match reality.
-- [ ] Secrets and raw production data are not committed.
+The UI is an internal configuration tool. This backlog contains no supplier or
+ERP dispatch integration and no proposal-approval workflow.
 
-## Human-input blocker register
+## Current status
 
-| ID | Human input / access needed | Needed by | Allowed fallback before then | What it blocks |
-|---|---|---|---|---|
-| `H-01` | Approval to extract and commit a minimal/anonymized KW34 fixture; confirm supplier/data sensitivity | M0 | Keep calculations documented only | Reproducible golden tests in git |
-| `H-02` | Confirm whether `Demand/Silo Load` means daily portions, refill level, or capacity-limited plan | M0/M1 | Treat as daily portions in `legacy_kw34` with assumption flag | Final Phase 1 contract semantics |
-| `H-03` | Confirm stock-count timestamp and reason for the 2.5-day bridge | M0/M2 | Reproduce 2.5 in legacy; use explicit assumed timestamp in scenarios | Correct time-phased opening projection |
-| `H-04` | Explain blank/reduced orders and `S/M/W/Fr`; identify current open-PO tracking | M0/M2 | Surface as unexplained exceptions; empty/manual PO fixture | Operational interpretation and approval |
-| `H-05` | Approve canonical item/SKU IDs, aliases, pack sizes, storage classes; resolve Creme Fraiche, Schnittlauch, missing fresh rows | M0/M1 | Quarantine ambiguous rows; no silent choice | Complete BOM/order coverage |
-| `H-06` | Supplier production/transport lead times, order cut-offs, delivery calendars, MOQ/case, split-delivery rules | M2 | Labelled supplier/class defaults | Production-ready scheduling |
-| `H-07` | Sealed/opened shelf life, remaining-life/lot source, max-cover policy, override owner | M2/M4 | Conservative configured approximation with warning | High-confidence chilled proposals |
-| `H-08` | Forward committed menu horizon and launch/discontinuation process | M2 | Hardcoded scenario calendar | Operational transition planning |
-| `H-09` | Obtain `data-transformation` access, inspect abandoned-model lineage, decide the cross-repository ownership boundary, provision stable Snowflake access, and work with Ops/data platform to establish a new expected-receipt/open-PO ingestion because Joel confirmed none currently exists | M3/M4 | File/manual PO adapters with explicit provenance | Accepted real-data adapters, PO netting, and shadow inputs |
-| `H-10` | Phase 1 output owner, delivery mechanism, schema/versioning, and first live sample | M6 | Hardcoded/CSV daily forecast | Live forecast integration |
-| `H-11` | Decide new versus shared Supabase project; owner, region, billing, backup/retention, credentials | M3 | Local/file persistence | Durable multi-user storage |
-| `H-12` | Define roles: config editor, planner, approver, admin, viewer; SSO/auth requirements | M5 | Local single-user development | Auth/RLS and approval UI |
-| `H-13` | Agree shadow-run duration, service/waste thresholds, override rules, and sign-off owners | M4 | Produce comparison reports only | Operational acceptance |
-| `H-14` | Approve output channel and any ERP/Xentral/supplier API credentials and dispatch controls | M6 | CSV export only | Automated dispatch |
+| Area | Status |
+|---|---|
+| KW33/KW34 displayed-value reconstruction | Complete: 27/27 filled orders and 28/28 bridge values reconciled |
+| Real KW33/KW34 automated golden fixture | Open: synthetic tests only; private/local or approved sanitized fixture needed |
+| Canonical file contracts and validation | Implemented |
+| Three-level BOM explosion | Implemented |
+| Dated stock/open-PO ledger and netting | Implemented for file inputs |
+| Full configurable Phase 2 policy | Not implemented |
+| Required Snowflake discovery SQL | Complete; no required rerun remains |
+| Live Snowflake adapters/output writes | Not implemented; access/output design pending |
+| Live PO source | Missing from Snowflake; Ops/data-platform workstream open |
+| Supabase configuration store | Planned, not created |
+| Internal configuration UI | Planned after config schemas/integration |
 
-### How to interpret the blockers
+The repository verification wrapper currently passes 32 tests.
 
-The register is a set of **stage-exit and promotion gates**, not a reason to pause all development. As of 2026-08-24, no unanswered business question blocks starting the repository scaffold, typed contracts, pure engine, CLI, or the `legacy_kw34` compatibility profile. Those paths must use fixture/scenario mode, explicit assumption flags, and non-sensitive synthetic or locally held fixture data until the corresponding gate is cleared.
+## Definition of done for the first useful release
 
-- **Start now:** project scaffold, contracts, validation, exception catalog, pure calculation functions, CLI/application service, synthetic scenario tests, and KW34 displayed-value reproduction.
-- **May be built with labelled assumptions:** improved inventory projection, pipeline netting, lead-time calendars, shelf-life caps, menu transitions, fresh-slot logic, safety/yield placeholders, SQL adapter interfaces, and preliminary UI information architecture.
-- **Must not be claimed as business-validated yet:** final Phase 1 semantics, complete canonical item coverage, placed-order/weekday replication, calibrated lead/shelf-life/buffer policies, and fresh-delivery coverage.
-- **Must wait for validated real inputs/authority:** accepted production SQL adapters, real-data backtests, shadow runs, Supabase/auth rollout, live proposal approval, and any supplier/ERP dispatch. Read access itself is already available.
+- [ ] A daily Phase 1 forecast can be read through a documented adapter.
+- [ ] Menu/BOM, item/pack, stock, and PO inputs are validated at stable-ID grain.
+- [ ] The Phase 2 result matches approved KW33/KW34 legacy fixtures where the
+      legacy profile is selected.
+- [ ] The improved profile produces explainable ingredient and pack
+      recommendations from approved Phase 2 rules.
+- [ ] Snowflake result rows include a run ID, calculation time, input/config
+      versions, intermediate values, and exceptions.
+- [ ] Rerunning the same inputs/config is deterministic and does not create
+      uncontrolled duplicate output.
+- [ ] Non-technical users can edit the approved planning-rule fields through
+      the internal UI without editing repository files or database rows.
+- [ ] No missing source or policy value is silently converted to zero.
+- [ ] No supplier/ERP write is implemented.
 
-### Business-question gate matrix
+## Human and access gates
 
-| Question | Work that can proceed while unanswered | What must wait for the answer | Primary gate |
-|---|---|---|---|
-| Q1 + Q4 — in-transit and `S/M/W/Fr` | Implement dated PO schema, empty/manual PO fixtures, pipeline netting, exception reporting, and the spreadsheet's calculated `Order` column | Identify the actual open-PO source with expected receipt dates; explain blank/reduced orders and weekday splits; approve operational netting | M2 business validation; M4 shadow |
-| Q2 — lead times and calendars | Implement item/supplier overrides and calendar engine with labelled defaults and scenario tests | Production-ready order/receipt dates and stockout risk | M2 exit; M4 shadow |
-| Q3 — shelf life | Implement sealed/opened fields, lot-ready interfaces, approximate caps, and infeasible-constraint tests | Trusted expiry/max-cover caps, especially for chilled/fresh items | M2 policy approval; M4 shadow |
-| Q5 — Demand/Silo Load | Reproduce KW34 by treating it as daily demand under a legacy assumption; define a daily Phase 1 contract | Final semantic mapping, silo-capacity constraints, and live Phase 1 integration | M1 business sign-off; M6 live input |
-| Q6 — stock count | Reproduce the literal 2.5-day bridge and implement timestamped inventory inputs/projection | Correct opening inventory timing and operational removal of the hard-coded bridge | M2 business validation; M4 shadow |
-| Q7 — menu changes | Implement forward menu schema and launch/discontinuation scenarios | Production transition dates, late-PO flags, and menu-horizon validation against reality | M2 exit; M4 shadow |
-| Q8 — 20% buffer | Keep exact `1.20` only in `legacy_kw34`; implement separate configurable yield and safety policies | Calibrated policy and replacement of provisional defaults | M4 calibration |
-| Q9 — master data | Build stable-ID schemas, alias validation, quarantine rules, and explicit KW34 quality cases | Confirm authoritative SKU/pack/storage sources and owner-approved mappings; complete three-level BOM/order coverage | M1 fixture acceptance; M3 integration |
-| Q10 — fresh products | Build configurable delivery-slot coverage with fixture calendars | Correct fresh order dates and consumption windows | M2 fresh-module sign-off; M4 shadow |
-| Q11 — weekly process | Build run/approval domain objects and retain human approval as a hard invariant | Final cadence, urgent-order workflow, ownership, notifications, and UI workflow | M4 operations design; M5 UI |
-| Q12 — other data used by the Excel owner | Build file adapters, provenance, placeholders, and `unavailable` metrics | Reconcile the owner's known inputs/systems with the separately validated Snowflake/source inventory | M3–M4 |
-| Q13 — planner experience | Continue with proposal explanations, exceptions, overrides, and auditability as baseline requirements | Final UI priority, automation boundary, and acceptance workflow | M5 product design |
+The detailed requests and owners are in `human_action_register.md`.
 
-Question 14 in the supplied list is empty and creates no additional gate.
+| Gate | Needed for | Does not block |
+|---|---|---|
+| Excel-owner Q1-Q13 answers | Business interpretation and final legacy/improved sign-off | Synthetic implementation and adapter scaffolding |
+| KW33/KW34 fixture handling decision | Committed golden fixture | Private/local validation |
+| Snowflake service account and `data-transformation` access | Live adapter tests and lineage inspection | Pure engine work |
+| Snowflake output ownership/schema/write pattern | End-to-end persistence | Output contract and writer interface |
+| Current PO source and ingestion | Complete production netting | Manual/synthetic PO scenarios |
+| Approved lead-time/shelf-life/MOQ/delivery-rule values | Business-valid improved recommendations | Parameterized calculations and tests |
+| Supabase project/access | Persistent non-technical rule editing | Engine and Snowflake adapter work |
+| Live Phase 1 forecast contract | Scheduled production runs | Manual/file forecast testing |
 
-## Milestone 0 — Evidence, contracts, and fixture readiness
+## Milestone 0 — Evidence and contracts
 
-**Outcome:** a clean, approved, reproducible definition of what KW34 does and which gaps are unknown.
+**Outcome:** preserve what the workbook actually does and keep unknowns visible.
 
-### P0 — Evidence validation
-
-- [x] Record the source workbook URL/ID and read it without modifying the source.
-- [x] Identify `Plan KW34` and `Stock KW34` as the first reference pair.
-- [x] Reconcile all 27 filled stocked-item order cells at displayed-value level.
-- [x] Reconcile all 28 continuing stocked-item bridge values to prior-week demand.
-- [x] Document legacy rounding: `Daily` 2 dp, bridge 2 dp, `After` 1 dp, then ceiling.
+- [x] Record the workbook and relevant `Plan KWxx`/`Stock KWxx` tabs.
+- [x] Reconcile all 27 filled KW34 stocked-order cells at displayed precision.
+- [x] Reconcile all 28 continuing bridge values to KW33 demand.
+- [x] Document the exact rounding order and constants.
 - [x] Document four positive-gap blank order cells.
-- [x] Document two plan ingredients absent from `Stock KW34`.
-- [x] Correct target netting, safety-stock grain, and post-rounding cap logic in the brief.
-- [ ] **HUMAN GATE `H-01`:** approve the fixture extraction/commit policy. This does not block scaffolding or synthetic tests; it blocks committing a real-data golden fixture.
-- [ ] Obtain an approved raw workbook copy or formula walkthrough to confirm formula AST/cell references.
-- [ ] Create a source manifest with workbook ID, modified timestamp, relevant tabs, extraction date, checksum, and caveats.
-
-### P0 — Canonical contracts
-
-- [x] Define typed schemas for `locations`, `forecast_daily`, `menu_calendar`, `bom_lines`, `items`, `suppliers`, `supplier_items`, `supplier_calendars`, `inventory_snapshots`, and `purchase_orders`.
-- [x] Define typed output schemas for `planning_runs`, `planning_run_inputs`, `planning_lines`, `order_proposals`, `exceptions`, and `approvals`.
-- [x] Add explicit unit suffixes (`_g`, `_units`, `_days`, `_at`, `_date`) and forbid ambiguous quantity fields.
-- [x] Define stable `location_id`, `dish_id`, `silo_id`, `item_id`, `supplier_id`, and optional `supplier_item_id` rules.
-- [x] Define provenance enum: `observed`, `manual`, `policy_default`, `empty_placeholder`, `unavailable`.
-- [x] Define run modes: `fixture`, `scenario`, `shadow`, `operational` and initial critical-source placeholder gates.
-- [x] Define exception-code catalog and severity (`blocker`, `warning`, `info`).
-- [ ] **HUMAN GATES `H-02`–`H-05`:** resolve semantics/master-data questions or approve documented fixture assumptions before accepting M1 as business-complete. Implementation may start with assumption flags and quarantined rows.
-
-### P1 — Fixture preparation
-
-- [ ] Extract only the required KW33/KW34 plan and stock data into normalized fixture files.
-- [ ] Preserve original labels alongside stable IDs and alias mappings.
-- [ ] Add expected legacy outputs for all visible rows, including blanks and manual booking columns.
-- [ ] Mark `Paprika - big`, `Mischsalat`, ambiguous Schnittlauch, and Creme Fraiche as explicit fixture quality cases.
-- [ ] Prevent the source XLSX and unapproved production exports from entering git.
-
-### P1 — Architecture decisions
-
-- [ ] Record an ADR for script-first/application-service architecture.
-- [ ] Record an ADR for separate `legacy_kw34` and `improved` policies.
-- [ ] Record an ADR that CLI/CSV/YAML are bootstrap, test, import/export, and fallback interfaces—not the non-technical planner workflow.
-- [ ] Record an ADR for files first and authoritative Supabase persistence at M3 once approved, with no dual operational configuration authority.
-- [x] Select Python/runtime and core libraries: Python 3.12 standard library for the pure core and first CLI, with no third-party runtime dependency; add adapter/API dependencies only at their owning milestone.
-- [x] Decide numeric representation and improved-engine precision/rounding boundaries: `Decimal` for planning quantities, no early improved-engine rounding, explicit legacy quantization only in `legacy_kw34`.
-
-### Milestone 0 exit criteria
-
-- [ ] Approved fixture policy and source manifest exist.
-- [ ] Required schemas and exception codes are reviewed.
-- [ ] Ambiguous rows are mapped, quarantined, or explicitly accepted as test cases.
-- [ ] No high-impact claim in the brief is stated more strongly than the evidence supports.
-
-## Milestone 1 — Reproduce the status quo as a Python CLI
-
-**Outcome:** a deterministic script reproduces KW34 and exposes the workbook's silent gaps.
-
-### P0 — Repository and quality scaffold
-
-- [x] Create `pyproject.toml`, package layout, Python version, zero-runtime-dependency declaration, and `.env.example`.
-- [x] Configure Ruff/mypy project metadata and a standard-library `unittest` verification wrapper. Ruff/mypy executables are not installed in the current runtime and remain a CI/tooling task.
-- [ ] Add CI for lint/type/unit/integration tests.
-- [x] Add README quick start and setup instructions.
-- [x] Add fixture/data paths and workbook formats to `.gitignore` where production exports could land.
-
-### P0 — File adapters and validation
-
-- [x] Implement canonical multi-dataset CSV loaders with no calculation logic.
-- [ ] Implement the XLSX loader when the approved real fixture/source warrants it.
-- [x] Implement the compatibility-specific legacy CSV loader with required-column/type checks and no calculation logic.
-- [ ] Implement forward-fill parsing of hierarchical `Dish -> Silo -> Ingredient` rows.
-- [x] Validate canonical CSV required columns, types, positive pack sizes, allowed storage classes, timezone-aware timestamps, and date/location grain.
-- [x] Validate implemented stable-ID joins, duplicate canonical keys, orphan BOM lines, effective BOM coverage, and active-menu coverage.
-- [ ] Add source-specific alias coverage and XLSX master-conflict validation with the approved real adapter.
-- [x] Emit human-readable legacy and canonical CSV errors with source file, row/key, field, value, and remedy.
-- [ ] Extend the actionable-error contract to the future XLSX adapter.
-- [ ] Preserve raw source values and normalized values for audit.
-
-### P0 — Legacy calculation profile
-
-- [x] Implement BOM explosion and aggregation across dishes while preserving the silo/pre-mix path.
-- [x] Implement the legacy `1.20` factor separately from future yield/safety stock.
-- [x] Implement exact documented KW34 `Daily`, `Need`, bridge, `After`, and `Order` rounding.
-- [x] Use the explicit previous-week daily input for the KW34 bridge.
-- [ ] Implement stocked paths for `TK`, `Kuehl`, and `RT`.
-- [ ] Implement fresh Sa/Mo/We/Fr average-day multiplier path.
-- [x] Preserve blank/observed Order values as source evidence and emit structured difference exceptions; do not invent placed orders.
-- [ ] Detect planned items missing from stock/order output.
-
-### P0 — CLI and outputs
-
-- [ ] Implement `plan validate` and `plan run --policy legacy_kw34` commands.
-- [x] Implement the first `supply-plan legacy-run` / `python -m supply_planning legacy-run` fixture command with CSV input and audit JSON output.
-- [x] Document the CLI as a developer/analyst, batch, troubleshooting, and recovery interface—not the final configuration UI.
-- [ ] Write `order_proposals.csv`, `exceptions.csv`, `planning_lines.csv`, and `run_summary.json`.
-- [ ] Include input hashes, config hash, code version, run timestamp, and run mode.
-- [x] Include every currently implemented legacy intermediate and calculated-versus-observed comparison field.
-- [x] Exit non-zero on input/schema blockers; allow quality warnings with explicit summary.
-
-### P0 — Golden tests
-
-- [ ] Assert all 27 filled KW34 stocked order cells match exactly.
-- [ ] Assert the four positive-gap blank cells are reported as unexplained exceptions.
-- [ ] Assert the two missing fresh rows are reported.
-- [ ] Assert all 28 continuing bridge rows use the prior-week rate.
-- [ ] Assert Creme Fraiche/Schnittlauch master conflicts fail or quarantine deterministically.
-- [x] Add synthetic unit tests for rounding boundaries, zero demand, availability floor, determinism, blank-order exceptions, BOM aggregation/pre-mixes, and run-mode gates.
-
-### P1 — Legacy usability
-
-- [ ] Add a concise proposal summary by storage class and supplier/date where available.
-- [ ] Add a diff report from generated versus source stock tab.
-- [ ] Add clear labels that legacy output reproduces known workbook behavior and is not an improved recommendation.
-
-### Milestone 1 exit criteria
-
-- [ ] One documented command reproduces KW34 from approved files.
-- [ ] Golden suite is green and deterministic across two clean runs.
-- [ ] Every mismatch is either fixed or recorded as an explicit exception/fixture caveat.
-- [ ] No database, UI, or supplier write is required.
-
-## Milestone 2 — Improved engine with file inputs and placeholders
-
-**Outcome:** corrected planning logic runs end to end without waiting for SQL, while clearly stating where defaults replace real data.
-
-### P0 — Daily demand and menu model
-
-- [x] Implement the Phase 1 daily forecast CSV contract.
-- [ ] Add the flat-KW34-to-daily fixture adapter after the approved fixture is available.
-- [x] Implement explicit location/date-aware menu assignments and require one active menu entry for each forecast row.
-- [x] Aggregate shared ingredients across all active forecast dishes by location/item/day.
-- [ ] Validate menu horizon against the longest feasible replenishment horizon.
-- [ ] Add launch, steady-state, discontinuation, and reactivation scenarios.
-
-### P0 — Time-phased inventory and netting
-
-- [x] Build a pure dated event ledger for demand, opening on-hand, receipts/open POs, and explicit candidate receipts.
-- [ ] Compute supplier-calendar-aware candidate arrival and next replenishment arrival.
-- [x] Compute horizon gross need and inventory position without double-counting demand.
-- [ ] Replace the forecast horizon with item-specific lead-time/review protection periods once policy is implemented.
-- [x] Simulate signed projected on-hand daily and emit projected/pre-candidate-arrival stockout exceptions.
-- [x] Accept manual `open_pos.csv`; allow unknown/empty-placeholder critical inputs only in fixture/scenario mode.
-- [x] Map and validate open, confirmed, partially received, closed, and cancelled PO statuses; flag overdue, post-horizon, and post-final-demand receipts.
-- [ ] Apply `pipeline_cancellable` to menu-transition recommendations and exceptions.
-
-### P0 — Yield and safety placeholders
-
-- [ ] Replace the legacy multiplier with separate `yield_factor` and safety stock in `improved` mode.
-- [ ] Support `yield_factor_source = policy_default` until consumption/waste data exists.
-- [ ] Support policy safety days when forecast sigma is absent.
-- [ ] Implement root-sum-of-squares when daily sigma exists; document dish-error correlation assumption.
-- [ ] Emit non-blocking calibration warnings and line-level provenance.
-- [ ] Never label placeholder values as historical or model-calibrated.
-
-### P0 — Constraints and scheduling
-
-- [ ] Apply shelf-life and max-cover feasibility at receipt date.
-- [ ] Apply MOQ and case rounding, then recheck hard caps.
-- [ ] Emit `INFEASIBLE_ORDER_CONSTRAINTS` when no purchasable quantity satisfies policy.
-- [ ] Distinguish configured shelf-life approximation from lot/expiry FEFO logic.
-- [ ] Schedule orders to supplier order dates and expected receipt dates.
-- [ ] Sum actual forecast days for fresh delivery-to-delivery coverage.
-
-### P0 — Validation and comparison
-
-- [x] Add run-mode gates for unknown forecast, menu, BOM, item/pack, stock, and open-PO sources; validate positive pack size at input.
-- [ ] Add lead-time/calendar and longest-feasible-menu-horizon gates with scheduling.
-- [ ] Produce side-by-side legacy versus improved results with reason codes for differences.
-- [x] Add synthetic multi-location scenarios for shared items, open pipeline, empty/unknown pipeline, late receipts, same-day receipts, and projected stockout.
-- [ ] Add scenarios for long lead, short shelf life, MOQ conflict, and menu retirement with the owning policy modules.
-- [x] Prove the improved CLI produces byte-stable audit JSON for identical inputs and arguments.
-
-### P1 — Bootstrap policy schemas and offline administration
-
-- [ ] Finalize documented `policy.yaml`, `items.csv`, and `suppliers.csv` templates.
-- [ ] Label templates as fixture/development/import/fallback artifacts; do not describe them as the permanent non-technical planner workflow.
-- [ ] Support supplier defaults plus item overrides and value provenance.
-- [ ] Add dry-run config diff showing which proposal lines change.
-- [ ] Add config version/hash to every run and line.
-- [ ] **HUMAN BLOCKERS `H-06`–`H-08`:** replace or approve operational defaults.
-
-### P2 — Advanced offline scenarios
-
-- [ ] Add optional lead-time variability and correlated forecast-error policies.
-- [ ] Add optional lot-level/FEFO fixture support.
-- [ ] Add multi-location fixtures to prove no hidden single-site assumptions.
-
-### Milestone 2 exit criteria
-
-- [x] Improved policy-free file-driven netting run completes with transparent placeholder warnings.
-- [ ] All high-risk edge cases have deterministic tests and exceptions.
-- [ ] Operational mode refuses unknown stock/open POs/pack size/lead time.
-- [ ] Business owners can review legacy-versus-improved differences without reading code.
-
-## Milestone 3 — SQL adapters and durable Supabase storage
-
-**Outcome:** real operational inputs replace file placeholders, reviewed configuration migrates to one authoritative store, and runs/config are persistently auditable.
-
-### P0 — Source discovery and fitness
-
-- [x] Verify `CIRCUS_MODELS_READER` access to `BASE`, `INTERMEDIATE`, `REPORTING`, and `TECH_OPS` (140 physical tables).
-- [ ] **HUMAN BLOCKER `H-09`:** identify the current Ops PO source with Deepali/Dor/Ilona, establish ingestion/modeling with Joel, obtain stable connection/repository access, and decide the implementation boundary before operational Snowflake adapters or replacement models are accepted. This blocks M4/operational PO netting, not file/scenario engine work.
-- [x] Run and review V6/V8. On 2026-08-25 the three models refreshed sequentially for one location; forecasts cover five dates and the 76-line recommendation output is arithmetically coherent.
-- [x] Record Joel's confirmation that the three generated models and `BASE_INVENTORY` are abandoned previous-data-team models and may be replaced; do not treat their current outputs as operational inputs or approved policy.
-- [ ] Request GitHub access to [`data-transformation`](https://github.com/circus-kitchens/data-transformation), then inspect the abandoned definitions and upstream lineage.
-- [ ] Agree whether `data-transformation` owns normalized Snowflake models/publication while this repository owns the pure planning calculation, or document another explicit boundary; avoid duplicate business logic.
-- [ ] Receive the stable RSA-authenticated Snowflake service account from Joel through 1Password and document only the account/role/setup procedure, never credentials.
-- [x] Run V7 and rule out `BASE_INVENTORY` as operational open-PO input: 106/106 lines are closed and fully delivered, last synced 2025-10-20.
-- [x] Record Joel's confirmation that no purchase-order data is currently ingested into Snowflake to his knowledge; stop searching abandoned models for the operational feed.
-- [ ] With Deepali/Dor/Ilona, document the current PO/expected-delivery system or sheet, process owner, history, change handling, and export/API capability.
-- [ ] Agree ingestion with Joel/data platform—Fivetran only if appropriate—and publish a normalized PO-line/receipt-history model with remaining quantity and expected receipt date.
-- [ ] Validate PO model grain, identifiers, units, remaining quantities, statuses, partial receipts, cancellations/date changes, history retention, completeness, and freshness before accepting the read-only adapter.
-- [x] Run V8 candidate-key/basic-value and unit-placeholder checks. Duplicate/conflict diagnostics returned zero rows; 12 IDs are placeholder-only, six combine a real unit with null/zero placeholders, and one stable ID mixes `g` and `ml`. Treat the abandoned output as reference and make canonical-unit validation a replacement-model test.
-- [x] Run V9 BOM checks: 1,193 clean current rows, 11,990 valid history rows, full materialized-menu coverage, zero tested revision-key duplicates, and complete positive pre-mix mappings. Physical silo/recipe-slot mapping remains open.
-- [x] Run V3 join/cardinality checks and reject ingredient-only capacity joins; resources can change ingredient over time.
-- [x] Test the first V3 active-menu/chamber path: zero of 2,576 stock keys resolved, but the raw sample proves `CHAMBER_ALIAS` is constant text, so the query tested the wrong position field.
-- [x] Run corrected V3B: 2,576 stock keys, 610 without active-menu/detailed-menu context, 1,636 matching through `INGREDIENT_KEY`, zero resource-position matches, and zero uniquely or ambiguously resolved physical slots. Reject the direct `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` join.
-- [ ] After `data-transformation` access, inspect upstream lineage for the authoritative unit/resource/dock-to-effective-recipe-slot bridge; ask Joel or the robot/menu data owner only if it is not documented. This gates physical-capacity use, not the pure/file engine.
-- [x] Complete V5: 76 rows/75 non-null ingredient IDs, one blank ID, zero bad pack quantities, zero missing units, seven missing EANs, ten missing Apicbase IDs, and no non-null duplicate/conflict exceptions.
-- [x] Run V10 expiry checks: all 6,497 tested silo-days have expiry, but remaining-life outliers require semantic validation and do not define shelf-life policy.
-- [x] Complete the saved V11 checks: `INT_UNIT_DAY_MENU` spans 2025-10-21 through 2026-08-24 across six units/26 menus and had no forward-day coverage on 2026-08-25; base rows extend later but mix operational-looking records with pilot/demo/training/far-future/terminated records. Forward commitment/source remains a business/source gate.
-- [x] Run initial and lagged V12 checks and classify the raw source as high-frequency stock state with ingredient resets/corrections; enhanced same-ingredient analysis is optional calibration work.
-- [x] Rerun dish-level V2 with only `CLOSED/SERVED`: 622 portions across 221 deployed dish-unit-days and 39 zero-sale days.
-- [x] Finish the saved V1/V2B checks: six observed location names map one-to-one to unit serials; five selling/production units reconcile to 622 portions with 8.4–31.8 portions per service day. Stable location-ID and source-contract acceptance remain M3 work.
-- [ ] Validate remaining source units, timestamps/timezones, completeness, freshness, retention, update cadence, and authority for each adapter actually selected.
-- [ ] Prioritize current stock and open POs first; they materially affect every operational proposal.
-- [ ] Validate the three-level BOM/pre-mix topology and map receipts, menu, sales, waste, OOS, stock, and refill/consumption sources with explicit coverage gaps.
-- [ ] Define secure local/hosted secret handling and update `.env.example` without values.
-
-### P0 — Read-only adapters
-
-- [ ] Implement adapters behind the same schemas used by files.
-- [ ] Add freshness, duplicate, allowed-value, referential, and join-coverage checks.
-- [ ] Snapshot query parameters/source timestamps with each run.
-- [ ] Compare SQL adapter output to equivalent file fixtures.
-- [ ] Add retry/timeouts without hiding partial or stale data.
-
-### P0 — Supabase decision and foundation
-
-- [ ] **HUMAN BLOCKER `H-11`:** approve project strategy, owner, region, billing, retention, and credentials.
-- [ ] Create in-repo migrations only after approval.
-- [ ] Implement master/config tables: locations, items, suppliers, supplier-items, BOM, policy versions.
-- [ ] Implement operational tables: menu calendar, forecasts, inventory snapshots, purchase orders.
-- [ ] Implement audit tables: planning runs/inputs/lines, proposals, exceptions, approvals.
-- [ ] Add immutable or append-only rules for run snapshots and approvals.
-- [ ] Add seed data for local development; never seed private production data.
-- [ ] Build and verify a one-time import path from reviewed CSV/YAML bootstrap configuration.
-- [ ] Designate Supabase configuration versions as authoritative for operational runs and reject ambiguous file-plus-database authority.
-- [ ] Keep file adapters for fixtures, controlled imports/exports, tests, and recovery only.
-
-### P1 — Calibration sources
-
-- [ ] Connect receipts and calculate actual lead-time distributions.
-- [ ] Connect sales and align service dates/timezones/location/dish IDs.
-- [ ] Connect OOS and quantify censored intervals/coverage.
-- [ ] Connect waste and distinguish expiry, prep, trim, and unknown waste where possible.
-- [ ] Connect lot/expiry data if available.
-- [ ] Keep missing sources explicitly unavailable rather than blocking stock/PO integration.
-
-### P1 — Persistence application layer
-
-- [ ] Persist input/config snapshots before calculation.
-- [ ] Persist line derivations, warnings, exceptions, and output hashes atomically.
-- [ ] Add replay by `planning_run_id` and verify identical normalized result.
-- [ ] Add config effective dating and change audit.
-
-### P2 — Operational hardening
-
-- [ ] Add source freshness monitoring and alerts.
-- [ ] Add backup/restore and retention checks for Supabase.
-- [ ] Add migration/rollback verification in CI.
-
-### Milestone 3 exit criteria
-
-- [ ] Stock and open-PO inputs run from real read-only sources with freshness checks.
-- [ ] Supabase persistence is approved, migrated, documented, authoritative, and replayable; using another operational store requires an explicit superseding architecture decision.
-- [ ] File adapters remain usable for fixtures and fallback.
-- [ ] No SQL/source credential is stored in git or output artifacts.
-
-## Milestone 4 — Backtest, calibration, and shadow validation
-
-**Outcome:** evidence shows whether the improved policy is safer and useful before UI or operational adoption.
-
-### P0 — Historical reconstruction
-
-- [ ] Define available historical window and data completeness by source/week/location/item.
-- [ ] Reconstruct forecasts, menus, stock, POs, receipts, and outcomes without look-ahead leakage.
-- [ ] Backtest legacy and improved policies on identical information available at each historical run time.
-- [ ] Separate model output differences from missing-data/placeholder effects.
-
-### P0 — Evaluation metrics
-
-- [ ] Define service-level/stockout metric using OOS-corrected demand where available.
-- [ ] Define expiry and prep waste separately where available.
-- [ ] Measure days of cover by storage class and item.
-- [ ] Measure proposed/approved/ordered/received deltas and planner override rate.
-- [ ] Measure unavoidable pre-arrival stockout and infeasible-constraint counts.
-- [ ] Measure planner time and explanation/exception resolution burden.
-- [ ] State unavailable metrics rather than substituting unlabelled proxies.
-
-### P1 — Calibration
-
-- [ ] Estimate yield factor only where actual/theoretical consumption coverage is sufficient.
-- [ ] Clamp/fallback with sample-size and source labels.
-- [ ] Estimate forecast error from Phase 1 or historical forecast snapshots; do not use realized demand as if it were a saved forecast.
-- [ ] Apply OOS uncensoring method and sensitivity analysis.
-- [ ] Calibrate lead-time variability from orders/receipts.
-- [ ] Compare service/waste tradeoffs by storage class and scenario.
-
-### P0 — Shadow runs
-
-- [ ] Run legacy automation beside the manual planner first and reconcile every line.
-- [ ] Run improved policy beside manual planning without dispatch.
-- [ ] Capture planner explanations for blank/reduced/overridden lines.
-- [ ] Review exceptions and false positives weekly.
-- [ ] **HUMAN BLOCKER `H-13`:** agree duration, thresholds, and sign-off owners.
-- [ ] Record signed decision to proceed, revise policy, or extend shadowing.
-
-### Milestone 4 exit criteria
-
-- [ ] Backtest methodology and limitations are documented and reproducible.
-- [ ] Shadow output is stable across the agreed period.
-- [ ] Material differences have understood reason codes or approved follow-up.
-- [ ] Owners approve the policy/config baseline for UI exposure.
-
-## Milestone 5 — FastAPI and React/Tailwind user interface
-
-**Outcome:** non-technical planners can manage validated inputs/config, run planning, review derivations/exceptions, and approve/export proposals.
-
-### P0 — API boundary
-
-- [ ] Add FastAPI around the existing application service; no engine logic in routes.
-- [ ] Define versioned API contracts for validation, run, result, config, history, approval, and export.
-- [ ] Add job/status handling for runs longer than request timeouts.
-- [ ] Add idempotency for run/approval actions.
-- [ ] Add API tests against the same fixtures as the CLI.
-
-### P0 — Auth and authorization
-
-- [ ] **HUMAN BLOCKER `H-12`:** approve roles and auth/SSO requirements.
-- [ ] Implement Supabase Auth/RLS if selected.
-- [ ] Enforce viewer/planner/config-editor/approver/admin permissions server-side.
-- [ ] Audit config changes, runs, approvals, exports, and overrides.
-
-### P0 — Web foundation
-
-- [ ] Select React app framework/build tool and record the decision.
-- [ ] Add Tailwind design tokens and accessible component primitives.
-- [ ] Add typed API client, query/cache strategy, routing, error boundaries, and test setup.
-- [ ] Build responsive planner-first navigation and consistent loading/empty/error states.
-
-### P0 — Planner workflows
-
-- [ ] Run page: select location/date/policy/input version, validate, review warnings, execute dry run.
-- [ ] Proposal table: supplier/date/storage filters, exact quantities, status, and exception summary.
-- [ ] Proposal detail: derivation, input/config provenance, inventory timeline, caps, MOQ/case delta, and placeholder badges.
-- [ ] Exception workflow: assign/resolve/comment/override with reason and audit.
-- [ ] Approval/export: explicit confirmation, permission check, immutable approval record, CSV download; no supplier send.
-- [ ] Run history: status, input/config versions, comparison, replay, and audit.
-
-### P1 — Configuration workflows
-
-- [ ] Item/SKU page with defaults/overrides, units, shelf life, storage class, provenance, and validation.
-- [ ] Supplier page with lead times, calendars/cut-offs, MOQ/case, split/cancel rules.
-- [ ] BOM/menu page with stable IDs, effective dates, alias warnings, and transition horizon.
-- [ ] Inventory/open-PO manual entry/import as a temporary integration fallback.
-- [ ] Policy version page with dry-run impact diff before activation.
-- [ ] Route planner configuration changes through the authenticated API with audit records; require no direct CSV/YAML or Supabase-table editing.
-- [ ] Prevent activation when operational blockers remain.
-
-### P1 — UI quality
-
-- [ ] Keyboard navigation, labels, contrast, focus, and screen-reader checks.
-- [ ] Browser tests for critical run/review/approve/export paths.
-- [ ] Visual QA at desktop/tablet widths used by planners.
-- [ ] Friendly validation text; no raw stack traces.
-
-### P2 — Convenience
-
-- [ ] Saved filters/views and supplier-grouped export.
-- [ ] Notifications for blocking exceptions or stale inputs.
-- [ ] Comment/assignment workflow if multiple planners require it.
-
-### Milestone 5 exit criteria
-
-- [ ] A non-technical test user completes config → validate → run → review → approve → CSV export without developer help.
-- [ ] The tested planner workflow requires neither repository-file editing nor direct database-table access.
-- [ ] Permissions and audit readback are verified.
-- [ ] UI and CLI produce the same normalized result for the same run inputs.
-- [ ] Supplier dispatch remains disabled.
-
-## Milestone 6 — Phase 1 integration and operationalization
-
-**Outcome:** live daily forecasts and scheduled planning operate reliably; any dispatch integration is separately approved.
-
-### P0 — Phase 1
-
-- [ ] **HUMAN BLOCKER `H-10`:** obtain live sample, owner, transport, and schema/version policy.
-- [ ] Implement Phase 1 adapter to the existing daily contract.
-- [ ] Validate dates, locations, dishes, negative/null forecasts, sigma semantics, and horizon coverage.
-- [ ] Compare live forecast adapter against equivalent file input.
-- [ ] Add contract-version compatibility and rejection behavior.
-
-### P0 — Scheduling and operations
-
-- [ ] Add scheduled fresh and stocked runs with explicit timezone/cut-off handling.
-- [ ] Add health, failure, stale-input, and incomplete-run monitoring.
-- [ ] Add retries/idempotency and prevent duplicate proposals/approvals.
-- [ ] Add runbook for source outage, UI outage, stale stock, and fallback file run.
-- [ ] Add rollback to the last approved config/policy version.
-
-### P1 — Operational exports
-
-- [ ] Confirm approved CSV/Sheet/ERP output contract and owner.
-- [ ] Add export reconciliation/readback.
-- [ ] Keep proposal, approval, export, placed order, and receipt as separate states.
-- [ ] **HUMAN BLOCKER `H-14`:** obtain explicit approval before any supplier/ERP write integration.
-
-### P2 — Dispatch automation (separate release gate)
-
-- [ ] Threat/risk review for wrong-recipient, duplicate-order, wrong-unit, stale-config, and partial-failure cases.
-- [ ] Add dual confirmation or four-eyes control if required.
-- [ ] Add idempotency keys, provider readback, reconciliation, and cancellation path.
-- [ ] Pilot with a limited supplier/location and documented rollback.
-
-### Milestone 6 exit criteria
-
-- [ ] Live Phase 1 input is contract-validated and monitored.
-- [ ] Scheduled runs are reliable and fallback procedure is tested.
-- [ ] Operational output matches approved human workflow.
-- [ ] Dispatch remains manual unless the separate P2 release gate is signed.
-
-## Cross-cutting test matrix
-
-- [ ] Multi-dish aggregation and pre-mix preservation.
-- [ ] Multiple locations and timezone/cut-off boundaries.
-- [ ] Zero/fractional forecast and menu start/end boundaries.
-- [ ] Missing/duplicate/orphan IDs and alias collisions.
-- [ ] Mixed/conflicting units and pack sizes.
-- [ ] Open PO before, on, and after protection end.
-- [ ] Stockout before candidate arrival.
-- [ ] Full/empty/partially filled pipeline and cancellable/non-cancellable POs.
-- [ ] Shelf-life shorter than lead time; max-cover cap.
-- [ ] MOQ and case rounding below/above hard cap.
-- [ ] Fresh delivery coverage using unequal daily demand.
-- [ ] Launch, discontinuation, shared ingredient after dish retirement.
-- [ ] Missing waste/OOS/sigma/receipt/lot data with correct provenance.
-- [ ] Fixture/scenario/shadow/operational run-mode gates.
-- [ ] Reproducibility and replay.
-- [ ] Approval permissions, idempotency, and export readback.
+- [x] Document `Paprika - big` and `Mischsalat` missing from `Stock KW34`.
+- [x] Document Creme Fraiche/Schnittlauch pack-size conflicts and label drift.
+- [x] Define daily Phase 1 input and three-level BOM contracts.
+- [x] Define source provenance and actionable validation errors.
+- [ ] Decide whether the real fixture may be committed, anonymized, or must
+      remain private.
+- [ ] Obtain raw formula evidence or an owner walkthrough if available.
+- [ ] Produce the minimal real KW33/KW34 fixture locally or in approved form.
+
+## Milestone 1 — Legacy KW33/KW34 parity
+
+**Outcome:** one deterministic command reproduces the manual baseline before
+we replace its assumptions.
+
+- [x] Implement isolated `legacy_kw34/v1` stocked-item arithmetic.
+- [x] Preserve exact displayed rounding and the `1.20`, `6`, and `2.5` values.
+- [x] Use previous-week `Daily` for the bridge.
+- [x] Preserve observed blank/different order cells as exceptions.
+- [x] Add a compatibility CSV adapter and deterministic JSON audit.
+- [x] Add synthetic boundary and determinism tests.
+- [ ] Implement the workbook-to-fixture extraction/adapter needed for actual
+      KW33/KW34 rows.
+- [ ] Add golden assertions for all 27 filled order cells and 28 bridge cells.
+- [ ] Add explicit assertions for the four blanks, two missing fresh rows, and
+      master-data conflicts.
+- [ ] Implement and validate the fresh Sa/Mo/We/Fr legacy path.
+- [ ] Review all differences with the Excel owner and record explanations.
+
+### Milestone 1 exit
+
+- [ ] The approved real fixture runs with one documented command.
+- [ ] All known filled cells match or have an explicit accepted explanation.
+- [ ] Blank/missing/conflicting rows remain visible.
+
+## Milestone 2 — Minimum improved Phase 2 engine
+
+**Outcome:** replace the workbook's structural weaknesses without building
+advanced optimization or infrastructure first.
+
+### Implemented foundation
+
+- [x] Load daily forecast, menu, BOM, items, inventory, and `open_pos.csv`.
+- [x] Validate required fields, types, stable-ID joins, duplicates, units,
+      effective BOM coverage, menu coverage, and timezone-aware timestamps.
+- [x] Explode and aggregate shared ingredients by location/day.
+- [x] Build a pure dated inventory/open-PO event ledger.
+- [x] Net demand without double-counting it.
+- [x] Emit projected stockout, stale-stock, overdue-PO, and late-PO exceptions.
+- [x] Fail closed in shadow/production mode when a critical source is unknown.
+- [x] Prove deterministic improved audit output with synthetic scenarios.
+
+### Next core calculation
+
+- [ ] Define one small versioned config contract for:
+  - lead time and review period;
+  - shelf life/max cover where used;
+  - storage-class behaviour;
+  - pack size and optional MOQ/case size;
+  - simple delivery weekdays/cut-off only where they affect the calculation;
+  - safety/yield values and provenance.
+- [ ] Calculate the protection horizon from lead time plus review/delivery
+      cadence; do not restore an unexplained global six-day target.
+- [ ] Keep legacy `1.20` only in `legacy_kw34`; make the improved safety/yield
+      rule explicit and simple until calibration exists.
+- [ ] Apply shelf-life/max-cover only when configured and expose a binding cap.
+- [ ] Apply pack, MOQ, and case rounding once at the end.
+- [ ] Report infeasible cases when rounding conflicts with a hard cap.
+- [ ] Implement fresh delivery-to-delivery coverage from actual daily forecast.
+- [ ] Produce internal `PlanningRecommendation` rows with derivations and
+      exception codes; do not add workflow statuses or approvals.
+- [ ] Add focused tests for zero demand, long lead, empty/open pipeline, late
+      receipt, fresh unequal days, shelf-life cap, MOQ/case boundary, and shared
+      ingredients.
+
+### Explicitly later, not P0
+
+- [ ] Statistical safety stock from forecast sigma.
+- [ ] Yield calibration from physical consumption/waste.
+- [ ] OOS uncensoring and forecast-quality analysis.
+- [ ] Lot-level FEFO.
+- [ ] Complex multi-supplier optimization or split deliveries.
+- [ ] Advanced launch/discontinuation optimization beyond validating the
+      supplied forecast/menu horizon.
+
+### Milestone 2 exit
+
+- [ ] File-driven recommendations are explainable and deterministic.
+- [ ] Every default/manual rule is labelled with provenance/version.
+- [ ] Results can be compared line-by-line with the legacy profile.
+
+## Milestone 3 — Snowflake inputs, Snowflake outputs, and Supabase configuration
+
+**Outcome:** replace file placeholders with real sources while giving internal
+users a durable place to maintain Phase 2 rules.
+
+### Snowflake and data-platform work
+
+- [x] Verify broad read access and complete V1-V12 source investigation.
+- [x] Record that the discovered forecast/recommendation models and
+      `BASE_INVENTORY` are abandoned.
+- [x] Rule out current Snowflake tables as a usable live PO ledger.
+- [ ] Obtain `data-transformation` repository access.
+- [ ] Receive Joel's RSA Snowflake service account through 1Password.
+- [ ] Agree with Joel:
+  - which upstream transformations belong in `data-transformation`;
+  - which Python job/repository owns Phase 2 calculation;
+  - the target Snowflake database/schema/table names;
+  - whether result runs append or replace a latest view;
+  - required read/write grants and scheduling owner.
+- [ ] Work with Deepali/Dor/Ilona to identify the PO source and have data
+      platform ingest a normalized PO/receipt history.
+- [ ] Implement read adapters only for accepted sources with freshness,
+      uniqueness, unit, key, and coverage checks.
+- [ ] Implement an idempotent Snowflake result writer.
+- [ ] Persist `run_id`, `generated_at`, input snapshot/version, active config
+      version/hash, recommendation derivations, and exceptions.
+- [ ] Reconcile each SQL adapter against an equivalent reviewed file fixture.
+
+### Supabase configuration
+
+- [ ] Approve project owner, region, environments, credentials, backup, and
+      retention before creating infrastructure.
+- [ ] Store only application-owned editable configuration and its change
+      history in Supabase; Snowflake remains the source/output warehouse.
+- [ ] Start with the minimum tables needed for active policy version,
+      storage-class defaults, item overrides, supplier-item constraints, and
+      simple delivery schedules.
+- [ ] Validate configuration before activation and keep one authoritative
+      active version per environment.
+- [ ] Include the active config version/hash in every Snowflake result run.
+- [ ] Keep CSV/YAML only for fixtures, controlled import/export, and recovery.
+
+### Milestone 3 exit
+
+- [ ] Accepted real inputs can run through the engine.
+- [ ] Results are written safely and reproducibly to Snowflake.
+- [ ] An active Supabase config version can replace bootstrap files.
+- [ ] Unknown PO/current-stock/forecast inputs block production output.
+
+## Milestone 4 — Internal validation against the manual process
+
+**Outcome:** demonstrate usefulness before scheduling the job broadly.
+
+- [ ] Run legacy output beside the Excel owner and reconcile every line.
+- [ ] Run improved results beside the manual plan for representative weeks.
+- [ ] Capture reasons for overrides, blanks, emergency orders, and fresh-slot
+      changes.
+- [ ] Separate calculation differences from missing-source and policy effects.
+- [ ] Agree simple first-release measures: missing-demand coverage, projected
+      stockout warnings, recommendation differences, and planner time.
+- [ ] Add waste/service-level calibration only when definitions and historical
+      coverage are trustworthy.
+- [ ] Record the decision to continue, adjust rules, or extend comparison.
+
+## Milestone 5 — Internal configuration UI and scheduled job
+
+**Outcome:** non-technical users maintain the Phase 2 rules and the internal job
+runs reliably.
+
+### Minimum UI
+
+- [ ] Add a thin Python API over validated Supabase configuration operations.
+- [ ] Add internal authentication appropriate to the hosting environment.
+- [ ] Let authorized internal users view/edit:
+  - storage-category defaults;
+  - item/supplier overrides;
+  - lead time and review period;
+  - shelf life/max cover;
+  - MOQ/case size;
+  - fresh/stocked classification and simple delivery schedule;
+  - safety/yield setting and provenance.
+- [ ] Validate before save/activation and show clear field-level errors.
+- [ ] Show current active version and basic change history.
+- [ ] Optionally provide a read-only result/exception view if it materially
+      helps users; Snowflake remains the result store.
+
+The first UI does not include proposal approval, assignment/comments, supplier
+send, ERP export, or a broad planning workflow.
+
+### Scheduled internal job
+
+- [ ] Connect the accepted live Phase 1 daily forecast contract.
+- [ ] Schedule the Snowflake/Supabase → engine → Snowflake run.
+- [ ] Add idempotency, retries, freshness checks, failure logging, and a small
+      runbook.
+- [ ] Verify that a failed run cannot replace the last successful result view.
+
+### Milestone 5 exit
+
+- [ ] A non-technical user can safely edit and activate the supported rules.
+- [ ] A scheduled run writes reproducible internal Snowflake output.
+- [ ] Source/config failures remain visible and do not produce trusted results.
+
+## Cross-cutting tests
+
+- [x] Multi-dish aggregation and pre-mix preservation.
+- [x] Multiple locations and shared ingredients.
+- [x] Zero forecast and deterministic replay.
+- [x] Duplicate/orphan/menu/BOM/input validation.
+- [x] Open PO within/after horizon and same-day receipt ordering.
+- [x] Missing/placeholder source gates and stale inventory.
+- [ ] Real KW33/KW34 parity cases.
+- [ ] Fresh unequal daily demand and delivery-to-delivery coverage.
+- [ ] Lead/review horizon boundaries.
+- [ ] Shelf-life/max-cover and MOQ/case conflicts.
+- [ ] Supabase config validation/version selection.
+- [ ] Snowflake read/write idempotency and failure behavior.
 
 ## Immediate next execution slice
 
-1. [ ] Wait for answers to the already-sent Q1-Q13 Excel-owner questionnaire; do not send a correction. Record the answers against the audience/topic map in brief section 10.
-2. [x] Create storage-neutral normalized schema definitions, initial run-mode gates, and the exception-code catalog; mark files as bootstrap adapters and Supabase as the planned operational store.
-3. [x] Scaffold the Python package and test tooling.
-4. [x] Create a documented synthetic fixture and private-data ignore paths; keep real KW34-derived rows uncommitted until `H-01`/`HA-02` is cleared.
-5. [x] Implement BOM explosion and legacy rounding.
-6. [ ] After fixture approval, land the 27-cell KW34 golden test plus gap/missing-row assertions.
-7. [x] Add the legacy and improved CLI paths, canonical multi-file validation, dated netting, manual/placeholder `open_pos.csv`, and deterministic audit JSON. The report CSV bundle remains open above.
-8. [ ] Ask Deepali/Dor (optionally Ilona) for the PO-process/source walkthrough, then coordinate ingestion/modeling with Joel. In parallel request `data-transformation` access, complete the least-privilege RSA service-account setup, inspect model and physical-slot lineage, and decide the cross-repository boundary. No required verification SQL remains; enhanced V12 is optional calibration work.
-9. [ ] Resolve or explicitly accept assumptions for `H-02`–`H-05`, then review Milestone 1 output with the current planner before accepting M1 or starting improved-policy sign-off.
-10. [ ] Implement the next M2 policy tranche: item-specific protection periods, separate yield/safety inputs, supplier scheduling, shelf-life/max-cover constraints, MOQ/case rounding, and fresh-slot coverage. Keep defaults explicit and do not promote to operational use before the relevant owner approvals.
+1. [x] Correct the architecture and backlog: Snowflake inputs/results,
+   Supabase editable rules, internal config UI, no approval/dispatch workflow.
+2. [ ] Build or run the minimal real KW33/KW34 fixture locally; commit only
+   after the recorded data-handling decision.
+3. [ ] Record the Excel-owner answers when received and map them to the legacy
+   and improved rules above.
+4. [ ] Ask Joel to confirm the Snowflake output ownership/schema/write pattern,
+   finish service-account provisioning, and grant `data-transformation` access.
+5. [ ] Continue the Ops PO-source/ingestion workstream.
+6. [ ] Implement the small Phase 2 config contract and the remaining minimum
+   calculation rules; keep advanced calibration out of P0.
+7. [ ] Implement Snowflake adapters/result writer once source contracts and
+   access are accepted.
+8. [ ] Create Supabase/config UI only after the config contract is stable.
 
-## Dated progress log
+## Dated progress
 
-- 2026-08-22: Repository initialized; AGENTS/MEMORY and engineering brief added.
-- 2026-08-22: Linked workbook inspected read-only; KW34 legacy values independently reconciled.
-- 2026-08-22: Brief corrected for bridge behavior, rounding, target netting, safety-stock grain, constraints, placeholders, script-first architecture, Supabase/UI boundary, and delivery sequence.
-- 2026-08-22: Master backlog and execution scratchpad created. Implementation remains unstarted.
-- 2026-08-24: Snowflake access confirmed; source-status documentation reconciled. Catalogued tables remain candidates until verification and owner/lineage checks pass. Access is no longer a blocker; expected-receipt/open-PO data, three-level BOM mapping, source authority, waste semantics, and planning policies remain stage gates.
-- 2026-08-22: Clarified that CLI/CSV/YAML are technical bootstrap and fallback interfaces; the planned non-technical workflow is React/FastAPI backed by authoritative Supabase persistence after approval.
-- 2026-08-24: Reclassified unanswered business questions as stage-exit/promotion gates rather than a global start blocker. M0/M1 scaffolding and scenario-safe engine work may begin while answers are collected in parallel.
-- 2026-08-24: Added the root README as the concise engineer handover for project purpose, planned architecture, logic, data/config boundaries, delivery order, safeguards, and the documentation reading path.
-- 2026-08-24: Implemented the first M0/M1 tranche: Python 3.12 package, canonical input/output dataclasses, provenance/run modes and critical-source gates, pure BOM explosion, isolated `legacy_kw34/v1`, legacy CSV adapter, deterministic audit CLI, synthetic fixture, and 17 passing tests. Added canonical-contract and human-action documentation; real KW34 golden tests remain gated.
-- 2026-08-25: Reviewed V6/V7/V8 outputs. Current forecasts and generated recommendations refresh together for one location and reconcile internally. Joel then confirmed that these three models and `BASE_INVENTORY` are abandoned previous-data-team models that may be replaced in `data-transformation`; they are not operational sources of truth. GitHub access and an RSA-authenticated Snowflake service account are pending. The actual source with remaining quantity and expected receipt date remains the main operational data blocker.
-- 2026-08-25: Reviewed the remaining V1-V12 exports and recorded them in `docs/scratchpads/snowflake_verification_evidence.md`. Forecast candidate keys pass the tested duplicate checks; the flattened/versioned BOM is clean and covers the materialized menu; ingredient-only silo-capacity joins are invalid; expiry coverage is high but policy remains manual; stock updates are state events rather than proven consumption; and the EUR 31k waste headline is reproducible only as a six-unit/83-day field sum with unconfirmed semantics. Superseded the earlier sales comparison and reduced the SQL backlog to focused follow-ups.
-- 2026-08-25: Reviewed the 13:07-13:11 follow-ups. V8 placeholder semantics are classified and expose one mixed-unit ingredient in the abandoned model; corrected dish-level V2 is 622 portions; V12 transition deltas confirm resets/corrections; the first V3 physical-slot attempt is invalid because `CHAMBER_ALIAS` is constant and is superseded by corrected V3B. The open-PO-source question was sent to Joel; his later response is recorded in the next entry.
-- 2026-08-25: Joel confirmed that PO data is not currently ingested into Snowflake to his knowledge and directed source discovery to Ops (Deepali/Dor/Ilona), with Fivetran a possible later ingestion route. This becomes `HA-13`: it blocks accepted real PO adapters, M4 shadow, and operational netting, but not pure/file engine work. The 13:33-13:35 exports closed V5, V11, V1, and V2B; V3B was still pending at that point and is completed in the next entry.
-- 2026-08-25: Corrected V3B reviewed. Of 2,576 stock keys, 1,636 match active-menu ingredient context through `INGREDIENT_KEY`, but none match `SILO_RESOURCE_ID` to `RECIPE_SLOT_INSERTING_POSITION` and no exact physical slot resolves. All required verification SQL is complete; physical-capacity use now waits on model/upstream lineage or a targeted owner-provided bridge, not another inferred join.
-- 2026-08-25: Implemented the first unblocked M2 file-engine tranche: canonical manifest plus daily forecast/menu/BOM/item/inventory/open-PO CSV adapters; actionable cross-dataset validation; typed PO statuses; a pure dated inventory event ledger; time-phased stock/open-PO netting; stale-snapshot, overdue/post-horizon/stockout exceptions; strict shadow/operational source gates; deterministic improved audit JSON/CLI; and a synthetic multi-location scenario. The full wrapper passes 33 tests. Policy, constraint, scheduling, persistence, SQL adapters, UI, approval, and dispatch remain outside this tranche.
+- 2026-08-22: Workbook inspected read-only; KW33/KW34 displayed values and
+  known gaps were reconstructed.
+- 2026-08-24: First M0/M1 Python foundation implemented with synthetic tests.
+- 2026-08-25: Snowflake V1-V12 investigation completed; abandoned models and
+  missing PO ingestion confirmed with Joel/data platform.
+- 2026-08-25: Canonical file adapters, BOM explosion, dated event ledger,
+  open-PO netting, strict gates, deterministic audit output, and synthetic
+  improved scenarios implemented.
+- 2026-08-25: Scope reconciled after architecture drift. Phase 1 remains the
+  independent daily forecast input. Phase 2 owns ingredient/order calculation.
+  Snowflake owns operational inputs/results; Supabase plus an internal UI owns
+  editable Phase 2 rules. Approval/dispatch workflows and speculative advanced
+  optimization were removed from the active plan.

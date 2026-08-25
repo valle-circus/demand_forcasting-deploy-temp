@@ -2,9 +2,8 @@
 
 from supply_planning.domain.issues import ExceptionCode, PlanningIssue, Severity
 from supply_planning.domain.models import (
-    ApprovalDecision,
-    ApprovalRecord,
     BomLine,
+    DeliveryScheduleRule,
     ForecastDaily,
     IngredientDemandDaily,
     InputSourceStatus,
@@ -13,12 +12,11 @@ from supply_planning.domain.models import (
     ItemDemandDaily,
     Location,
     MenuCalendarEntry,
-    OrderProposal,
     PlanningExceptionRecord,
     PlanningLine,
+    PlanningRecommendation,
     PlanningRun,
     PlanningRunInput,
-    ProposalStatus,
     Provenance,
     PurchaseOrderLine,
     PurchaseOrderStatus,
@@ -26,14 +24,12 @@ from supply_planning.domain.models import (
     RunStatus,
     StorageClass,
     Supplier,
-    SupplierCalendarRule,
     SupplierItem,
 )
 
 __all__ = [
-    "ApprovalDecision",
-    "ApprovalRecord",
     "BomLine",
+    "DeliveryScheduleRule",
     "ExceptionCode",
     "ForecastDaily",
     "IngredientDemandDaily",
@@ -43,13 +39,12 @@ __all__ = [
     "ItemDemandDaily",
     "Location",
     "MenuCalendarEntry",
-    "OrderProposal",
     "PlanningExceptionRecord",
     "PlanningIssue",
     "PlanningLine",
+    "PlanningRecommendation",
     "PlanningRun",
     "PlanningRunInput",
-    "ProposalStatus",
     "Provenance",
     "PurchaseOrderLine",
     "PurchaseOrderStatus",
@@ -58,6 +53,5 @@ __all__ = [
     "Severity",
     "StorageClass",
     "Supplier",
-    "SupplierCalendarRule",
     "SupplierItem",
 ]
