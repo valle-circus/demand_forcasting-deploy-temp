@@ -11,7 +11,9 @@
 - [x] Define the script-first, data-later, UI-last architecture.
 - [x] Create the cross-session master backlog.
 - [x] Implement the first Milestone 0/Milestone 1 foundation: contracts, pure BOM explosion, isolated legacy calculation, synthetic tests, and audit CLI.
+- [x] Implement the first unblocked Milestone 2 tranche: canonical CSV bundle, daily menu/BOM validation, dated inventory/open-PO ledger and netting, strict source gates, deterministic improved audit output, and scenario tests.
 - [ ] Add the approved real KW34 golden fixture and remaining legacy workbook paths after the relevant human gates clear.
+- [ ] Implement the next M2 policy tranche: item-specific protection periods, yield/safety inputs, constraints, supplier/fresh scheduling, and order-proposal derivations.
 
 ## Key decisions (and why)
 - 2026-08-22: Keep separate `legacy_kw34` and `improved` policy profiles. Exact reproduction must not contaminate corrected policy.
@@ -33,6 +35,8 @@
 - 2026-08-25: Joel confirmed that `FACT_CG_DISH_DEMAND_FORECASTS`, `FACT_CG_INGREDIENT_DEMAND_FORECASTS`, `FACT_CG_PURCHASE_ORDERS`, and `BASE_INVENTORY` are abandoned previous-data-team models. They may be replaced in `data-transformation`, but are not authoritative inputs or approved logic. Inspect that repository after access and decide its boundary with this repository's pure engine before changing models.
 - 2026-08-25: Joel will provision a stable RSA-authenticated Snowflake service account and share credentials through 1Password. Never record the private key/token in git or documentation. Connection readiness is separate from the unresolved source of live open-PO data.
 - 2026-08-25: Joel confirmed that PO data is not currently ingested into Snowflake to his knowledge. Work with Deepali/Dor/Ilona to identify the operational source/process, then with Joel to ingest and normalize it; Fivetran is only a candidate after source fit is known. This blocks real PO adapters, shadow, and operational netting—not pure/file engine implementation.
+- 2026-08-25: The first improved file-engine tranche uses a required source manifest to distinguish a known zero-row PO result from an unknown `empty_placeholder`/`unavailable` source. Fixture/scenario mode warns; shadow/operational mode fails closed before netting output. Manual `open_pos.csv` is therefore a safe development bridge, not evidence that operational pipeline data exists.
+- 2026-08-25: Dated netting treats the selected inventory snapshot as the opening balance on the planning date and applies same-day receipts before daily demand. Overdue POs are reported but not counted; after-horizon and after-final-demand receipts are reported separately. Net requirements remain unrounded grams and exclude candidate receipts so later policy/scheduling cannot be hidden in the ledger.
 
 ## What we learned (facts, not guesses)
 - Source is `Supply_Planning_Rewe.xlsx`, an Office workbook stored in Drive, modified 2026-08-21. KW34 reference tabs are `Plan KW34` and `Stock KW34`.
@@ -45,9 +49,9 @@
 - The original target netting equation double-counted demand. Correct netting uses protection-period demand minus inventory position, followed by a daily stock projection.
 - The original safety-stock equation did not clearly match daily sigma. For daily errors use root-sum-of-squares over the protection period, with explicit correlation assumptions.
 - MOQ/case rounding can violate an earlier shelf-life cap; hard caps must be rechecked after rounding and infeasible combinations must become exceptions.
-- The runnable foundation now includes canonical input/output dataclasses, critical-source run-mode gates, pure daily BOM explosion, exact displayed-value legacy rounding, a compatibility CSV adapter, and deterministic audit JSON.
+- The runnable foundation now includes canonical input/output dataclasses, legacy and canonical CSV adapters, critical-source run-mode gates, pure daily BOM explosion, exact displayed-value legacy rounding, a pure dated event ledger, time-phased stock/open-PO netting, and deterministic audit JSON for both CLI paths.
 - The checked-in synthetic fixture produces three audit lines, ten calculated units, one `UNEXPLAINED_BLANK_ORDER` warning, and no blockers.
-- The repository verification wrapper passes 17 tests covering domain contracts, BOM/pre-mix aggregation, legacy rounding, audit determinism, actionable CLI errors, and fixture/shadow/operational source gates.
+- The repository verification wrapper passes 33 tests covering domain contracts, BOM/pre-mix aggregation, legacy rounding, canonical file/cross-dataset validation, typed PO statuses, dated netting, audit determinism, actionable CLI errors, stale-snapshot handling, and fixture/scenario/shadow/operational source gates.
 - `CIRCUS_MODELS_READER` can read 140 physical tables across `BASE`, `INTERMEDIATE`, `REPORTING`, and `TECH_OPS`; access itself is no longer a blocker.
 - Snowflake catalogues generated order recommendations and dish/ingredient forecasts. Joel confirmed that all three are abandoned previous-data-team models; the scheduled refresh observed by SQL does not make them operational.
 - V6/V8 measured on 2026-08-25: dish forecasts (115 rows), ingredient forecasts (190), and recommendations (76) refreshed sequentially around 04:31-04:32 Berlin time for one location. Forecasts cover 2026-08-25 through 2026-08-29. This is useful reference evidence for the old automated pipeline, not a live planning source.
@@ -56,7 +60,7 @@
 - V7 measured on 2026-08-25: `BASE_INVENTORY` has 106 lines/35 POs, all closed and fully delivered, last synced 2025-10-20; all 106 nonblank delivery strings fail `TRY_TO_DATE`. It is ruled out for open-PO netting and is not yet fit even as receipt history.
 - `BASE_STOCKS` has 21 one-location rows, last synced 2025-10-30, with every supplier-article field missing; it is not a current operational stock/supplier master.
 - V9 measured: the current flattened BOM has 1,193 clean rows and zero tested revision-key duplicates; all 763 materialized unit-days/26 menu keys resolve; the 11,990-row history has valid intervals. Raw recipe-slot and positive pre-mix mappings exist. Physical silo-to-effective-recipe-slot mapping remains unverified.
-- V3 measured: an ingredient-only silo/BOM join is many-to-many for 62 ingredients. The first active-menu/chamber path resolved 0/2,576 stock keys, but its premise was wrong: `CHAMBER_ALIAS` is constant text in the raw sample while `SILO_RESOURCE_ID` carries numeric positions. Run corrected V3B before escalating the physical mapping.
+- V3 measured: an ingredient-only silo/BOM join is many-to-many for 62 ingredients. Corrected V3B tested 2,576 stock keys: 610 lack active-menu/detailed-menu context, 1,636 match through `INGREDIENT_KEY`, but zero match `SILO_RESOURCE_ID` to `RECIPE_SLOT_INSERTING_POSITION` and no physical slot resolves. The tested direct position join is rejected; inspect lineage or ask the responsible owner for the authoritative bridge before using capacity.
 - V10 measured: all 6,497 tested silo-days carry expiry, with `DAYS_UNTIL_EXPIRATION` from -2 to 368. Observation coverage is strong; sealed/opened shelf-life remains approved policy.
 - V12 measured: 148,158 raw stock rows are high-frequency state updates. Of 147,980 lagged transitions, 12.0% change ingredient and 62.1% are unchanged; gross positive/negative changes exceed 15 tonnes and contain 7 kg jumps. This is not physical consumption without reset filtering and semantics.
 - V4 measured field sums: 3,750.3 kg and EUR 31,339 across six units, 63 ingredients, and 314 unit-days. This is not one dish/unit and must not be called physical disposal before waste/valuation lineage is confirmed.
@@ -84,8 +88,8 @@
 
 ## Next steps
 - Human now: wait for replies to the already-sent Q1-Q13 set under `HA-01`; do not send a correction. Separately decide the KW34 fixture policy (`HA-02`) and provide raw formulas/owner walkthrough if available (`HA-03`). These are M1 acceptance gates, not a stop-work gate.
-- Data now: ask Deepali/Dor (optionally Ilona) for the current PO/expected-delivery source walkthrough, then return the findings to Joel for ingestion/model design. In parallel request `data-transformation` access, complete the least-privilege service-account setup through 1Password, inspect lineage, and decide the cross-repository boundary. Run corrected V3B only; enhanced V12 is optional until calibration. Defer the waste-definition question until the V4 field sums will be shared or used.
-- Engineering next: implement the Phase 1 daily/file contract, location/date-aware menu assignment, canonical multi-dataset validation/file adapters, dated event ledger, manual `open_pos.csv`, time-phased netting, and the remaining legacy stocked/fresh paths. Use synthetic/manual fixtures and fail closed in shadow/operational mode while PO ingestion and business answers are pending.
+- Data now: ask Deepali/Dor (optionally Ilona) for the current PO/expected-delivery source walkthrough, then return the findings to Joel for ingestion/model design. In parallel request `data-transformation` access, complete the least-privilege service-account setup through 1Password, inspect source and physical-slot lineage, and decide the cross-repository boundary. No required verification SQL remains; enhanced V12 is optional until calibration. Defer the waste-definition question until the V4 field sums will be shared or used.
+- Engineering next: build the remaining improved-policy layers on the validated event ledger: item-specific protection periods; separate yield/safety inputs; supplier calendars; shelf-life/max-cover; MOQ/case rounding with post-rounding feasibility; fresh delivery-slot coverage; and explainable proposal derivations. Keep real SQL adapters, shadow promotion, and production policy claims behind their recorded gates.
 - After `HA-02`, add the minimal real KW33/KW34 fixture, 27-cell golden assertions, four unexplained blank-order assertions, two missing-fresh-row assertions, and master-data quarantine cases.
 - Keep accepted SQL adapters, Supabase, real-data backtests, UI, and dispatch behind their recorded milestone gates in `docs/plans/human_action_register.md`.
 
@@ -105,4 +109,4 @@
 - Google reports the source as XLSX, not a native Sheet; use read-only Drive fetch rather than native Sheets range APIs.
 - On this desktop sandbox, Git commands may need a command-scoped `safe.directory` value and permission to write `.git` metadata.
 - Verification: `scripts/check.ps1 -PythonExecutable <python-3.12-path>` sets `PYTHONPATH`, compiles `src`/`tests`, and runs the standard-library suite.
-- Current verified result on 2026-08-24: 17 tests passed. Ruff/mypy are configured in `pyproject.toml` but their executables are not installed in the bundled runtime.
+- Current verified result on 2026-08-25: 33 tests passed. Ruff/mypy are configured in `pyproject.toml` but their executables are not installed in the bundled runtime.

@@ -1,0 +1,7 @@
+dataset,provenance,source_version
+forecast_daily,manual,synthetic-forecast-v1
+menu_calendar,manual,synthetic-menu-v1
+bom_lines,manual,synthetic-bom-v1
+items,manual,synthetic-items-v1
+inventory_snapshots,manual,synthetic-stock-v1
+purchase_orders,manual,synthetic-open-pos-v1

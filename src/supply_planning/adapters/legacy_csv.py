@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from supply_planning.adapters.errors import InputFileError
 from supply_planning.application.run_legacy import LegacyRunResult
 from supply_planning.engine.legacy_kw34 import LegacyKw34Input
 
@@ -17,11 +18,6 @@ REQUIRED_FIELDS = (
     "stock_units",
     "observed_order_units",
 )
-
-
-class InputFileError(ValueError):
-    """Planner-facing file validation error with location and remedy."""
-
 
 def _decimal(path: Path, row_number: int, field: str, value: str) -> Decimal:
     try:

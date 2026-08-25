@@ -1,7 +1,7 @@
 # Supply Planning Automation — Phase 2 Engineering Brief
 
 **Scope:** replace the manual weekly Excel supply-planning process with a hosted Python service.
-**Status:** discovery and KW34 value-level validation complete; first M0/M1 foundation implemented on 2026-08-24. Canonical contracts, run-mode source gates, pure BOM explosion, the isolated legacy calculation, synthetic tests, and a deterministic audit CLI are runnable. Real KW34 fixture acceptance and the full legacy workbook adapter remain open.
+**Status:** discovery and KW34 value-level validation complete; M0/M1 foundation and the first unblocked M2 file-engine tranche are implemented. Canonical CSV validation, daily menu-aware demand, a pure dated inventory/open-PO ledger, time-phased netting, strict source gates, and deterministic improved-run audit output are runnable. Real KW34 fixture acceptance, policy/constraint/scheduling logic, and real source adapters remain open.
 **Source analysed:** [`Supply_Planning_Rewe.xlsx`](https://docs.google.com/spreadsheets/d/1W0fwiO_mf7pQ6G0Oqmp6QE92MCljrXQ-/edit?gid=844782362#gid=844782362) (Excel workbook stored in Google Drive), tabs `Plan KW34` / `Stock KW34`, cross-checked against adjacent weeks. Revalidated read-only on 2026-08-22 against the workbook modified on 2026-08-21.
 **Audience:** the engineer who will build and own the Phase 2 service.
 
@@ -18,6 +18,15 @@ The overall direction is sound: reproduce the manual process first, isolate a pu
 Confidence is **high** for the displayed KW34 legacy arithmetic and **medium** for the operational meaning of blank/booking cells, lead times, shelf life, and pipeline handling. The source is an Office workbook in Drive; the connector exposed displayed cell values but not a formula AST. The reconstruction was therefore independently reconciled at value level. Preserve this caveat until the raw workbook formulas or an owner walkthrough confirm the exact cell implementation.
 
 The implemented canonical field definitions and source-mapping boundary are maintained in `docs/descriptions/canonical_data_contracts.md`. The engine contracts do not assume physical Snowflake, ERP, or Supabase table names. Current code uses Python 3.12 standard-library dataclasses and `Decimal` with no third-party runtime dependency; source/UI frameworks remain adapter-boundary decisions for later milestones.
+
+The current `improved_file/v1` implementation covers only the policy-free core
+of Milestone 2: validated daily forecast/menu/BOM/item/inventory/open-PO CSVs,
+dated demand and receipt events, signed daily stock projection, open-PO netting,
+stockout/late-receipt exceptions, deterministic audit JSON, and fail-closed
+shadow/operational source gates. It does not yet calculate purchasable order
+proposals because lead-time/review, safety/yield, shelf-life, MOQ/case, supplier
+calendar, and fresh-slot policies are intentionally still unapproved or
+unimplemented.
 
 ---
 
@@ -96,6 +105,11 @@ unit-days/26 menu keys. Raw recipe-slot and pre-mix mappings also exist. The
 remaining gap is physical identity: an ingredient-only join to robot stock is
 many-to-many, and silo resources can change ingredient over time, so the
 effective `unit/menu/recipe slot ↔ resource/dock` mapping is still required.
+Corrected V3B reinforces that boundary: 1,636 of 2,576 stock keys find active-
+menu ingredient context through `INGREDIENT_KEY`, but none match
+`SILO_RESOURCE_ID` to `RECIPE_SLOT_INSERTING_POSITION` and no exact physical
+slot is resolved. The direct position-equality hypothesis is therefore rejected;
+capacity logic must wait for an authoritative bridge, not another inferred join.
 
 ### 4.2 `Stock KWxx` — netting and order proposal
 
@@ -604,9 +618,11 @@ that the quantities are physical disposal. V5, V11, V1, and corrected V2B are
 now complete: the item master has usable pack/unit coverage with one blank ID,
 the materialized menu has no forward-day coverage as of 2026-08-25, and the
 corrected per-unit sales output reconciles to 622 portions across five
-production/selling units. Corrected V3B is the only required SQL follow-up;
-ask Joel an additional silo-lineage question only if it cannot settle the
-physical mapping.
+production/selling units. Corrected V3B is also complete and rules out the
+tested direct `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` join. Inspect
+the data-model/upstream lineage for an authoritative physical-slot bridge after
+repository access, then ask Joel or the robot/menu data owner only if it is not
+documented there. No required Snowflake verification query remains.
 
 Separate infrastructure decisions—not part of the already-shared 13—remain
 for their later milestones: who may edit/run/approve/export; whether Supabase is
@@ -621,7 +637,14 @@ and authentication policy.
 
 **Milestone 1 — Reproduce the status quo.** Build the Python package and CLI, file schemas, validation, BOM explosion, legacy `1.20` buffer, prior-week bridge, exact rounding, stocked/fresh paths, proposal/exception/audit exports, and golden tests. Acceptance: all 27 filled KW34 order cells match exactly and unexplained/missing rows are surfaced rather than silently filled. Ship nothing to suppliers.
 
-**Milestone 2 — Implement the improved engine with file inputs.** Add daily time-phased demand, lead-time/review protection, open-PO netting, pre-arrival stockout detection, shelf-life/max-cover constraints, MOQ/case feasibility, delivery scheduling, menu transitions, and explicit placeholder provenance. Use manual/hardcoded files for missing data; do not call placeholder output production-calibrated.
+**Milestone 2 — Implement the improved engine with file inputs.** The first
+tranche is complete: canonical daily file inputs, location/date menu checks,
+dated inventory/open-PO netting, stockout and late-receipt exceptions, explicit
+placeholder provenance, and deterministic audit output. Next add
+lead-time/review protection, yield/safety policy, shelf-life/max-cover
+constraints, MOQ/case feasibility, delivery scheduling, fresh delivery-slot
+coverage, and menu-transition rules. Use manual/hardcoded files for missing
+data; do not call placeholder output production-calibrated.
 
 **Milestone 3 — Connect SQL and durable storage.** Confirm source schemas and credentials, implement read-only adapters, create Supabase only if approved, migrate reviewed bootstrap configuration into authoritative versioned tables, persist run snapshots, and replace placeholders source by source. Waste and OOS can arrive after stock/open-PO integration because they calibrate rather than enable core netting.
 

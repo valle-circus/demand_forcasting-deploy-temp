@@ -31,6 +31,14 @@ Snowflake tables as authoritative production inputs. Source ownership,
 completeness, grain, units, and lineage must be resolved before their adapters
 are accepted for shadow or operational runs.
 
+The first canonical file path is now implemented: a required source manifest
+plus daily forecast, menu, BOM, item, inventory, and `open_pos.csv` inputs feed
+the pure dated netting engine. This is the approved development/scenario bridge
+while real adapters are unavailable. It does not change any source-status
+finding below. An explicit manual or observed zero-row PO file is a known empty
+result; `empty_placeholder` or `unavailable` provenance is an unknown pipeline
+and blocks shadow/operational runs before netting output.
+
 Joel confirmed on 2026-08-25 that
 `REPORTING.FACT_CG_PURCHASE_ORDERS`, `FACT_CG_DISH_DEMAND_FORECASTS`,
 `FACT_CG_INGREDIENT_DEMAND_FORECASTS`, and `BASE_INVENTORY` are abandoned models
@@ -106,7 +114,11 @@ key, token, or 1Password secret in this repository or its documentation.
   ingredients, with no bad gram/key rows and no revision-aware duplicates. All
   763 materialized unit-days/26 menu keys resolve to it. The history table has
   11,990 valid intervals; raw three-level recipe and pre-mix mappings also
-  exist. Physical silo/recipe-slot identity remains unresolved.
+  exist. Corrected V3B tested 2,576 stock keys: 1,636 match the active menu via
+  `INGREDIENT_KEY`, but none match `SILO_RESOURCE_ID` to
+  `RECIPE_SLOT_INSERTING_POSITION` and no physical slot is resolved. Physical
+  silo/recipe-slot identity therefore remains unresolved, and that tested
+  direct position join is ruled out.
 - Expiry is populated on all 6,497 tested silo-days, but remaining life ranges
   from -2 to 368 days. It is an observation, not an approved shelf-life rule.
 - Raw stock data contain 148,158 high-frequency state updates across 34 silos
@@ -163,7 +175,7 @@ key, token, or 1Password secret in this repository or its documentation.
 | D5 | Current unit stock and expiry observation | `REPORTING.FACT_UNIT_SILO_STOCK_DAILY`; raw `BASE_STOCK_UPDATES` | **MEASURED/CANDIDATE.** V10 found expiry on all 6,497 tested silo-days; the V3 200-row key sample had no composite duplicates. Validate snapshot cutoff/unit semantics, all-class coverage, transition handling, and expiry outliers before adapter acceptance |
 | D6 | Menu by unit and day | `INTERMEDIATE.INT_UNIT_DAY_MENU`; `BASE_UCS_MENU` | **MEASURED/CANDIDATE for history; forward horizon OPEN.** All 763 materialized unit-days/26 menu keys resolve to the BOM, but the materialized table ended on 2026-08-24 when queried on 2026-08-25. Base rows extend later but mix operational-looking menus with training/demo/pilot, far-future, long-running, and terminated records. Identify the operational-unit filter, committed forward-menu source, publication timing, and business commitment rule before transition planning |
 | D7 | Loaded and consumed grams per day | Daily silo snapshots plus raw stock-update events | **OPEN.** The lagged profile confirms a high-frequency state stream with 12.0% ingredient changes, 62.1% unchanged transitions, gross positive/negative changes above 15 tonnes, and jumps above 7 kg. It does not reconcile to daily net depletion. Filter same-ingredient transitions and confirm event semantics only when calibration is in scope |
-| D8 | Versioned `Dish → Silo → Ingredient` BOM in grams | Flattened `FACT_CG_MENU_DISH_INGREDIENTS`, history dimension, raw `BASE_RECIPE_*`, and active-menu/resource stock context | **MEASURED/CANDIDATE for flattened grams and versioning.** 1,193 current rows have complete keys/positive grams/no tested revision-key duplicates; all materialized menu keys resolve; 11,990 valid history intervals and pre-mix decomposition exist. Physical silo/slot topology is still **OPEN**. The first active-menu test resolved zero because it used a constant chamber alias and one likely mismatched ingredient field; run corrected V3B using alternative IDs and `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` before escalating |
+| D8 | Versioned `Dish → Silo → Ingredient` BOM in grams | Flattened `FACT_CG_MENU_DISH_INGREDIENTS`, history dimension, raw `BASE_RECIPE_*`, and active-menu/resource stock context | **MEASURED/CANDIDATE for flattened grams and versioning.** 1,193 current rows have complete keys/positive grams/no tested revision-key duplicates; all materialized menu keys resolve; 11,990 valid history intervals and pre-mix decomposition exist. Physical silo/slot topology is still **OPEN**. Corrected V3B found 1,636/2,576 stock keys with menu context through `INGREDIENT_KEY`, but zero resource-position or exact-slot matches; the direct `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` hypothesis is rejected. Inspect upstream lineage or obtain the authoritative unit/resource/dock-to-effective-slot bridge before using physical capacity |
 | D9 | Item/SKU master, pack size, EAN, storage class | `BASE_INGREDIENT_LIST`; `STORAGE_TYPE` is visible on the abandoned generated-recommendation model | **MEASURED/CANDIDATE for pack quantity and unit; partial identity/metadata.** V5 returned 76 rows/75 non-null IDs: one blank ID, zero bad pack quantities, zero missing units, seven missing EANs, and ten missing `APICBASE_ID`s. No non-null duplicate/conflict exception was returned. The abandoned recommendation model's `FRESH`/`FROZEN` values are lineage clues only; resolve the blank record, authoritative storage-class source, ownership, freshness, and whether EAN/Apicbase are required for each adapter |
 | D10 | Supplier identity and purchasing terms | Supplier names occur in `BASE_INVENTORY`; article numbers occur in `BASE_STOCKS` | **MEASURED but unsuitable:** three supplier names occur in the stale closed-order extract, while all 21 `BASE_STOCKS` rows lack supplier article numbers. No authoritative supplier-terms master is confirmed. Lead time, MOQ, case size, calendars, and cutoffs remain **POLICY/OPEN** |
 | D11 | Open POs and dated in-transit receipts | No current Snowflake source; operational source to be identified with Deepali/Dor/Ilona | **CONFIRMED MISSING FROM SNOWFLAKE / operational blocker.** V7 proves `BASE_INVENTORY` is not the feed, and Joel confirmed no PO data is currently ingested to his knowledge. Ops must identify the system/sheet/process and owner; then data platform must ingest it and publish a normalized source with PO/line ID, item/SKU, location, supplier, ordered and remaining quantities/units, status, order date, expected receipt date, partial receipts, cancellations/date changes, and source update timestamp. Until then, file/manual PO inputs are allowed only with explicit provenance and operational mode fails closed |
@@ -228,13 +240,15 @@ After repository access is granted, inspect the existing definitions and agree
 with Joel on the ownership boundary between Snowflake transformations/publication
 and the pure planning engine before replacing any model.
 
-### Remaining SQL before a physical silo-capacity conclusion
+### SQL verification status and physical silo-capacity follow-up
 
-V5, V11, V1, and corrected V2B are complete. The only remaining required
-verification block is corrected V3B physical-slot coverage. The enhanced V12
-same-ingredient profile is optional until consumption/refill calibration is in
-scope. Ask Joel a targeted follow-up about the silo mapping only if V3B cannot
-establish it; do not delay core engine work for this capacity hypothesis.
+All required V1-V12 verification blocks, including corrected V3B, are complete.
+V3B could not establish physical slot identity and rules out the tested direct
+resource-position equality. After `data-transformation` access, inspect lineage
+for an authoritative unit/resource/dock-to-effective-recipe-slot bridge; if it
+is absent, ask Joel or the robot/menu data owner. The enhanced V12 same-
+ingredient profile remains optional until consumption/refill calibration is in
+scope. Do not delay core engine work for either optional investigation.
 
 ### Ask later, before using waste
 
@@ -247,7 +261,7 @@ warehouse field sums as physical waste or use them to calibrate yield.
 | Stage | Can continue now? | Required before acceptance/promotion |
 |---|---|---|
 | M0/M1 foundation and legacy reproduction | Yes | Planner interpretation is needed for business sign-off, not for synthetic engineering |
-| M2 improved file-driven engine | Yes, with labelled policy defaults | Planner/purchasing approval of demand semantics and planning policies before M2 business acceptance |
+| M2 improved file-driven engine | Yes; canonical inputs and policy-free dated netting are implemented | Complete and approve demand semantics, protection periods, yield/safety, constraints, supplier/fresh scheduling, and transition policies before M2 business acceptance |
 | M3 Snowflake adapters | Discovery can continue | Owner/lineage, grain, units, coverage, freshness, and three-level BOM mapping for each accepted source |
 | M4 shadow run | Not yet | Trustworthy current stock, open POs with expected receipt dates, forward menu, canonical IDs/packs, and comparable planner outputs |
 | Operational approval/export | Not yet | All M4 gates plus approval roles and an explicit human approval; no supplier dispatch |
@@ -257,8 +271,9 @@ warehouse field sums as physical waste or use them to calibrate yield.
 - `scripts/snowflake_discovery.sql` is historical and must not be used for
   current conclusions.
 - `scripts/snowflake_verification.sql` is the current read-only verification
-  file. V1-V12 were substantially reviewed on 2026-08-25; only corrected V3B
-  remains required, while enhanced V12 is optional calibration work. Keep
+  file. All required V1-V12 blocks were reviewed on 2026-08-25; enhanced V12 is
+  optional calibration work and the physical slot gap now requires lineage or
+  owner evidence rather than another rerun of the tested direct join. Keep
   exports private and record results in
   `docs/scratchpads/snowflake_verification_evidence.md` rather than committing
   raw CSVs.

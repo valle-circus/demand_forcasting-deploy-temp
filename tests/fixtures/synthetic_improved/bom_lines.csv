@@ -1,0 +1,4 @@
+bom_line_id,dish_id,silo_id,item_id,grams_per_portion,effective_from,effective_to
+BOM_A_SHARED,DISH_A,SILO_A,ITEM_SHARED,100,2026-01-01,
+BOM_A_COMPONENT,DISH_A,SILO_PREMIX,ITEM_COMPONENT,20,2026-01-01,
+BOM_B_SHARED,DISH_B,SILO_B,ITEM_SHARED,200,2026-01-01,

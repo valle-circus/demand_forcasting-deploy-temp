@@ -1,0 +1,3 @@
+po_id,po_line_id,location_id,supplier_id,item_id,ordered_at,expected_receipt_at,open_qty_units,status
+PO_A,PO_A_1,LOC_A,SUPPLIER_A,ITEM_SHARED,2026-08-20T09:00:00+02:00,2026-08-26T06:00:00+02:00,1,open
+PO_B,PO_B_1,LOC_B,SUPPLIER_A,ITEM_SHARED,2026-08-20T09:00:00+02:00,2026-08-27T06:00:00+02:00,1,confirmed

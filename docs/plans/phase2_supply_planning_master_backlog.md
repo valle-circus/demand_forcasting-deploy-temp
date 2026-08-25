@@ -163,12 +163,15 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 ### P0 — File adapters and validation
 
-- [ ] Implement XLSX and canonical multi-dataset CSV loaders with no calculation logic.
+- [x] Implement canonical multi-dataset CSV loaders with no calculation logic.
+- [ ] Implement the XLSX loader when the approved real fixture/source warrants it.
 - [x] Implement the compatibility-specific legacy CSV loader with required-column/type checks and no calculation logic.
 - [ ] Implement forward-fill parsing of hierarchical `Dish -> Silo -> Ingredient` rows.
-- [ ] Validate required columns, types, positive pack sizes, allowed storage classes, and date/location grain.
-- [ ] Validate stable-ID joins, alias coverage, duplicate IDs, orphan BOM lines, and conflicting pack sizes.
-- [x] Emit human-readable legacy CSV errors with source file, row, field, value, and remedy; extend the same contract to canonical/XLSX adapters.
+- [x] Validate canonical CSV required columns, types, positive pack sizes, allowed storage classes, timezone-aware timestamps, and date/location grain.
+- [x] Validate implemented stable-ID joins, duplicate canonical keys, orphan BOM lines, effective BOM coverage, and active-menu coverage.
+- [ ] Add source-specific alias coverage and XLSX master-conflict validation with the approved real adapter.
+- [x] Emit human-readable legacy and canonical CSV errors with source file, row/key, field, value, and remedy.
+- [ ] Extend the actionable-error contract to the future XLSX adapter.
 - [ ] Preserve raw source values and normalized values for audit.
 
 ### P0 — Legacy calculation profile
@@ -220,20 +223,23 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 ### P0 — Daily demand and menu model
 
-- [ ] Implement the Phase 1 daily forecast contract and flat-KW34 fixture adapter.
-- [ ] Implement location/date-aware menu assignments with service start/end.
-- [ ] Aggregate shared ingredients across all active dishes before stopping an item.
+- [x] Implement the Phase 1 daily forecast CSV contract.
+- [ ] Add the flat-KW34-to-daily fixture adapter after the approved fixture is available.
+- [x] Implement explicit location/date-aware menu assignments and require one active menu entry for each forecast row.
+- [x] Aggregate shared ingredients across all active forecast dishes by location/item/day.
 - [ ] Validate menu horizon against the longest feasible replenishment horizon.
 - [ ] Add launch, steady-state, discontinuation, and reactivation scenarios.
 
 ### P0 — Time-phased inventory and netting
 
-- [ ] Build a dated event ledger for demand, on-hand snapshot, receipts/open POs, and candidate receipts.
+- [x] Build a pure dated event ledger for demand, opening on-hand, receipts/open POs, and explicit candidate receipts.
 - [ ] Compute supplier-calendar-aware candidate arrival and next replenishment arrival.
-- [ ] Compute protection-period gross need and inventory position without double-counting demand.
-- [ ] Simulate projected on-hand daily and emit pre-arrival stockout exceptions.
-- [ ] Accept manual `open_pos.csv`; allow empty placeholder only in fixture/scenario mode.
-- [ ] Support PO status/cancellability and flag receipts after final demand.
+- [x] Compute horizon gross need and inventory position without double-counting demand.
+- [ ] Replace the forecast horizon with item-specific lead-time/review protection periods once policy is implemented.
+- [x] Simulate signed projected on-hand daily and emit projected/pre-candidate-arrival stockout exceptions.
+- [x] Accept manual `open_pos.csv`; allow unknown/empty-placeholder critical inputs only in fixture/scenario mode.
+- [x] Map and validate open, confirmed, partially received, closed, and cancelled PO statuses; flag overdue, post-horizon, and post-final-demand receipts.
+- [ ] Apply `pipeline_cancellable` to menu-transition recommendations and exceptions.
 
 ### P0 — Yield and safety placeholders
 
@@ -255,10 +261,12 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 ### P0 — Validation and comparison
 
-- [ ] Add run-mode gates for unknown stock, open POs, pack size, lead time, and menu horizon.
+- [x] Add run-mode gates for unknown forecast, menu, BOM, item/pack, stock, and open-PO sources; validate positive pack size at input.
+- [ ] Add lead-time/calendar and longest-feasible-menu-horizon gates with scheduling.
 - [ ] Produce side-by-side legacy versus improved results with reason codes for differences.
-- [ ] Add scenario fixtures for long lead, open pipeline, empty pipeline, short shelf life, MOQ conflict, and menu retirement.
-- [ ] Prove same inputs/config/code produce byte-stable normalized outputs apart from run metadata.
+- [x] Add synthetic multi-location scenarios for shared items, open pipeline, empty/unknown pipeline, late receipts, same-day receipts, and projected stockout.
+- [ ] Add scenarios for long lead, short shelf life, MOQ conflict, and menu retirement with the owning policy modules.
+- [x] Prove the improved CLI produces byte-stable audit JSON for identical inputs and arguments.
 
 ### P1 — Bootstrap policy schemas and offline administration
 
@@ -277,7 +285,7 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 ### Milestone 2 exit criteria
 
-- [ ] Improved file-driven run completes with transparent placeholder warnings.
+- [x] Improved policy-free file-driven netting run completes with transparent placeholder warnings.
 - [ ] All high-risk edge cases have deterministic tests and exceptions.
 - [ ] Operational mode refuses unknown stock/open POs/pack size/lead time.
 - [ ] Business owners can review legacy-versus-improved differences without reading code.
@@ -304,7 +312,8 @@ Question 14 in the supplied list is empty and creates no additional gate.
 - [x] Run V9 BOM checks: 1,193 clean current rows, 11,990 valid history rows, full materialized-menu coverage, zero tested revision-key duplicates, and complete positive pre-mix mappings. Physical silo/recipe-slot mapping remains open.
 - [x] Run V3 join/cardinality checks and reject ingredient-only capacity joins; resources can change ingredient over time.
 - [x] Test the first V3 active-menu/chamber path: zero of 2,576 stock keys resolved, but the raw sample proves `CHAMBER_ALIAS` is constant text, so the query tested the wrong position field.
-- [ ] Run corrected V3B using active-menu matches across days, alternative ingredient IDs, and `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` before requesting a separate map.
+- [x] Run corrected V3B: 2,576 stock keys, 610 without active-menu/detailed-menu context, 1,636 matching through `INGREDIENT_KEY`, zero resource-position matches, and zero uniquely or ambiguously resolved physical slots. Reject the direct `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` join.
+- [ ] After `data-transformation` access, inspect upstream lineage for the authoritative unit/resource/dock-to-effective-recipe-slot bridge; ask Joel or the robot/menu data owner only if it is not documented. This gates physical-capacity use, not the pure/file engine.
 - [x] Complete V5: 76 rows/75 non-null ingredient IDs, one blank ID, zero bad pack quantities, zero missing units, seven missing EANs, ten missing Apicbase IDs, and no non-null duplicate/conflict exceptions.
 - [x] Run V10 expiry checks: all 6,497 tested silo-days have expiry, but remaining-life outliers require semantic validation and do not define shelf-life policy.
 - [x] Complete the saved V11 checks: `INT_UNIT_DAY_MENU` spans 2025-10-21 through 2026-08-24 across six units/26 menus and had no forward-day coverage on 2026-08-25; base rows extend later but mix operational-looking records with pilot/demo/training/far-future/terminated records. Forward commitment/source remains a business/source gate.
@@ -546,9 +555,10 @@ Question 14 in the supplied list is empty and creates no additional gate.
 4. [x] Create a documented synthetic fixture and private-data ignore paths; keep real KW34-derived rows uncommitted until `H-01`/`HA-02` is cleared.
 5. [x] Implement BOM explosion and legacy rounding.
 6. [ ] After fixture approval, land the 27-cell KW34 golden test plus gap/missing-row assertions.
-7. [x] Add the first compatibility CSV validation/run command and deterministic audit JSON; multi-file canonical validation and CSV report bundle remain open above.
-8. [ ] Ask Deepali/Dor (optionally Ilona) for the PO-process/source walkthrough, then coordinate ingestion/modeling with Joel. In parallel request `data-transformation` access, complete the least-privilege RSA service-account setup, inspect lineage, and decide the cross-repository boundary. Corrected V3B is the only required SQL follow-up; enhanced V12 is optional calibration work.
+7. [x] Add the legacy and improved CLI paths, canonical multi-file validation, dated netting, manual/placeholder `open_pos.csv`, and deterministic audit JSON. The report CSV bundle remains open above.
+8. [ ] Ask Deepali/Dor (optionally Ilona) for the PO-process/source walkthrough, then coordinate ingestion/modeling with Joel. In parallel request `data-transformation` access, complete the least-privilege RSA service-account setup, inspect model and physical-slot lineage, and decide the cross-repository boundary. No required verification SQL remains; enhanced V12 is optional calibration work.
 9. [ ] Resolve or explicitly accept assumptions for `H-02`–`H-05`, then review Milestone 1 output with the current planner before accepting M1 or starting improved-policy sign-off.
+10. [ ] Implement the next M2 policy tranche: item-specific protection periods, separate yield/safety inputs, supplier scheduling, shelf-life/max-cover constraints, MOQ/case rounding, and fresh-slot coverage. Keep defaults explicit and do not promote to operational use before the relevant owner approvals.
 
 ## Dated progress log
 
@@ -564,4 +574,6 @@ Question 14 in the supplied list is empty and creates no additional gate.
 - 2026-08-25: Reviewed V6/V7/V8 outputs. Current forecasts and generated recommendations refresh together for one location and reconcile internally. Joel then confirmed that these three models and `BASE_INVENTORY` are abandoned previous-data-team models that may be replaced in `data-transformation`; they are not operational sources of truth. GitHub access and an RSA-authenticated Snowflake service account are pending. The actual source with remaining quantity and expected receipt date remains the main operational data blocker.
 - 2026-08-25: Reviewed the remaining V1-V12 exports and recorded them in `docs/scratchpads/snowflake_verification_evidence.md`. Forecast candidate keys pass the tested duplicate checks; the flattened/versioned BOM is clean and covers the materialized menu; ingredient-only silo-capacity joins are invalid; expiry coverage is high but policy remains manual; stock updates are state events rather than proven consumption; and the EUR 31k waste headline is reproducible only as a six-unit/83-day field sum with unconfirmed semantics. Superseded the earlier sales comparison and reduced the SQL backlog to focused follow-ups.
 - 2026-08-25: Reviewed the 13:07-13:11 follow-ups. V8 placeholder semantics are classified and expose one mixed-unit ingredient in the abandoned model; corrected dish-level V2 is 622 portions; V12 transition deltas confirm resets/corrections; the first V3 physical-slot attempt is invalid because `CHAMBER_ALIAS` is constant and is superseded by corrected V3B. The open-PO-source question was sent to Joel; his later response is recorded in the next entry.
-- 2026-08-25: Joel confirmed that PO data is not currently ingested into Snowflake to his knowledge and directed source discovery to Ops (Deepali/Dor/Ilona), with Fivetran a possible later ingestion route. This becomes `HA-13`: it blocks accepted real PO adapters, M4 shadow, and operational netting, but not pure/file engine work. The 13:33-13:35 exports close V5, V11, V1, and V2B; corrected V3B is the only required SQL follow-up.
+- 2026-08-25: Joel confirmed that PO data is not currently ingested into Snowflake to his knowledge and directed source discovery to Ops (Deepali/Dor/Ilona), with Fivetran a possible later ingestion route. This becomes `HA-13`: it blocks accepted real PO adapters, M4 shadow, and operational netting, but not pure/file engine work. The 13:33-13:35 exports closed V5, V11, V1, and V2B; V3B was still pending at that point and is completed in the next entry.
+- 2026-08-25: Corrected V3B reviewed. Of 2,576 stock keys, 1,636 match active-menu ingredient context through `INGREDIENT_KEY`, but none match `SILO_RESOURCE_ID` to `RECIPE_SLOT_INSERTING_POSITION` and no exact physical slot resolves. All required verification SQL is complete; physical-capacity use now waits on model/upstream lineage or a targeted owner-provided bridge, not another inferred join.
+- 2026-08-25: Implemented the first unblocked M2 file-engine tranche: canonical manifest plus daily forecast/menu/BOM/item/inventory/open-PO CSV adapters; actionable cross-dataset validation; typed PO statuses; a pure dated inventory event ledger; time-phased stock/open-PO netting; stale-snapshot, overdue/post-horizon/stockout exceptions; strict shadow/operational source gates; deterministic improved audit JSON/CLI; and a synthetic multi-location scenario. The full wrapper passes 33 tests. Policy, constraint, scheduling, persistence, SQL adapters, UI, approval, and dispatch remain outside this tranche.

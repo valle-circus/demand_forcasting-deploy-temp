@@ -1,0 +1,4 @@
+location_id,item_id,counted_at,usable_on_hand_units,partial_pack_g
+LOC_A,ITEM_SHARED,2026-08-25T00:00:00+02:00,1,0
+LOC_A,ITEM_COMPONENT,2026-08-25T00:00:00+02:00,1,0
+LOC_B,ITEM_SHARED,2026-08-25T00:00:00+02:00,0,500

@@ -74,8 +74,13 @@ not a task log or a replacement for the detailed engineering brief.
   preserve the required `Dish -> Silo -> Ingredient` identity. A first physical
   path resolved 0/2,576 stock keys, but the raw sample proves the tested
   `CHAMBER_ALIAS` is constant text and therefore not the physical position.
-  Test corrected V3B using active-menu matches, alternative ingredient IDs and
-  `SILO_RESOURCE_ID -> RECIPE_SLOT_INSERTING_POSITION` before requesting a map.
+  Corrected V3B then tested 2,576 stock keys: 610 lack active-menu/detailed-menu
+  context, 1,636 match through `INGREDIENT_KEY`, but zero match
+  `SILO_RESOURCE_ID -> RECIPE_SLOT_INSERTING_POSITION` and no exact physical
+  slot resolves. The tested direct position join is rejected. Inspect
+  `data-transformation`/upstream lineage for an authoritative
+  unit/resource/dock-to-effective-slot bridge; if absent, ask Joel or the
+  robot/menu data owner. This blocks capacity use, not pure/file engine work.
   Evidence:
   `docs/scratchpads/snowflake_verification_evidence.md` V9/V3;
   `docs/descriptions/data_requirements.md` D8. Status: `active`.
@@ -187,6 +192,27 @@ not a task log or a replacement for the detailed engineering brief.
   tests. Real KW34 golden fixtures, full canonical/XLSX adapters, improved
   planning, SQL, persistence, API, and UI remain open. Evidence:
   `src/supply_planning/`, `tests/`, `README.md`,
+  `docs/descriptions/canonical_data_contracts.md`, and
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `superseded`
+  by the 2026-08-25 implementation state below.
+
+- 2026-08-25: The first unblocked M2 file-engine tranche is implemented. A
+  required source manifest and canonical CSV adapters load daily forecasts,
+  location/date menu assignments, effective BOM lines, items, timestamped
+  inventory, and manual/observed/placeholder `open_pos.csv` with actionable
+  field, key, duplicate, and referential validation. The pure engine now emits
+  a dated event ledger and signed daily inventory projection, nets in-horizon
+  open POs once, and reports overdue, post-horizon, post-final-demand, and
+  stockout conditions. Unknown critical inputs warn in fixture/scenario mode
+  and fail closed with zero netting results in shadow/operational mode. The
+  deterministic `improved-run` CLI and synthetic multi-location fixture are
+  covered by the repository's 33 passing tests. Yield/safety policy,
+  protection-period selection, constraints, supplier/fresh scheduling,
+  proposal rounding/approval, SQL adapters, persistence, API, UI, and dispatch
+  remain open. Evidence: `src/supply_planning/adapters/canonical_csv.py`,
+  `src/supply_planning/engine/netting.py`,
+  `src/supply_planning/application/run_improved.py`,
+  `tests/fixtures/synthetic_improved/`,
   `docs/descriptions/canonical_data_contracts.md`, and
   `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
 

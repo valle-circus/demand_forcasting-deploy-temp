@@ -1,0 +1,6 @@
+location_id,dish_id,service_date,menu_version,active
+LOC_A,DISH_A,2026-08-25,menu-v1,true
+LOC_A,DISH_A,2026-08-26,menu-v1,true
+LOC_A,DISH_A,2026-08-27,menu-v1,true
+LOC_B,DISH_B,2026-08-25,menu-v1,true
+LOC_B,DISH_B,2026-08-26,menu-v1,true

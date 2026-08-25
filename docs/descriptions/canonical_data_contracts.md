@@ -1,6 +1,6 @@
 # Phase 2 Canonical Data Contracts
 
-**Status:** v1 foundation implemented on 2026-08-24
+**Status:** v1 contracts and canonical CSV/netting tranche implemented on 2026-08-25
 
 **Code:** `src/supply_planning/domain/models.py`
 
@@ -72,6 +72,7 @@ For the KW34 fixture, the weekly manual value is repeated across applicable serv
 | `service_date` | date | yes | Date the dish is planned for service |
 | `menu_version` | string | yes | Committed menu snapshot/version |
 | `active` | boolean | yes | Whether the dish is served that day |
+| `provenance` | enum | yes | Value provenance inherited from the input manifest |
 
 ### 3.4 `bom_lines`
 
@@ -86,6 +87,7 @@ For the KW34 fixture, the weekly manual value is repeated across applicable serv
 | `grams_per_portion` | decimal | yes | Positive ingredient grams per portion |
 | `effective_from` | date | yes | First valid service date |
 | `effective_to` | date | no | Last valid service date |
+| `provenance` | enum | yes | Value provenance inherited from the input manifest |
 
 The engine preserves the `Dish -> Silo -> Item` path during explosion. It may aggregate only after this derivation exists.
 
@@ -184,10 +186,38 @@ Lot/expiry inventory is intentionally separate and optional until a source is av
 | `ordered_at` | timestamp | yes | Order placement time |
 | `expected_receipt_at` | timestamp | yes | Current expected receipt time |
 | `open_qty_units` | decimal | yes | Outstanding purchasable units |
-| `status` | string | yes | Source status mapped to an approved status set |
+| `status` | enum | yes | `open`, `confirmed`, `partially_received`, `closed`, or `cancelled` |
 | `provenance` | enum | yes | Observed/manual/default status |
 
 An observed query returning zero rows is valid. An unavailable source represented by an empty placeholder is not equivalent and blocks shadow/operational use.
+
+### 3.11 Implemented canonical CSV package
+
+`python -m supply_planning improved-run` reads one directory containing:
+
+| File | Canonical dataset |
+|---|---|
+| `source_manifest.csv` | Source-level `dataset`, `provenance`, and `source_version` declarations |
+| `forecast_daily.csv` | `forecast_daily` |
+| `menu_calendar.csv` | `menu_calendar` |
+| `bom_lines.csv` | `bom_lines` |
+| `items.csv` | `items` |
+| `inventory_snapshots.csv` | `inventory_snapshots` |
+| `open_pos.csv` | `purchase_orders` |
+
+The manifest must declare every dataset exactly once. Its provenance is copied
+onto the parsed rows and retained in the audit output. A zero-row
+`open_pos.csv` is valid only when its manifest state is explicit: `observed` or
+`manual` means a known empty result; `empty_placeholder` or `unavailable`
+means the pipeline is unknown. Supplying data rows under placeholder or
+unavailable provenance is rejected.
+
+The adapter validates required fields, ISO dates and timezone-aware timestamps,
+enums, decimals, booleans, duplicate canonical keys, item references, partial
+pack bounds, effective BOM coverage, and active-menu coverage before invoking
+the engine. Errors identify the file, row or stable key, field, and remedy.
+The checked-in `tests/fixtures/synthetic_improved/` directory is synthetic;
+private operational extracts must not be committed.
 
 ## 4. Run modes and gates
 
@@ -198,7 +228,12 @@ An observed query returning zero rows is valid. An unavailable source represente
 | `shadow` | unknown critical sources block | Comparison with real planner runs |
 | `operational` | unknown critical sources block | Proposal approval/export |
 
-Critical sources currently enforced in code are `forecast_daily`, `bom_lines`, `items`, `inventory_snapshots`, and `purchase_orders`. Field-level policy gates for canonical pack size and lead time are added with the improved engine.
+Critical sources currently enforced in code are `forecast_daily`,
+`menu_calendar`, `bom_lines`, `items`, `inventory_snapshots`, and
+`purchase_orders`. Pack size is validated by the item contract. Unknown or
+placeholder critical sources warn in fixture/scenario mode and block before any
+netting result is emitted in shadow/operational mode. Lead-time/calendar policy
+gates remain open until scheduling is implemented.
 
 ## 5. Canonical output contracts
 
@@ -233,6 +268,28 @@ The current `legacy_kw34/v1` CLI emits deterministic JSON containing:
 - every legacy intermediate (`daily_units`, `need_units`, `bridge_units`, `after_units`, calculated and observed order);
 - source row references; and
 - structured issue codes, severity, message, and remedy.
+
+### 5.6 Current improved-file audit envelope
+
+The implemented `improved_file/v1` path emits deterministic JSON containing
+the normalized input hash, run mode/status, source statuses, structured issues,
+and one dated netting result per location/item. Each result retains the opening
+stock, daily demand and receipt events, daily signed balances, in-horizon PO
+quantity, overdue and post-horizon PO quantities, first projected stockout,
+and the unrounded net requirement in grams.
+
+The selected snapshot is treated as the opening balance at the projection
+start. If its calendar date is older, the assumption is a warning in
+fixture/scenario mode and a blocker in shadow/operational mode unless a current
+snapshot or complete dated event bridge is supplied. Receipts dated on a
+service day are available before that day's demand. Stale POs dated before the
+start are reported but not silently counted; POs after the horizon are reported
+separately. Candidate receipts are scenario inputs and remain separate from
+open POs and from the net-requirement calculation.
+
+This tranche deliberately stops before yield/safety policy, protection-period
+selection, shelf-life/max-cover constraints, MOQ/case rounding, supplier
+scheduling, proposal approval, persistence, or dispatch.
 
 ## 6. SQL/source discovery deliverable
 

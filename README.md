@@ -2,7 +2,7 @@
 
 This project will replace a manual Excel-based supply-planning process for autonomous robot kitchens with a deterministic, auditable planning service. It converts daily dish demand into ingredient-level order proposals while considering recipes, stock, open purchase orders, supplier constraints, shelf life, delivery schedules, and menu changes.
 
-> **Current status:** KW34 displayed-value validation and the main Snowflake verification pass are complete. The first M0/M1 implementation tranche is runnable: canonical typed contracts, provenance/run-mode gates, pure BOM explosion, the isolated `legacy_kw34/v1` calculation, a synthetic fixture, deterministic audit JSON, and automated tests. Joel confirmed that the discovered forecast, generated-recommendation, and `BASE_INVENTORY` models are abandoned previous-team models and that purchase-order data is not currently ingested into Snowflake. Ops source discovery with Deepali/Dor/Ilona and a subsequent ingestion/modeling workstream with Joel are therefore required before operational PO netting. This does **not** block the pure engine, manual/file PO contract, scenario tests, or other file adapters. GitHub access, the RSA Snowflake service account, the real KW34 golden fixture, and broader source adapters remain gated/in progress.
+> **Current status:** KW34 displayed-value validation and all required Snowflake verification queries are complete. The M0/M1 foundation and first unblocked M2 file-engine tranche are runnable: canonical multi-file CSV validation, daily menu-aware BOM explosion, a pure dated inventory/open-PO ledger, time-phased netting, explicit source provenance, fail-closed shadow/operational gates, deterministic audit JSON, and 33 automated tests. Joel confirmed that the discovered forecast/recommendation models are abandoned and that live PO data is not ingested. Ops source discovery and later ingestion/modeling with Joel are required before a real PO adapter or shadow run, but do not block further pure policy-engine work. The real KW34 fixture, policy/constraint/scheduling layers, source adapters, persistence, API, and UI remain gated or open.
 
 ## Scope
 
@@ -139,7 +139,7 @@ See the backlog's blocker register and question-to-gate matrix for the current d
 | [`MEMORY.md`](MEMORY.md) | Durable decisions and verified facts that must survive handovers and context compaction |
 | [`docs/scratchpads/phase2_supply_planning_execution.md`](docs/scratchpads/phase2_supply_planning_execution.md) | Short-lived execution context, risks, open questions, and next actions |
 
-The immediate engineering work is listed under **Immediate next execution slice** in the master backlog. There is now a runnable Python CLI foundation; SQL, persistence, API, UI, and deployment are not implemented.
+The immediate engineering work is listed under **Immediate next execution slice** in the master backlog. The legacy and improved file CLIs are runnable; SQL adapters, persistence, API, UI, and deployment are not implemented.
 
 ## Quick start
 
@@ -153,6 +153,11 @@ python -m unittest discover -s tests -v
 python -m supply_planning legacy-run `
   --input tests\fixtures\synthetic_legacy\legacy_inputs.csv `
   --output output\synthetic_legacy_audit.json
+python -m supply_planning improved-run `
+  --input-dir tests\fixtures\synthetic_improved `
+  --output output\synthetic_improved_audit.json `
+  --planning-as-of 2026-08-25T00:00:00+02:00 `
+  --run-mode scenario
 ```
 
 Or run the checked-in verification wrapper with an explicit Python executable when `python` is not on `PATH`:
@@ -161,7 +166,12 @@ Or run the checked-in verification wrapper with an explicit Python executable wh
 .\scripts\check.ps1 -PythonExecutable "C:\path\to\python.exe"
 ```
 
-The CLI is deliberately restricted to `fixture` and `scenario` modes. It calculates proposals only; it cannot approve or dispatch an order.
+The legacy CLI is deliberately restricted to `fixture` and `scenario` modes.
+The improved CLI also accepts `shadow` and `operational` so its critical-source
+gates can be tested; unknown/placeholder critical inputs block those modes
+before netting output. The current improved output is an auditable netting
+result, not a purchasable order proposal. Neither CLI can approve or dispatch
+an order.
 
 ## Non-negotiable safeguards
 

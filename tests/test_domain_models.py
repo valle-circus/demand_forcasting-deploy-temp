@@ -10,6 +10,8 @@ from supply_planning.domain.models import (
     Item,
     OrderProposal,
     PlanningLine,
+    PurchaseOrderLine,
+    PurchaseOrderStatus,
     ProposalStatus,
     Provenance,
     StorageClass,
@@ -94,6 +96,33 @@ class DomainModelTests(unittest.TestCase):
             reason="Supplier constraint needs review.",
         )
         self.assertEqual(approval.decision, ApprovalDecision.REJECTED)
+
+    def test_purchase_order_requires_typed_status(self) -> None:
+        with self.assertRaisesRegex(ValueError, "PurchaseOrderStatus"):
+            PurchaseOrderLine(
+                po_id="PO_A",
+                po_line_id="PO_LINE_A",
+                location_id="LOC_A",
+                supplier_id="SUPPLIER_A",
+                item_id="ITEM_A",
+                ordered_at=datetime(2026, 8, 24, 9, 0, tzinfo=UTC),
+                expected_receipt_at=datetime(2026, 8, 25, 9, 0, tzinfo=UTC),
+                open_qty_units=Decimal("1"),
+                status="open",  # type: ignore[arg-type]
+            )
+
+        valid = PurchaseOrderLine(
+            po_id="PO_B",
+            po_line_id="PO_LINE_B",
+            location_id="LOC_A",
+            supplier_id="SUPPLIER_A",
+            item_id="ITEM_A",
+            ordered_at=datetime(2026, 8, 24, 9, 0, tzinfo=UTC),
+            expected_receipt_at=datetime(2026, 8, 25, 9, 0, tzinfo=UTC),
+            open_qty_units=Decimal("1"),
+            status=PurchaseOrderStatus.OPEN,
+        )
+        self.assertTrue(valid.status.is_open)
 
 
 if __name__ == "__main__":

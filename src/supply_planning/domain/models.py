@@ -64,6 +64,22 @@ class ProposalStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class PurchaseOrderStatus(StrEnum):
+    OPEN = "open"
+    CONFIRMED = "confirmed"
+    PARTIALLY_RECEIVED = "partially_received"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+    @property
+    def is_open(self) -> bool:
+        return self in {
+            PurchaseOrderStatus.OPEN,
+            PurchaseOrderStatus.CONFIRMED,
+            PurchaseOrderStatus.PARTIALLY_RECEIVED,
+        }
+
+
 class ApprovalDecision(StrEnum):
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -108,6 +124,7 @@ class MenuCalendarEntry:
     service_date: date
     menu_version: str
     active: bool = True
+    provenance: Provenance = Provenance.MANUAL
 
     def __post_init__(self) -> None:
         _require_text(self.location_id, "location_id")
@@ -124,6 +141,7 @@ class BomLine:
     grams_per_portion: Decimal
     effective_from: date
     effective_to: date | None = None
+    provenance: Provenance = Provenance.MANUAL
 
     def __post_init__(self) -> None:
         for field_name in ("bom_line_id", "dish_id", "silo_id", "item_id"):
@@ -255,18 +273,21 @@ class PurchaseOrderLine:
     ordered_at: datetime
     expected_receipt_at: datetime
     open_qty_units: Decimal
-    status: str
+    status: PurchaseOrderStatus
     provenance: Provenance = Provenance.OBSERVED
 
     def __post_init__(self) -> None:
         for field_name in ("po_id", "po_line_id", "location_id", "supplier_id", "item_id"):
             _require_text(getattr(self, field_name), field_name)
-        _require_text(self.status, "status")
+        if not isinstance(self.status, PurchaseOrderStatus):
+            raise ValueError("status must be a PurchaseOrderStatus")
         _require_aware_datetime(self.ordered_at, "ordered_at")
         _require_aware_datetime(self.expected_receipt_at, "expected_receipt_at")
         _require_non_negative(self.open_qty_units, "open_qty_units")
         if self.expected_receipt_at < self.ordered_at:
             raise ValueError("expected_receipt_at must not be before ordered_at")
+        if not self.status.is_open and self.open_qty_units != 0:
+            raise ValueError("closed or cancelled purchase orders must have zero open_qty_units")
 
 
 @dataclass(frozen=True, slots=True)

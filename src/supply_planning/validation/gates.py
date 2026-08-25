@@ -7,6 +7,7 @@ from supply_planning.domain.models import InputSourceStatus, Provenance, RunMode
 
 CRITICAL_DATASETS = (
     "forecast_daily",
+    "menu_calendar",
     "bom_lines",
     "items",
     "inventory_snapshots",

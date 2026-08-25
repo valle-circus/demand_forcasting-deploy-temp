@@ -5,11 +5,10 @@
 -- In Snowsight, set the database context to ANALYTICS before running a block.
 -- This file intentionally does not issue USE ROLE or change warehouse state.
 --
--- V6-V12 and V1-V4 were substantially reviewed on 2026-08-25; measured results
--- are preserved in docs/scratchpads/snowflake_verification_evidence.md. The
--- corrected V3B physical-slot coverage is the only required rerun. V5, V11,
--- V1, and corrected V2B were captured on 2026-08-25. A same-ingredient V12
--- rerun is optional calibration work.
+-- All required V1-V12 verification blocks, including corrected V3B, were
+-- reviewed on 2026-08-25; measured results are preserved in
+-- docs/scratchpads/snowflake_verification_evidence.md. A same-ingredient V12
+-- rerun is optional calibration work; no required verification rerun remains.
 -- Joel confirmed on 2026-08-25 that the three generated models and
 -- BASE_INVENTORY are abandoned previous-data-team models and that no purchase-
 -- order data is currently ingested into Snowflake to his knowledge. Ops source
@@ -345,10 +344,13 @@ limit 200;
 -- Therefore that first query tested the wrong physical-position field and is
 -- superseded by the diagnostic below.
 
--- REMAINING V3B: test ACTIVE_MENU_PUBLIC_ID without prematurely requiring the
--- event date to equal the materialised day; compare the stock ingredient value
--- with all plausible detailed-menu IDs; and compare SILO_RESOURCE_ID, not the
--- constant CHAMBER_ALIAS, with RECIPE_SLOT_INSERTING_POSITION.
+-- V3B RESULT 2026-08-25: 2,576 stock keys; 610 without active-menu/detailed-
+-- menu context; zero ambiguous active menus; 489 whose menu exists only outside
+-- the event day; 1,636 matching via INGREDIENT_KEY; zero via the other tested
+-- ingredient IDs; zero SILO_RESOURCE_ID-to-RECIPE_SLOT_INSERTING_POSITION
+-- matches; and zero uniquely or ambiguously resolved exact physical slots.
+-- The direct resource-position equality is rejected. Physical capacity now
+-- requires authoritative model/upstream lineage, not another inferred join.
 with stock_keys as (
     select distinct to_date(s.original_timestamp) as day,
            s.active_menu_public_id,

@@ -1,0 +1,3 @@
+item_id,item_name,storage_class,pack_size_g,shelf_life_days,min_safety_days,max_cover_days,last_order_date_offset_days,pipeline_cancellable,active
+ITEM_SHARED,Synthetic shared item,RT,1000,,,,0,false,true
+ITEM_COMPONENT,Synthetic premix component,Kuehl,500,,,,0,false,true
