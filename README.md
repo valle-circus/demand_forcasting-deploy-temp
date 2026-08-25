@@ -2,13 +2,13 @@
 
 This project will replace a manual Excel-based supply-planning process for autonomous robot kitchens with a deterministic, auditable planning service. It converts daily dish demand into ingredient-level order proposals while considering recipes, stock, open purchase orders, supplier constraints, shelf life, delivery schedules, and menu changes.
 
-> **Current status:** discovery and KW34 displayed-value validation are complete. The first M0/M1 implementation tranche is runnable: canonical typed contracts, provenance/run-mode gates, pure BOM explosion, the isolated `legacy_kw34/v1` calculation, a synthetic fixture, deterministic audit JSON, and automated tests. The real KW34 golden fixture and broader file adapters remain gated/in progress.
+> **Current status:** KW34 displayed-value validation and the main Snowflake verification pass are complete. The first M0/M1 implementation tranche is runnable: canonical typed contracts, provenance/run-mode gates, pure BOM explosion, the isolated `legacy_kw34/v1` calculation, a synthetic fixture, deterministic audit JSON, and automated tests. Joel confirmed that the discovered forecast, generated-recommendation, and `BASE_INVENTORY` models are abandoned previous-team models and that purchase-order data is not currently ingested into Snowflake. Ops source discovery with Deepali/Dor/Ilona and a subsequent ingestion/modeling workstream with Joel are therefore required before operational PO netting. This does **not** block the pure engine, manual/file PO contract, scenario tests, or other file adapters. GitHub access, the RSA Snowflake service account, the real KW34 golden fixture, and broader source adapters remain gated/in progress.
 
 ## Scope
 
 This repository implements **Phase 2: supply planning and ordering**.
 
-- **Phase 1, forecasting:** supplies expected portions per dish, location, and day. It is a future pluggable input and is not implemented here.
+- **Phase 1, forecasting:** supplies expected portions per dish, location, and day. It remains a pluggable upstream input and is not implemented here; the discovered Snowflake forecast models are abandoned and may be replaced, not accepted as a live forecast source.
 - **Phase 2, this project:** explodes dish demand through the BOM, projects inventory, nets open purchase orders, applies planning constraints, and produces explainable order proposals for human approval.
 
 The first reference case is the manually maintained `Supply_Planning_Rewe.xlsx` workbook, primarily `Plan KW34` and `Stock KW34`, with KW33 used for the legacy bridge calculation.
@@ -88,7 +88,7 @@ Core inputs are:
 - `inventory_snapshots`: timestamped usable stock;
 - `purchase_orders`: open quantities and expected receipt dates.
 
-The menu may initially be represented by a fixture and later mapped from an authoritative Snowflake model or menu API. The BOM initially comes from the cleaned workbook; if no authoritative recipe system exists, it may become versioned application master data in Supabase.
+The menu may initially be represented by a fixture and later mapped from an authoritative Snowflake model or menu API. Snowflake's flattened/versioned BOM now passes the tested key, gram, history, and materialized-menu coverage checks, while its physical silo/recipe-slot mapping and ownership remain open. Until those are resolved, the cleaned workbook remains the approved legacy reference; application-owned versioned master data is a fallback only if no authoritative recipe source is accepted.
 
 During early development, policy and master data are represented through validated CSV/YAML files. These files are engineering fixtures, imports/exports, and fallback—not the intended workflow for non-technical planners. The eventual React UI will manage approved configuration through FastAPI and versioned Supabase records.
 
@@ -133,6 +133,7 @@ See the backlog's blocker register and question-to-gate matrix for the current d
 | [`docs/descriptions/phase2_supply_planning_brief.md`](docs/descriptions/phase2_supply_planning_brief.md) | Primary domain and architecture specification, including the verified Excel logic and improved target logic |
 | [`docs/plans/phase2_supply_planning_master_backlog.md`](docs/plans/phase2_supply_planning_master_backlog.md) | Source-of-truth implementation backlog, priorities, human gates, exit criteria, and immediate next slice |
 | [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Candidate source systems, known tables, gaps, access context, and data-discovery sequence |
+| [`docs/scratchpads/snowflake_verification_evidence.md`](docs/scratchpads/snowflake_verification_evidence.md) | Durable measured V1-V12 counts, zero-row diagnostics, interpretations, and remaining SQL without committing the private exports |
 | [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Implemented canonical input/output contracts, provenance, run-mode gates, and source-mapping rules |
 | [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Manual actions and information needed from the user, with the milestone where each becomes blocking |
 | [`MEMORY.md`](MEMORY.md) | Durable decisions and verified facts that must survive handovers and context compaction |

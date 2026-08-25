@@ -2,8 +2,13 @@
   "surface": "report",
   "manifest": {
     "version": 1,
-    "title": "Build Now, Gate Later",
+    "title": "Historical snapshot — Build Now, Gate Later",
     "blocks": [
+      {
+        "id": "historical-notice",
+        "type": "markdown",
+        "body": "## Historical snapshot\n\nThis artifact predates the full-schema Snowflake catalogue review. Do not use it for current source status, question wording, or integration next steps. Use `docs/descriptions/data_requirements.md`, section 10 of the brief, and `docs/plans/human_action_register.md`."
+      },
       {
         "id": "title",
         "type": "markdown",

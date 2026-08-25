@@ -1,4 +1,7 @@
--- Reviewed decision classification used by the report detail table.
+-- HISTORICAL SNAPSHOT. Superseded by the Q1-Q13 audience/topic map in
+-- docs/descriptions/phase2_supply_planning_brief.md section 10 and the
+-- action status in docs/plans/human_action_register.md.
+-- Retained only as evidence for the original report.
 SELECT *
 FROM (
     VALUES

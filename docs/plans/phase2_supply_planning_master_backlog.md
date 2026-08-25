@@ -61,7 +61,7 @@ Do not skip directly to the UI or database. The engine and its audit contract mu
 | `H-06` | Supplier production/transport lead times, order cut-offs, delivery calendars, MOQ/case, split-delivery rules | M2 | Labelled supplier/class defaults | Production-ready scheduling |
 | `H-07` | Sealed/opened shelf life, remaining-life/lot source, max-cover policy, override owner | M2/M4 | Conservative configured approximation with warning | High-confidence chilled proposals |
 | `H-08` | Forward committed menu horizon and launch/discontinuation process | M2 | Hardcoded scenario calendar | Operational transition planning |
-| `H-09` | Source systems, table/API owners, schemas, read-only endpoints/credentials for stock, POs, receipts, BOM, menu, sales, waste, OOS | M3 | File adapters | Real-data integration |
+| `H-09` | Obtain `data-transformation` access, inspect abandoned-model lineage, decide the cross-repository ownership boundary, provision stable Snowflake access, and work with Ops/data platform to establish a new expected-receipt/open-PO ingestion because Joel confirmed none currently exists | M3/M4 | File/manual PO adapters with explicit provenance | Accepted real-data adapters, PO netting, and shadow inputs |
 | `H-10` | Phase 1 output owner, delivery mechanism, schema/versioning, and first live sample | M6 | Hardcoded/CSV daily forecast | Live forecast integration |
 | `H-11` | Decide new versus shared Supabase project; owner, region, billing, backup/retention, credentials | M3 | Local/file persistence | Durable multi-user storage |
 | `H-12` | Define roles: config editor, planner, approver, admin, viewer; SSO/auth requirements | M5 | Local single-user development | Auth/RLS and approval UI |
@@ -75,23 +75,23 @@ The register is a set of **stage-exit and promotion gates**, not a reason to pau
 - **Start now:** project scaffold, contracts, validation, exception catalog, pure calculation functions, CLI/application service, synthetic scenario tests, and KW34 displayed-value reproduction.
 - **May be built with labelled assumptions:** improved inventory projection, pipeline netting, lead-time calendars, shelf-life caps, menu transitions, fresh-slot logic, safety/yield placeholders, SQL adapter interfaces, and preliminary UI information architecture.
 - **Must not be claimed as business-validated yet:** final Phase 1 semantics, complete canonical item coverage, placed-order/weekday replication, calibrated lead/shelf-life/buffer policies, and fresh-delivery coverage.
-- **Must wait for real inputs/access:** production SQL connectors, real-data backtests, shadow runs, Supabase/auth rollout, live proposal approval, and any supplier/ERP dispatch.
+- **Must wait for validated real inputs/authority:** accepted production SQL adapters, real-data backtests, shadow runs, Supabase/auth rollout, live proposal approval, and any supplier/ERP dispatch. Read access itself is already available.
 
 ### Business-question gate matrix
 
 | Question | Work that can proceed while unanswered | What must wait for the answer | Primary gate |
 |---|---|---|---|
-| Q1 + Q4 — in-transit and `S/M/W/Fr` | Implement dated PO schema, empty/manual PO fixtures, pipeline netting, exception reporting, and the spreadsheet's calculated `Order` column | Explain blank/reduced orders, reproduce actual placed quantities/weekday split, and approve operational netting | M2 business validation; M4 shadow |
+| Q1 + Q4 — in-transit and `S/M/W/Fr` | Implement dated PO schema, empty/manual PO fixtures, pipeline netting, exception reporting, and the spreadsheet's calculated `Order` column | Identify the actual open-PO source with expected receipt dates; explain blank/reduced orders and weekday splits; approve operational netting | M2 business validation; M4 shadow |
 | Q2 — lead times and calendars | Implement item/supplier overrides and calendar engine with labelled defaults and scenario tests | Production-ready order/receipt dates and stockout risk | M2 exit; M4 shadow |
 | Q3 — shelf life | Implement sealed/opened fields, lot-ready interfaces, approximate caps, and infeasible-constraint tests | Trusted expiry/max-cover caps, especially for chilled/fresh items | M2 policy approval; M4 shadow |
 | Q5 — Demand/Silo Load | Reproduce KW34 by treating it as daily demand under a legacy assumption; define a daily Phase 1 contract | Final semantic mapping, silo-capacity constraints, and live Phase 1 integration | M1 business sign-off; M6 live input |
 | Q6 — stock count | Reproduce the literal 2.5-day bridge and implement timestamped inventory inputs/projection | Correct opening inventory timing and operational removal of the hard-coded bridge | M2 business validation; M4 shadow |
 | Q7 — menu changes | Implement forward menu schema and launch/discontinuation scenarios | Production transition dates, late-PO flags, and menu-horizon validation against reality | M2 exit; M4 shadow |
 | Q8 — 20% buffer | Keep exact `1.20` only in `legacy_kw34`; implement separate configurable yield and safety policies | Calibrated policy and replacement of provisional defaults | M4 calibration |
-| Q9 — master data | Build stable-ID schemas, alias validation, quarantine rules, and explicit KW34 quality cases | Complete BOM/order coverage and automated operational joins | M1 fixture acceptance; M3 integration |
+| Q9 — master data | Build stable-ID schemas, alias validation, quarantine rules, and explicit KW34 quality cases | Confirm authoritative SKU/pack/storage sources and owner-approved mappings; complete three-level BOM/order coverage | M1 fixture acceptance; M3 integration |
 | Q10 — fresh products | Build configurable delivery-slot coverage with fixture calendars | Correct fresh order dates and consumption windows | M2 fresh-module sign-off; M4 shadow |
 | Q11 — weekly process | Build run/approval domain objects and retain human approval as a hard invariant | Final cadence, urgent-order workflow, ownership, notifications, and UI workflow | M4 operations design; M5 UI |
-| Q12 — other data | Build file adapters, SQL ports, provenance, placeholders, and `unavailable` metrics | Actual connectors, calibration, backtests, waste/OOS evaluation, and real-data shadowing | M3–M4 |
+| Q12 — other data used by the Excel owner | Build file adapters, provenance, placeholders, and `unavailable` metrics | Reconcile the owner's known inputs/systems with the separately validated Snowflake/source inventory | M3–M4 |
 | Q13 — planner experience | Continue with proposal explanations, exceptions, overrides, and auditability as baseline requirements | Final UI priority, automation boundary, and acceptance workflow | M5 product design |
 
 Question 14 in the supplied list is empty and creates no additional gate.
@@ -286,12 +286,34 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 **Outcome:** real operational inputs replace file placeholders, reviewed configuration migrates to one authoritative store, and runs/config are persistently auditable.
 
-### P0 — Source discovery and access
+### P0 — Source discovery and fitness
 
-- [ ] **HUMAN BLOCKER `H-09`:** identify source owners and obtain read-only schemas/endpoints/credentials.
-- [ ] Inventory source tables, grain, keys, timestamps/timezones, freshness, retention, and update cadence.
+- [x] Verify `CIRCUS_MODELS_READER` access to `BASE`, `INTERMEDIATE`, `REPORTING`, and `TECH_OPS` (140 physical tables).
+- [ ] **HUMAN BLOCKER `H-09`:** identify the current Ops PO source with Deepali/Dor/Ilona, establish ingestion/modeling with Joel, obtain stable connection/repository access, and decide the implementation boundary before operational Snowflake adapters or replacement models are accepted. This blocks M4/operational PO netting, not file/scenario engine work.
+- [x] Run and review V6/V8. On 2026-08-25 the three models refreshed sequentially for one location; forecasts cover five dates and the 76-line recommendation output is arithmetically coherent.
+- [x] Record Joel's confirmation that the three generated models and `BASE_INVENTORY` are abandoned previous-data-team models and may be replaced; do not treat their current outputs as operational inputs or approved policy.
+- [ ] Request GitHub access to [`data-transformation`](https://github.com/circus-kitchens/data-transformation), then inspect the abandoned definitions and upstream lineage.
+- [ ] Agree whether `data-transformation` owns normalized Snowflake models/publication while this repository owns the pure planning calculation, or document another explicit boundary; avoid duplicate business logic.
+- [ ] Receive the stable RSA-authenticated Snowflake service account from Joel through 1Password and document only the account/role/setup procedure, never credentials.
+- [x] Run V7 and rule out `BASE_INVENTORY` as operational open-PO input: 106/106 lines are closed and fully delivered, last synced 2025-10-20.
+- [x] Record Joel's confirmation that no purchase-order data is currently ingested into Snowflake to his knowledge; stop searching abandoned models for the operational feed.
+- [ ] With Deepali/Dor/Ilona, document the current PO/expected-delivery system or sheet, process owner, history, change handling, and export/API capability.
+- [ ] Agree ingestion with Joel/data platform—Fivetran only if appropriate—and publish a normalized PO-line/receipt-history model with remaining quantity and expected receipt date.
+- [ ] Validate PO model grain, identifiers, units, remaining quantities, statuses, partial receipts, cancellations/date changes, history retention, completeness, and freshness before accepting the read-only adapter.
+- [x] Run V8 candidate-key/basic-value and unit-placeholder checks. Duplicate/conflict diagnostics returned zero rows; 12 IDs are placeholder-only, six combine a real unit with null/zero placeholders, and one stable ID mixes `g` and `ml`. Treat the abandoned output as reference and make canonical-unit validation a replacement-model test.
+- [x] Run V9 BOM checks: 1,193 clean current rows, 11,990 valid history rows, full materialized-menu coverage, zero tested revision-key duplicates, and complete positive pre-mix mappings. Physical silo/recipe-slot mapping remains open.
+- [x] Run V3 join/cardinality checks and reject ingredient-only capacity joins; resources can change ingredient over time.
+- [x] Test the first V3 active-menu/chamber path: zero of 2,576 stock keys resolved, but the raw sample proves `CHAMBER_ALIAS` is constant text, so the query tested the wrong position field.
+- [ ] Run corrected V3B using active-menu matches across days, alternative ingredient IDs, and `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` before requesting a separate map.
+- [x] Complete V5: 76 rows/75 non-null ingredient IDs, one blank ID, zero bad pack quantities, zero missing units, seven missing EANs, ten missing Apicbase IDs, and no non-null duplicate/conflict exceptions.
+- [x] Run V10 expiry checks: all 6,497 tested silo-days have expiry, but remaining-life outliers require semantic validation and do not define shelf-life policy.
+- [x] Complete the saved V11 checks: `INT_UNIT_DAY_MENU` spans 2025-10-21 through 2026-08-24 across six units/26 menus and had no forward-day coverage on 2026-08-25; base rows extend later but mix operational-looking records with pilot/demo/training/far-future/terminated records. Forward commitment/source remains a business/source gate.
+- [x] Run initial and lagged V12 checks and classify the raw source as high-frequency stock state with ingredient resets/corrections; enhanced same-ingredient analysis is optional calibration work.
+- [x] Rerun dish-level V2 with only `CLOSED/SERVED`: 622 portions across 221 deployed dish-unit-days and 39 zero-sale days.
+- [x] Finish the saved V1/V2B checks: six observed location names map one-to-one to unit serials; five selling/production units reconcile to 622 portions with 8.4–31.8 portions per service day. Stable location-ID and source-contract acceptance remain M3 work.
+- [ ] Validate remaining source units, timestamps/timezones, completeness, freshness, retention, update cadence, and authority for each adapter actually selected.
 - [ ] Prioritize current stock and open POs first; they materially affect every operational proposal.
-- [ ] Map receipts, BOM, menu, sales, waste, and OOS sources with explicit coverage gaps.
+- [ ] Validate the three-level BOM/pre-mix topology and map receipts, menu, sales, waste, OOS, stock, and refill/consumption sources with explicit coverage gaps.
 - [ ] Define secure local/hosted secret handling and update `.env.example` without values.
 
 ### P0 — Read-only adapters
@@ -518,14 +540,15 @@ Question 14 in the supplied list is empty and creates no additional gate.
 
 ## Immediate next execution slice
 
-1. [ ] Send Tier A questions Q1/Q4/Q5/Q6/Q9 to the planner and track answers in parallel; do not pause scaffolding.
+1. [ ] Wait for answers to the already-sent Q1-Q13 Excel-owner questionnaire; do not send a correction. Record the answers against the audience/topic map in brief section 10.
 2. [x] Create storage-neutral normalized schema definitions, initial run-mode gates, and the exception-code catalog; mark files as bootstrap adapters and Supabase as the planned operational store.
 3. [x] Scaffold the Python package and test tooling.
 4. [x] Create a documented synthetic fixture and private-data ignore paths; keep real KW34-derived rows uncommitted until `H-01`/`HA-02` is cleared.
 5. [x] Implement BOM explosion and legacy rounding.
 6. [ ] After fixture approval, land the 27-cell KW34 golden test plus gap/missing-row assertions.
 7. [x] Add the first compatibility CSV validation/run command and deterministic audit JSON; multi-file canonical validation and CSV report bundle remain open above.
-8. [ ] Resolve or explicitly accept assumptions for `H-02`–`H-05`, then review Milestone 1 output with the current planner before accepting M1 or starting improved-policy sign-off.
+8. [ ] Ask Deepali/Dor (optionally Ilona) for the PO-process/source walkthrough, then coordinate ingestion/modeling with Joel. In parallel request `data-transformation` access, complete the least-privilege RSA service-account setup, inspect lineage, and decide the cross-repository boundary. Corrected V3B is the only required SQL follow-up; enhanced V12 is optional calibration work.
+9. [ ] Resolve or explicitly accept assumptions for `H-02`–`H-05`, then review Milestone 1 output with the current planner before accepting M1 or starting improved-policy sign-off.
 
 ## Dated progress log
 
@@ -533,7 +556,12 @@ Question 14 in the supplied list is empty and creates no additional gate.
 - 2026-08-22: Linked workbook inspected read-only; KW34 legacy values independently reconciled.
 - 2026-08-22: Brief corrected for bridge behavior, rounding, target netting, safety-stock grain, constraints, placeholders, script-first architecture, Supabase/UI boundary, and delivery sequence.
 - 2026-08-22: Master backlog and execution scratchpad created. Implementation remains unstarted.
+- 2026-08-24: Snowflake access confirmed; source-status documentation reconciled. Catalogued tables remain candidates until verification and owner/lineage checks pass. Access is no longer a blocker; expected-receipt/open-PO data, three-level BOM mapping, source authority, waste semantics, and planning policies remain stage gates.
 - 2026-08-22: Clarified that CLI/CSV/YAML are technical bootstrap and fallback interfaces; the planned non-technical workflow is React/FastAPI backed by authoritative Supabase persistence after approval.
 - 2026-08-24: Reclassified unanswered business questions as stage-exit/promotion gates rather than a global start blocker. M0/M1 scaffolding and scenario-safe engine work may begin while answers are collected in parallel.
 - 2026-08-24: Added the root README as the concise engineer handover for project purpose, planned architecture, logic, data/config boundaries, delivery order, safeguards, and the documentation reading path.
 - 2026-08-24: Implemented the first M0/M1 tranche: Python 3.12 package, canonical input/output dataclasses, provenance/run modes and critical-source gates, pure BOM explosion, isolated `legacy_kw34/v1`, legacy CSV adapter, deterministic audit CLI, synthetic fixture, and 17 passing tests. Added canonical-contract and human-action documentation; real KW34 golden tests remain gated.
+- 2026-08-25: Reviewed V6/V7/V8 outputs. Current forecasts and generated recommendations refresh together for one location and reconcile internally. Joel then confirmed that these three models and `BASE_INVENTORY` are abandoned previous-data-team models that may be replaced in `data-transformation`; they are not operational sources of truth. GitHub access and an RSA-authenticated Snowflake service account are pending. The actual source with remaining quantity and expected receipt date remains the main operational data blocker.
+- 2026-08-25: Reviewed the remaining V1-V12 exports and recorded them in `docs/scratchpads/snowflake_verification_evidence.md`. Forecast candidate keys pass the tested duplicate checks; the flattened/versioned BOM is clean and covers the materialized menu; ingredient-only silo-capacity joins are invalid; expiry coverage is high but policy remains manual; stock updates are state events rather than proven consumption; and the EUR 31k waste headline is reproducible only as a six-unit/83-day field sum with unconfirmed semantics. Superseded the earlier sales comparison and reduced the SQL backlog to focused follow-ups.
+- 2026-08-25: Reviewed the 13:07-13:11 follow-ups. V8 placeholder semantics are classified and expose one mixed-unit ingredient in the abandoned model; corrected dish-level V2 is 622 portions; V12 transition deltas confirm resets/corrections; the first V3 physical-slot attempt is invalid because `CHAMBER_ALIAS` is constant and is superseded by corrected V3B. The open-PO-source question was sent to Joel; his later response is recorded in the next entry.
+- 2026-08-25: Joel confirmed that PO data is not currently ingested into Snowflake to his knowledge and directed source discovery to Ops (Deepali/Dor/Ilona), with Fivetran a possible later ingestion route. This becomes `HA-13`: it blocks accepted real PO adapters, M4 shadow, and operational netting, but not pure/file engine work. The 13:33-13:35 exports close V5, V11, V1, and V2B; corrected V3B is the only required SQL follow-up.

@@ -4,17 +4,17 @@
 
 Status values: `OPEN`, `IN PROGRESS`, `DONE`, `NOT NEEDED YET`, `SUPERSEDED`.
 
-`HA-*` IDs group work into requests a person can act on. The backlog's `H-*` IDs remain the finer-grained domain gates: `HA-02` clears `H-01`; `HA-01` addresses `H-02`–`H-05`; `HA-04` addresses `H-06`–`H-08`; and `HA-06`–`HA-12` cover the corresponding integration, persistence, validation, UI, forecast, and dispatch gates. Use this file for action status and the master backlog for technical exit criteria.
+`HA-*` IDs group work into requests a person can act on. The backlog's `H-*` IDs remain the finer-grained domain gates: `HA-02` clears `H-01`; `HA-01` addresses `H-02`–`H-05`; `HA-04` addresses `H-06`–`H-08`; and `HA-06`–`HA-13` cover the corresponding integration, persistence, validation, UI, forecast, dispatch, and PO-ingestion gates. Use this file for action status and the master backlog for technical exit criteria.
 
 ## Actions needed now
 
-### HA-01 — Send the Tier A process questions
+### HA-01 — Collect and reconcile the already-sent planner questions
 
-- **Status:** `OPEN`
+- **Status:** `IN PROGRESS`
 - **Owner:** Valentin / current planner
 - **Needed by:** Milestone 1 business acceptance; engineering continues meanwhile
-- **Action:** obtain answers for Q1, Q4, Q5, Q6, and Q9 from the question-to-gate matrix: open POs/in-transit, `S/M/W/Fr`, `Demand/Silo Load`, stock-count timing/2.5-day bridge, and canonical item/pack/SKU checks.
-- **Helpful evidence:** one open-PO example, one final supplier order/confirmation, the KW34 stock-count timestamp, and an item/SKU export or owner-reviewed mapping.
+- **Action:** the original Q1-Q13 set has already been sent to the person who builds and uses the workbook. No correction is needed and nothing should be resent now. Wait for the answers and record them against the topic map in `docs/descriptions/phase2_supply_planning_brief.md` section 10. The Excel owner is explaining their process and pointing to possible sources; they are not being asked to validate Snowflake tables or lineage.
+- **Helpful evidence:** one currently open PO with its expected receipt date, one final supplier order/confirmation, the KW34 stock-count timestamp, and an owner-reviewed item/SKU mapping.
 - **Fallback until then:** assumption flags, unexplained-order exceptions, and quarantined master-data rows.
 - **Blocks only:** calling M1 business-approved and interpreting actual/manual order differences.
 
@@ -44,7 +44,7 @@ Status values: `OPEN`, `IN PROGRESS`, `DONE`, `NOT NEEDED YET`, `SUPERSEDED`.
 - **Status:** `NOT NEEDED YET`
 - **Owner:** Valentin / planner / purchasing owner
 - **Needed by:** Milestone 2 business acceptance and Milestone 4 shadow start
-- **Action:** answer Q2, Q3, Q7, Q10, and Q11: lead times/calendars, shelf life, menu horizon/transitions, fresh delivery coverage, and weekly/urgent order workflow.
+- **Action:** approve the planning values and operating rules for lead times/calendars, sealed/opened shelf life, menu commitment/transitions, fresh delivery coverage, and weekly/urgent ordering. Observed delivery/expiry data may inform these decisions but does not replace policy approval.
 - **Fallback until then:** explicit supplier/class defaults and scenario calendars.
 
 ### HA-05 — Confirm the 20% buffer policy owner
@@ -57,21 +57,43 @@ Status values: `OPEN`, `IN PROGRESS`, `DONE`, `NOT NEEDED YET`, `SUPERSEDED`.
 
 ## Actions needed before Milestone 3 integration
 
-### HA-06 — Obtain read-only source discovery access
+### HA-06 — Confirm read-only source discovery access
 
-- **Status:** `NOT NEEDED YET`
+- **Status:** `DONE`
 - **Owner:** Valentin / data platform owner
-- **Needed by:** Milestone 3 start
-- **Action:** obtain/confirm Snowflake access for relevant `base_*` and `int_*` models and provide source DDL/columns, grain, keys, timezone, freshness, retention, and sample rows.
-- **Fallback until then:** canonical CSV fixtures and adapter interfaces.
+- **Needed by:** completed 2026-08-24
+- **Action:** `CIRCUS_MODELS_READER` was verified against `BASE`, `INTERMEDIATE`, `REPORTING`, and `TECH_OPS` (140 physical tables). No further permission request is currently needed.
+- **Evidence:** local information-schema exports and `docs/descriptions/data_requirements.md`.
 
-### HA-07 — Identify authoritative operational sources
+### HA-07 — Validate source fitness and ownership
 
-- **Status:** `NOT NEEDED YET`
+- **Status:** `IN PROGRESS`
 - **Owner:** Valentin / data platform / purchasing / ERP owner
-- **Needed by:** Milestone 3 exit
-- **Action:** identify authoritative sources for open POs, goods receipts, BOM/recipes, item/SKU master, supplier terms, stock snapshots, and menu calendar. Confirm whether Xentral holds the missing purchasing/master data.
-- **Fallback until then:** file adapters; open POs may be manually supplied only for non-live development.
+- **Needed by:** before Snowflake adapters are accepted for M3; source lineage and the cross-repository boundary must be resolved before replacement models are accepted
+- **Evidence received 2026-08-25:** V1-V12 and all saved follow-ups are summarized in `docs/scratchpads/snowflake_verification_evidence.md`. Joel confirmed that `FACT_CG_DISH_DEMAND_FORECASTS`, `FACT_CG_INGREDIENT_DEMAND_FORECASTS`, `FACT_CG_PURCHASE_ORDERS`, and `BASE_INVENTORY` are abandoned previous-data-team models. They may be replaced in [`data-transformation`](https://github.com/circus-kitchens/data-transformation), but are not operational sources of truth. Joel will provision a stable RSA-authenticated Snowflake service account through 1Password. V5 now measures 76 item rows/75 IDs with complete pack/unit values, seven missing EANs, ten missing Apicbase IDs, and one blank ID. V11 proves the materialized menu ended on 2026-08-24 when queried on 2026-08-25. V1/V2B closes the saved location/per-unit sales checks at 622 portions. Corrected V3B remains the only required SQL follow-up.
+- **Actions now:**
+  1. Valentin requests GitHub access to `data-transformation`.
+  2. Joel provisions a least-privilege, read-only Snowflake service account and shares credentials only through 1Password; no key/token is stored in git or documentation.
+  3. After repository access, inspect the abandoned model definitions/upstream lineage and agree which normalized inputs/outputs belong in `data-transformation` versus this repository's pure engine before changing either.
+  4. Run corrected V3B slot coverage. Enhanced V12 is optional until calibration is in scope. Keep exports private and append results to the evidence register.
+- **Later, before waste is shared or calibrated:** ask which field represents physical disposal and how `WASTE_VALUE_EUR` is calculated.
+- **Only after V3B:** ask a targeted follow-up about physical silo-slot identity only if the returned data cannot settle it. Forward-menu commitment remains a business/source question because the materialized table has no forward coverage.
+- **Fallback until then:** canonical file adapters with explicit provenance; manual open-PO inputs are allowed only in fixture/scenario modes, never silently treated as production-complete.
+
+### HA-13 — Establish the operational PO source and Snowflake ingestion
+
+- **Status:** `IN PROGRESS`
+- **Owner:** Valentin / Ops (Deepali, Dor, Ilona) / Joel and data platform
+- **Needed by:** M4 shadow start and any operational netting; not needed for M0/M1 or file/scenario M2 engineering
+- **Evidence received 2026-08-25:** Joel confirmed that purchase-order data is not currently ingested into Snowflake to his knowledge. Deepali, Dor, and Ilona are the recommended Ops contacts, with Deepali likely knowing the detailed current process. Fivetran may be suitable after the source is identified.
+- **Actions now:**
+  1. Ask Deepali and Dor, with Ilona optionally included, for a short walkthrough of how Ops tracks POs and expected deliveries, the system/sheet and owner, available history, and export/API access.
+  2. Obtain one approved/anonymized example that demonstrates PO and line ID, item/SKU, ordering location, supplier, ordered quantity/unit, remaining open quantity, status, order date, expected receipt date, partial receipts, cancellations/date changes, and source-updated timestamp.
+  3. Return the source findings to Joel; agree the raw ingestion route, history/change capture, refresh SLA, and normalized Snowflake model. Use Fivetran only if it fits the actual source and preserves the required history.
+  4. Add source-model tests for grain/uniqueness, nonnegative and unit-consistent quantities, PO-line receipt linkage, statuses, expected dates, partial/cancelled lines, update history, completeness, and freshness.
+  5. Only then implement and validate this repository's read-only PO adapter against the canonical contract.
+- **Fallback until then:** continue the pure event-ledger/netting implementation with synthetic and manual `open_pos.csv` fixtures. Fixture/scenario mode may explicitly use an empty pipeline; shadow/operational mode must refuse an unknown pipeline.
+- **Blocks only:** real PO adapter acceptance, trustworthy shadow runs, and operational proposal approval. It does not block building or testing the engine.
 
 ### HA-08 — Approve Supabase project and ownership
 

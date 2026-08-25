@@ -47,7 +47,7 @@ sales history, waste, OOS    ──────>  BOM explosion → netting → 
 portions per dish per day             units to order per item per delivery date
 ```
 
-**Phase 1 does not exist yet.** It is currently a human typing one integer per dish per week into a column called `Demand/Silo Load`. That single number is the entire interface between the two phases. Everything downstream of it is deterministic arithmetic.
+**No approved/live Phase 1 has been confirmed.** The current workbook interface is a human typing one integer per dish per week into a column called `Demand/Silo Load`. Snowflake contains a five-day, one-location dish forecast whose tested `date × location × PLU` key and basic value checks pass, plus ingredient forecasts and generated recommendations refreshed within the same minute. Joel confirmed on 2026-08-25 that these are abandoned previous-data-team models, despite the observed refresh. They may be replaced in the `data-transformation` repository, but they are not an approved live Phase 1 source or Phase 2 policy. Phase 1 therefore remains a pluggable upstream contract rather than an embedded assumption. Everything downstream of the workbook value is deterministic arithmetic.
 
 **This project is Phase 2 only.** Phase 1 will be built afterwards. Phase 2 must therefore be designed so the forecast is a *pluggable input*: today a manually maintained file, later a table or API call, with no change to the engine.
 
@@ -88,6 +88,14 @@ Structure is three-level: `Dish → Silo → Ingredient`.
 | `Unit Size` | Grams per purchasable pack |
 
 Example, `Penne Arrabbiata mit Hähnchen`, KW34: demand 30 portions/day, Arrabbiata Sauce at 200 g/portion → 6,000 g/day.
+
+Snowflake now provides a strong candidate for the flattened, versioned part of
+this contract: 1,193 current PLU-to-ingredient rows have complete keys, positive
+grams, no tested revision-key duplicates, and cover all 763 materialized
+unit-days/26 menu keys. Raw recipe-slot and pre-mix mappings also exist. The
+remaining gap is physical identity: an ingredient-only join to robot stock is
+many-to-many, and silo resources can change ingredient over time, so the
+effective `unit/menu/recipe slot ↔ resource/dock` mapping is still required.
 
 ### 4.2 `Stock KWxx` — netting and order proposal
 
@@ -227,6 +235,14 @@ The Plan tab's weekly column is `day × 7`. It is **not used by the ordering pat
 ### 5.11 `Demand/Silo Load` conflates three concepts
 
 Demand forecast, physical silo capacity, and menu availability are one number. The values are round (15/20/25/30/35/45/70) and drift downward over time (Penne Arrabbiata: 70 in KW28 → 45 in KW29–31 → 30 from KW32). That could be manual reaction to sales, waste, capacity, or another operational constraint; the workbook does not prove which. *This is Phase 1's problem to solve* — but Phase 2 must keep demand and capacity as separate fields so the concepts can be distinguished.
+
+The corrected Snowflake comparison strengthens the need to separate these
+concepts. For 2026-08-17 through 2026-08-22, a zero-inclusive query using only
+`CLOSED/SERVED` lines found 622 sold portions, 39 zero-sale dish-unit-days out
+of 221, and a maximum of 15 for one dish-unit-day. The earlier provisional 626
+total and the former three-location, 82.5-portions/day and 3.2×/9.5× claims are
+superseded. The corrected per-unit output and unit/location map are still to be
+captured; the Excel owner must still define the workbook field and its scope.
 
 ---
 
@@ -518,25 +534,84 @@ Start locally as a deterministic CLI with CSV/JSON outputs for engineering valid
 
 ---
 
-## 10. Open questions for the business
+## 10. Already-sent questions for the Excel owner
 
 The exact manual actions, owners, fallbacks, and milestone due dates are tracked in `docs/plans/human_action_register.md`; these questions are promotion gates rather than a global development pause.
 
-1. **Is `Demand/Silo Load` portions sold per day, or silo fill level per day?** The arithmetic works either way, but it determines whether Phase 1 forecasts demand or forecasts refills. Blocking for the Phase 1 interface.
-2. **When exactly is the stock count taken, and by whom?** Needed to replace the hardcoded 2.5-day bridge with a real timestamp.
-3. **Why 2.5 rather than 3?** Half-day Saturday, or a typo that has been copied forward for months?
-4. **Is the 4-week lead time uniform, or per supplier / per item?** Config assumes the latter; needs real values to seed `items.csv`.
-5. **Where do open purchase orders live?** If nowhere queryable, that is a prerequisite, not a nice-to-have.
-6. **Do the `S/M/W/Fr` numbers reflect supplier constraints, partial orders, or errors?** Determines whether case-size and MOQ config can reproduce them.
-7. **Is silo capacity a real binding constraint?** If yes it belongs in `items.csv` as a per-dish `max_silo_load` and gets applied as an explicit, visible cap.
-8. **Which shelf life matters — sealed or opened?** For chilled sauces this changes the cap materially.
-9. **How many weeks ahead is the menu fixed and committed?** The committed horizon must extend beyond the longest item lead time so launches and discontinuations can be planned safely. If it does not, the process must change or the engine must raise a blocking exception.
-10. **What is the canonical purchasable SKU and pack size for every ingredient?** KW34 has conflicting pack sizes for Schnittlauch and Creme Fraiche, so names alone cannot define an order line.
-11. **Are `Paprika - big` and `Mischsalat` intentionally handled outside `Stock KW34`?** They are present in the plan but missing from the order tab.
-12. **What supplier order calendars, cut-off times, MOQ, case-size, and split-delivery rules apply?** Lead days alone are not enough to schedule a dated order.
-13. **Which system will provide current stock, open POs, receipts, sales, waste, OOS, BOM, and menu data, and what read-only SQL/API access is available?** Needed before the integration milestone, not before the file-based engine.
-14. **Who may edit policy, run planning, approve a proposal, and export/dispatch it?** Needed before Supabase auth/RLS and the UI approval workflow are designed.
-15. **Should the available Supabase project be new or shared, and who owns its region, billing, credentials, backup, and retention policy?** Blocking only when durable persistence starts.
+The original 13 substantive questions have already been sent to the person who
+builds and uses the workbook. **No correction or replacement questionnaire is
+needed.** Wait for the answers. The list below records the audience and intent
+of each question; it is not new wording to resend:
+
+1. **In-transit:** how the Excel owner personally tracks orders already placed and deliveries still expected.
+2. **Lead times:** which practical lead-time assumptions they use when planning.
+3. **Shelf life:** which shelf-life rule they apply and how it changes order quantities.
+4. **`S/M/W/Fr`:** what the manual weekday quantities mean and why they differ from calculated quantities.
+5. **`Demand/Silo Load`:** what this workbook input means and whether it applies per unit or across locations.
+6. **Stock count:** when stock is counted and why the workbook uses the `2.5`-day bridge.
+7. **Menu changes:** where the owner obtains menu plans and how they maintain launches, substitutions, and discontinuations.
+8. **20% buffer:** the intended meaning of `1.20` and the operating judgment behind it.
+9. **Master data:** which item, pack, storage, recipe, and supplier information the owner actually uses and maintains.
+10. **Fresh products:** how fresh delivery windows and quantities are planned in practice.
+11. **Weekly process:** the real planning cadence, urgent-order path, overrides, and approvals.
+12. **Other data:** which other information or systems the owner knows about or consults while planning.
+13. **Planner experience:** what explanations, controls, and workflow would make automated proposals usable and trustworthy.
+
+Questions 1, 7, 9, and 12 may point towards other systems, but the Excel owner
+is being asked only to explain their process and identify possible sources—not
+to validate Snowflake tables, joins, lineage, grain, or completeness. The blank
+Q14 in the sent document is harmless.
+
+### Technical source status from Joel
+
+Confirmed on 2026-08-25:
+
+- `FACT_CG_DISH_DEMAND_FORECASTS`,
+  `FACT_CG_INGREDIENT_DEMAND_FORECASTS`, `FACT_CG_PURCHASE_ORDERS`, and
+  `BASE_INVENTORY` are abandoned models from the previous data team.
+- The data-model repository is
+  [`data-transformation`](https://github.com/circus-kitchens/data-transformation),
+  and the abandoned models may be updated with the new logic after access is
+  granted.
+- Joel will create a stable Snowflake service account using RSA authentication,
+  with credentials shared through 1Password. No credential material belongs in
+  this repository.
+- Purchase-order data is not currently ingested into Snowflake to Joel's
+  knowledge. Deepali, Dor, and Ilona are the recommended Ops contacts for the
+  current process/source, with Deepali likely knowing the details. Fivetran may
+  be suitable once that source is identified.
+
+The immediate PO action is therefore no longer a Snowflake search or another
+question to Joel. Valentin should ask Ops for a walkthrough of the system,
+sheet, or process used to track orders and expected deliveries, its owner,
+history, and export/API capability. Once identified, Joel/data platform can
+establish ingestion and a normalized source model. The service account solves
+stable connectivity, not this missing input. Until that model passes grain,
+unit, completeness, history, and freshness checks, operational mode must fail
+closed on open POs; manual/file PO inputs remain valid for fixture/scenario
+development.
+
+After GitHub access, inspect the abandoned definitions and decide explicitly
+whether `data-transformation` owns normalized Snowflake inputs/outputs while
+this repository keeps the pure planning engine, or whether another boundary is
+intended. Do not duplicate the same planning logic in both repositories.
+
+Before waste is shared or used for calibration, ask which field represents
+physical disposal and how `WASTE_VALUE_EUR` is calculated. V4 now reproduces
+3,750.3 kg and EUR 31,339 as field sums across six units, 63 ingredients, and
+2026-06-01 through 2026-08-22—not one dish or one unit—but does not establish
+that the quantities are physical disposal. V5, V11, V1, and corrected V2B are
+now complete: the item master has usable pack/unit coverage with one blank ID,
+the materialized menu has no forward-day coverage as of 2026-08-25, and the
+corrected per-unit sales output reconciles to 622 portions across five
+production/selling units. Corrected V3B is the only required SQL follow-up;
+ask Joel an additional silo-lineage question only if it cannot settle the
+physical mapping.
+
+Separate infrastructure decisions—not part of the already-shared 13—remain
+for their later milestones: who may edit/run/approve/export; whether Supabase is
+new or shared; and its owner, region, billing, credentials, backup, retention,
+and authentication policy.
 
 ---
 

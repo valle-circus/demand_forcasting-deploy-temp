@@ -15,10 +15,161 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-24: **A correction notice supersedes four earlier same-day entries.**
+  Findings first recorded on 2026-08-24 were produced under the Lightdash
+  service role, which reads 1 of 4 accessible schemas, and several were then
+  generalised to "not found anywhere". That inference was invalid. The broader
+  Snowflake catalogue contains candidate fields for storage type, expiry,
+  supplier information and pre-mix decomposition. Their presence retracts the
+  claims of absence, but it does **not** establish authoritative master data,
+  shelf-life policy, a supplier master, or whether pre-mixes are purchased or
+  assembled on site. Standing rule adopted: no claim of absence without naming
+  the role and scope searched; no aggregate headline without a saved query that
+  reproduces it; no inference recorded as a measurement. Evidence:
+  `docs/descriptions/data_requirements.md` evidence rules and corrections.
+  Status: `active`.
+
+- 2026-08-24: **Access is not a blocker.** Role `CIRCUS_MODELS_READER` reads
+  `BASE` (49 tables), `INTERMEDIATE` (7), `REPORTING` (58) and `TECH_OPS` (26)
+  in `ANALYTICS` — 140 tables, all physical tables, no views. No permission
+  request to the data team is required. Separately, the Lightdash service role
+  reads only `LOOKER_STUDIO_CIRCUS` (46 `LS_` views), so Lightdash is not a
+  usable discovery tool for this project. Evidence:
+  `docs/descriptions/data_requirements.md` access note. Status: `active`.
+
+- 2026-08-25: **The discovered forecast/recommendation models are abandoned
+  previous-data-team models, despite still producing closely timed outputs.**
+  `REPORTING.FACT_CG_PURCHASE_ORDERS` (76 rows) carries `DEMAND_IN_WINDOW`,
+  `ON_HAND_QTY`, `DEMAND_PLUS_SAFETY`, `NET_QTY_NEEDED`, `PACKAGES_TO_ORDER`,
+  `EST_ORDER_COST` and `GENERATED_AT_UTC`; it is generated netting output, not
+  a source purchase-order ledger. V6/V8 measured the three models refreshing
+  sequentially around 04:31-04:32 Berlin time on 2026-08-25 for one location.
+  Forecasts cover five dates; the 76 recommendations contain 73 `Sufficient`
+  and 3 `Order Today` lines. Net, pack rounding, and cost reconcile on every
+  row, and positive-demand rows use an exact 1.05 uplift. The tested dish
+  `date × location × PLU` and ingredient
+  `date × location × ingredient_id × unit` duplicate/conflict queries returned
+  zero rows. Dish rows pass basic value checks. The ingredient follow-up found
+  12 IDs with placeholder-only null/zero rows, six with a real unit plus those
+  placeholders, and one stable ID (`Rotes Thai Curry`) mixing `g` and `ml`;
+  none of the null-unit rows is nonzero.
+  Caveats remain one missing recommendation ingredient ID, two missing prices,
+  only `FRESH`/`FROZEN`, and one-location coverage. Joel confirmed that these
+  models, together with `BASE_INVENTORY`, are abandoned and may be replaced with
+  this project's logic in the `data-transformation` repository. They are useful
+  reference evidence, not live inputs or approved policy. GitHub access to that
+  repository and the division of responsibilities between its data models and
+  this repository's pure planning engine remain to be decided.
+  Evidence: `docs/scratchpads/snowflake_verification_evidence.md` V6/V8;
+  `scripts/snowflake_verification.sql` blocks V6/V8. Status: `active`.
+
+- 2026-08-25: **The flattened/versioned BOM is a measured strong candidate;
+  physical silo identity remains open.**
+  `REPORTING.FACT_CG_MENU_DISH_INGREDIENTS` has 1,193 current rows across 52
+  menus, 122 PLUs and 120 ingredients, with complete keys, positive grams and
+  zero tested revision-key duplicates. All 763 materialized unit-days/26 menu
+  keys resolve to it. `DIM_MENU_DISH_INGREDIENTS_HISTORY` has 11,990 valid
+  intervals. The raw `BASE_RECIPE_*` topology and positive pre-mix mappings
+  exist, but an ingredient-only stock/BOM join is many-to-many and does not
+  preserve the required `Dish -> Silo -> Ingredient` identity. A first physical
+  path resolved 0/2,576 stock keys, but the raw sample proves the tested
+  `CHAMBER_ALIAS` is constant text and therefore not the physical position.
+  Test corrected V3B using active-menu matches, alternative ingredient IDs and
+  `SILO_RESOURCE_ID -> RECIPE_SLOT_INSERTING_POSITION` before requesting a map.
+  Evidence:
+  `docs/scratchpads/snowflake_verification_evidence.md` V9/V3;
+  `docs/descriptions/data_requirements.md` D8. Status: `active`.
+
+- 2026-08-25: **`BASE_INVENTORY` is ruled out as the operational open-PO
+  source.** V7 returned 106 lines across 35 POs: every line is `Closed`, ordered
+  quantity equals delivered quantity, and no line is undelivered. The last sync
+  is 2025-10-20; all 106 nonblank `DELIVERED_ON` strings fail `TRY_TO_DATE`;
+  there is no order-created or expected-receipt timestamp. `BASE_STOCKS` has 21
+  one-location rows last synced 2025-10-30 and every supplier article number is
+  missing. Joel additionally confirmed that `BASE_INVENTORY` is an abandoned
+  previous-team model and, to his knowledge, **no PO data is currently ingested
+  into Snowflake**. Deepali, Dor, and Ilona are the recommended Ops contacts for
+  the current source/process, with Deepali likely knowing the details. After
+  discovery, Joel's team can establish ingestion—potentially with Fivetran—and
+  a normalized model. This blocks real PO adapter acceptance, shadow runs, and
+  operational netting; it does not block the pure engine, manual/file PO
+  fixtures, or scenario tests. MOQ, case size and supplier calendars remain
+  controlled manual-policy inputs unless an authoritative source is found.
+  Evidence:
+  `docs/descriptions/data_requirements.md` D10-D12;
+  `scripts/snowflake_verification.sql` block V7. Status: `active`.
+
+- 2026-08-25: **Silo stock fields exist, but dish-capacity and daily-load
+  semantics are not yet established.** `FACT_UNIT_SILO_STOCK_DAILY` carries
+  `MAXIMUM_AMOUNT`, `REFILL_THRESHOLD`,
+  `START_OF_DAY_AMOUNT`, `END_OF_DAY_AMOUNT`, `NET_DEPLETION`, `REFILL_COUNT`
+  and `EXPIRATION_DATE`. A direct ingredient-only join to flattened BOM grams
+  is measured many-to-many for 62 ingredient IDs and must not be used to claim
+  dish capacity. In a 200-row stock sample, 11 of 25 resources carry multiple
+  ingredients over time; mapping `RESOURCE_ID`/`DOCK_ID` to the effective
+  unit/menu/recipe slot is required. Raw stock contains 148,158 high-frequency
+  state updates across 34 silos in the tested period, and daily
+  `NET_DEPLETION` includes a negative day. The lagged profile has 147,980
+  transitions: 17,691 ingredient changes, 91,831 unchanged states and gross
+  positive/negative movement above 15 tonnes with jumps above 7 kg.
+  `REFILL_COUNT` has no quantity, so D7 remains open pending reset filtering and
+  event semantics. Expiry is
+  present on all 6,497 tested silo-days but does not define shelf-life policy.
+  Evidence: `docs/scratchpads/snowflake_verification_evidence.md` V3/V10/V12;
+  `scripts/snowflake_verification.sql` blocks V3/V10/V12;
+  `docs/descriptions/data_requirements.md` D7-D8. Status: `active`.
+
+- 2026-08-24: **Apicbase is a master-data-source candidate, not yet confirmed
+  as authority.** `BASE_INGREDIENT_LIST` carries `APICBASE_ID` alongside `EAN`,
+  `QUANTITY` (pack size) and `PACKAGE_PRICE`. Most `BASE` tables carry
+  `_FIVETRAN_SYNCED`, indicating Fivetran ingestion. This makes Apicbase a
+  plausible source for ingredient data, but column names alone do not establish
+  system ownership or field-level authority. Joel must confirm it; Xentral must
+  likewise not be assumed. Evidence:
+  `docs/descriptions/data_requirements.md` source-authority questions. Status: `active`.
+
+- 2026-08-24: **`FACT_CG_SALES_DAILY` cannot satisfy D1.** It has no dish
+  dimension; grain is `DAY x LOCATION_NAME x CUSTOMER_ID x REVENUE_SOURCE`
+  with aggregate measures only (`TOTAL_DISHES_SOLD`, `UNIQUE_DISHES_SOLD`).
+  Dish-level sales are in `REPORTING.FACT_CG_SALES` (22,894 rows, one row per
+  line item, carrying `DAY`, `UNIT_SERIAL`, `LOCATION_NAME`, `PLU`,
+  `DISH_NAME`, `IS_REFUNDED`). This is the most robust correction of the day
+  and is measured, not inferred. Evidence:
+  `docs/descriptions/data_requirements.md` D1. Status: `active`.
+
+- 2026-08-25: **The old three-location `Demand/Silo Load` comparison is
+  superseded; the workbook field's meaning is still open.** A zero-inclusive
+  corrected V2 dish run for 2026-08-17 through 2026-08-22 uses only
+  `CLOSED/SERVED` rows and finds 622 portions, 221 dish-unit-days, 39 zero-sale
+  dish-unit-days and a maximum dish-unit-day of 15. The provisional 626 total
+  is superseded. V1 maps each of six observed location names to one unit serial;
+  corrected V2B reconciles the 622 portions across five selling/production
+  units at 8.4–31.8 portions per service day. Do not quote the former 82.5/day,
+  27.5/location-day, 3.2x or 9.5x results. The planner must still confirm
+  whether `Demand/Silo Load` is expected sales, target fill, refill quantity or
+  capacity, and whether it is per unit or network-wide. Evidence:
+  `docs/scratchpads/snowflake_verification_evidence.md` V1/V2;
+  `scripts/snowflake_verification.sql` blocks V1/V2. Status: `active`.
+
+- 2026-08-25: **Waste field sums are reproducible, but physical/valuation
+  semantics remain unverified; item-master coverage is only partially checked.**
+  V4 measured 5,699 rows across six units, 63 ingredients and 314 unit-days
+  (2026-06-01 through 2026-08-22), summing `WASTE_QTY_G` to 3,750.3 kg and
+  `WASTE_VALUE_EUR` to EUR 31,339. This is not one dish or unit. The row-level
+  waste/EOD ratio has median 0.771 and p90 0.912, a derivation warning rather
+  than proof. Do not call or share it as physical waste until Joel defines the
+  fields and valuation. V5 found 76 item rows/75 non-null IDs, one blank ID,
+  zero bad pack quantities, zero missing units, seven missing EANs, ten missing
+  Apicbase IDs, and no non-null duplicate/conflict exceptions. Evidence:
+  `docs/scratchpads/snowflake_verification_evidence.md` V4/V5;
+  `docs/descriptions/data_requirements.md` D3/D9. Status: `active`.
+
 - 2026-08-22: This repository is for Phase 2 supply-planning automation only:
   BOM explosion, time-phased inventory projection, netting, constraints,
-  delivery scheduling, and auditable order proposals. Phase 1 forecasting does
-  not exist yet and must remain a pluggable upstream input. Evidence:
+  delivery scheduling, and auditable order proposals. No approved live Phase 1
+  has been confirmed; Joel confirmed on 2026-08-25 that the catalogued forecast
+  models are abandoned previous-team models. Forecasting must remain a
+  pluggable upstream input rather than being embedded in this engine. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` sections 1-3. Status:
   `active`.
 
@@ -211,24 +362,61 @@ not a task log or a replacement for the detailed engineering brief.
   engineering. Evidence: that register and the backlog's question-to-gate
   matrix. Status: `active`.
 
+- 2026-08-25: **Question audiences are separated.** The already-sent Q1-Q13
+  questionnaire belongs to the person who builds and uses the Excel workbook;
+  it asks about their manual process, hidden logic, assumptions, overrides, and
+  known sources. It needs no correction or Snowflake terminology. Joel answered
+  the existing-model question: the four named models are abandoned. The only
+  immediate open-PO question is now answered: no PO data is currently ingested
+  into Snowflake to his knowledge. Valentin should identify the Ops source with
+  Deepali/Dor/Ilona, then coordinate ingestion/modeling with Joel. GitHub access to
+  `data-transformation` and a stable RSA-authenticated Snowflake service account
+  are separate setup actions. BOM joins, silo keys, menu coverage, stock events,
+  grain, freshness, and other technical matters are investigated through SQL
+  first. The waste-definition question is deferred until waste will be shared
+  or used for calibration. Evidence: `docs/descriptions/phase2_supply_planning_brief.md`
+  section 10 and `docs/plans/human_action_register.md` HA-01/HA-07/HA-13. Status:
+  `active`.
+
 ## Open high-impact questions
 
 These are intentionally unresolved and must not be silently converted into
 implementation assumptions:
 
 - Is the current `Demand/Silo Load` value portions sold per day or a silo refill
-  level?
+  level? **Narrowed 2026-08-24, not closed:** measured sales are far below the
+  sheet value at every dish in a representative week, which is strong evidence
+  against "portions sold". The remaining question is which non-demand quantity
+  it is — target fill, refill quantity, or physical silo capacity — and whether
+  it applies per unit or across all Rewe units. Testing the capacity hypothesis
+  requires an exact `RESOURCE_ID`/`DOCK_ID` to effective menu/recipe-slot map;
+  an ingredient-only join is invalid. Planner confirmation is still required.
+- Which repository owns each part of the target implementation: normalized
+  Snowflake input/output models in `data-transformation` versus the pure Phase 2
+  calculation engine in this repository? Inspect the data-model repository
+  after access is granted and decide explicitly so logic is not duplicated.
+- Which of `WASTE_QTY_G`, `STRANDED_QTY_G` and `SILO_END_OF_DAY_QTY_G` is
+  physical disposal, and how is `WASTE_VALUE_EUR` valued? Blocks the yield
+  factor.
+- Which operational system/sheet/process contains actual PO lines and expected
+  receipts, who owns it, and can it expose history through export/API for
+  ingestion? Snowflake currently has no PO ingestion to Joel's knowledge.
+- What is the committed forward-menu source/process? `INT_UNIT_DAY_MENU` ended
+  on 2026-08-24 when queried on 2026-08-25, while later `BASE_UCS_MENU` rows mix
+  operational-looking and pilot/demo/training/far-future/terminated records.
+- Is the master-data source system Apicbase rather than Xentral?
 - What is the exact stock-count timestamp and why does the legacy sheet use a
   2.5-day bridge?
-- Are lead times item-specific or supplier-specific, and where are open purchase
-  orders stored? Does the planner currently track those orders outside the
-  visible workbook?
+- Are planning lead times item-specific or supplier-specific? Does the planner
+  currently track the open-order pipeline outside the workbook while the live
+  system/source remains unidentified?
 - What constraints explain the differences between calculated and booked orders?
 - Is silo capacity binding, and does sealed or opened shelf life govern each
   item?
 - How many weeks ahead is the menu fixed and committed?
-- Which source systems/tables and read-only credentials will provide stock, open
-  POs, receipts, BOM, menu, sales, waste, and OOS?
+- Which catalogued Snowflake models are authoritative and operationally fit for
+  stock, BOM, menu, sales, waste and OOS, and how should the newly identified
+  Ops PO/receipt source be ingested and modeled? Read access itself is resolved.
 - Which Supabase project/region/owner and which user roles/auth policy should be
   used when durable storage and the UI begin?
 
