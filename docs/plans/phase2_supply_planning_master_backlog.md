@@ -1,7 +1,7 @@
 # Phase 2 Supply Planning — Master Backlog
 
 **Created:** 2026-08-22
-**Reconciled:** 2026-08-25 after scope correction
+**Reconciled:** 2026-08-26 after Excel-owner Q1-Q13 answers
 **Source of truth:** this file controls implementation order and status.
 **Detailed evidence:** `docs/descriptions/phase2_supply_planning_brief.md` and
 `docs/scratchpads/snowflake_verification_evidence.md`.
@@ -57,7 +57,8 @@ ERP dispatch integration and no proposal-approval workflow.
 | Full configurable Phase 2 policy | Not implemented |
 | Required Snowflake discovery SQL | Complete; no required rerun remains |
 | Live Snowflake adapters/output writes | Not implemented; access/output design pending |
-| Live PO source | Missing from Snowflake; Ops/data-platform workstream open |
+| Excel-owner Q1-Q13 | Received/reconciled; focused policy/source follow-ups remain |
+| Live PO source | Transgourmet pending-order process identified; normalized export/API and Snowflake ingestion missing |
 | Supabase configuration store | Planned, not created |
 | Internal configuration UI | Planned after config schemas/integration |
 
@@ -86,7 +87,7 @@ The detailed requests and owners are in `human_action_register.md`.
 
 | Gate | Needed for | Does not block |
 |---|---|---|
-| Excel-owner Q1-Q13 answers | Business interpretation and final legacy/improved sign-off | Synthetic implementation and adapter scaffolding |
+| Focused post-Q1-Q13 planner confirmations | Exact delivery-cell semantics, count/cut-off timing, capacity, menu horizon, and improved-policy sign-off | Synthetic/parameterized implementation and adapter scaffolding |
 | KW33/KW34 fixture handling decision | Committed golden fixture | Private/local validation |
 | Snowflake service account and `data-transformation` access | Live adapter tests and lineage inspection | Pure engine work |
 | Snowflake output ownership/schema/write pattern | End-to-end persistence | Output contract and writer interface |
@@ -106,6 +107,9 @@ The detailed requests and owners are in `human_action_register.md`.
 - [x] Document four positive-gap blank order cells.
 - [x] Document `Paprika - big` and `Mischsalat` missing from `Stock KW34`.
 - [x] Document Creme Fraiche/Schnittlauch pack-size conflicts and label drift.
+- [x] Reconcile the Excel-owner answers: combined central-prep demand semantics,
+      likely missed blank orders, fresh coverage windows, current/future lead
+      classes, master-data corrections, and Thursday/Monday cadence.
 - [x] Define daily Phase 1 input and three-level BOM contracts.
 - [x] Define source provenance and actionable validation errors.
 - [ ] Decide whether the real fixture may be committed, anonymized, or must
@@ -127,8 +131,8 @@ we replace its assumptions.
 - [ ] Implement the workbook-to-fixture extraction/adapter needed for actual
       KW33/KW34 rows.
 - [ ] Add golden assertions for all 27 filled order cells and 28 bridge cells.
-- [ ] Add explicit assertions for the four blanks, two missing fresh rows, and
-      master-data conflicts.
+- [ ] Add explicit assertions for the four likely missed blanks, two fresh rows
+      handled outside the stocked path, and owner-resolved master-data cases.
 - [ ] Implement and validate the fresh Sa/Mo/We/Fr legacy path.
 - [ ] Review all differences with the Excel owner and record explanations.
 
@@ -171,7 +175,9 @@ advanced optimization or infrastructure first.
 - [ ] Apply shelf-life/max-cover only when configured and expose a binding cap.
 - [ ] Apply pack, MOQ, and case rounding once at the end.
 - [ ] Report infeasible cases when rounding conflicts with a hard cap.
-- [ ] Implement fresh delivery-to-delivery coverage from actual daily forecast.
+- [ ] Implement fresh coverage from actual daily forecast using the confirmed
+      `Sat→Mon`, `Mon→Tue+Wed`, `Wed→Thu+Fri`, `Fri→Sat` service-day windows;
+      keep receipt-time/holiday semantics configurable and unapproved.
 - [ ] Produce internal `PlanningRecommendation` rows with derivations and
       exception codes; do not add workflow statuses or approvals.
 - [ ] Add focused tests for zero demand, long lead, empty/open pipeline, late
@@ -213,8 +219,11 @@ users a durable place to maintain Phase 2 rules.
   - the target Snowflake database/schema/table names;
   - whether result runs append or replace a latest view;
   - required read/write grants and scheduling owner.
-- [ ] Work with Deepali/Dor/Ilona to identify the PO source and have data
-      platform ingest a normalized PO/receipt history.
+- [x] Identify the current PO process: Transgourmet pending-order history/PDFs
+      are netted manually outside the workbook.
+- [ ] Obtain an approved sanitized export/API contract and have data platform
+      ingest normalized PO/receipt history; do not automate portal credentials
+      or PDF/Claude handling inside the engine.
 - [ ] Implement read adapters only for accepted sources with freshness,
       uniqueness, unit, key, and coverage checks.
 - [ ] Implement an idempotent Snowflake result writer.
@@ -251,6 +260,9 @@ users a durable place to maintain Phase 2 rules.
 - [ ] Run improved results beside the manual plan for representative weeks.
 - [ ] Capture reasons for overrides, blanks, emergency orders, and fresh-slot
       changes.
+- [ ] Include the now-known comparison reasons: off-sheet PO netting, freezer/
+      storage-driven split orders, likely missed blank orders, and fresh items
+      handled outside the stocked path.
 - [ ] Separate calculation differences from missing-source and policy effects.
 - [ ] Agree simple first-release measures: missing-demand coverage, projected
       stockout warnings, recommendation differences, and planner time.
@@ -318,16 +330,19 @@ send, ERP export, or a broad planning workflow.
    Supabase editable rules, internal config UI, no approval/dispatch workflow.
 2. [ ] Build or run the minimal real KW33/KW34 fixture locally; commit only
    after the recorded data-handling decision.
-3. [ ] Record the Excel-owner answers when received and map them to the legacy
-   and improved rules above.
+3. [x] Record the Excel-owner answers and map confirmed versus partial details
+   to legacy/improved rules, sources, and human gates.
 4. [ ] Ask Joel to confirm the Snowflake output ownership/schema/write pattern,
    finish service-account provisioning, and grant `data-transformation` access.
-5. [ ] Continue the Ops PO-source/ingestion workstream.
-6. [ ] Implement the small Phase 2 config contract and the remaining minimum
+5. [ ] Validate a sanitized Transgourmet export/API and continue normalized
+   PO/receipt ingestion with data platform.
+6. [ ] Arrange read-only Apicbase assessment for stock/item/BOM fields; accept
+   each domain separately because the owner reports stale master data.
+7. [ ] Implement the small Phase 2 config contract and the remaining minimum
    calculation rules; keep advanced calibration out of P0.
-7. [ ] Implement Snowflake adapters/result writer once source contracts and
+8. [ ] Implement Snowflake adapters/result writer once source contracts and
    access are accepted.
-8. [ ] Create Supabase/config UI only after the config contract is stable.
+9. [ ] Create Supabase/config UI only after the config contract is stable.
 
 ## Dated progress
 
@@ -344,3 +359,8 @@ send, ERP export, or a broad planning workflow.
   Snowflake owns operational inputs/results; Supabase plus an internal UI owns
   editable Phase 2 rules. Approval/dispatch workflows and speculative advanced
   optimization were removed from the active plan.
+- 2026-08-26: Excel-owner Q1-Q13 answers reconciled. Demand is a combined
+  three-unit central-prep forecast; Transgourmet pending orders are netted
+  off-sheet; fresh service windows and several master-data cases are confirmed;
+  current standard/fresh versus future-pod lead classes are separated. Focused
+  timing, calendar, capacity, menu, source-contract, and approval gates remain.

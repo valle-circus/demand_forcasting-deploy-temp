@@ -9,8 +9,10 @@ currently maintained in `Supply_Planning_Rewe.xlsx`.
 > synthetic data. The first improved file path can validate daily forecast,
 > menu, BOM, item, inventory, and open-PO inputs, explode demand, and project
 > inventory through time. All 32 tests pass. Required Snowflake verification is
-> complete, but the live forecast source, current PO source, production stock
-> mapping, and editable policy values still require the recorded follow-ups.
+> complete and the Excel-owner Q1-Q13 response is reconciled. The current PO
+> process is identified, but live forecast/PO/stock adapters, exact scheduling/
+> capacity rules, and approved editable policy values still require the focused
+> follow-ups.
 
 ## Phase boundary
 
@@ -44,14 +46,15 @@ Order  = ceil(max(0, Need - After))
 ```
 
 This reproduces all 27 filled KW34 `Order` cells and all 28 continuing-item
-bridge values at displayed precision. Four positive calculated gaps have blank
-order cells, two planned fresh ingredients are absent from the stock tab, and
-several item/pack mappings conflict. Those cases remain explicit evidence, not
-assumptions to silently repair.
+bridge values at displayed precision. The owner thinks the four positive-gap
+blank orders were missed; two planned fresh ingredients are handled outside the
+stocked path; and selected item/pack conflicts are now resolved. Historical
+cells remain explicit evidence, not values to silently repair.
 
-Fresh products use the workbook's Saturday/Monday/Wednesday/Friday
-delivery-to-delivery pattern. The exact operational meaning of those columns is
-still one of the questions already sent to the Excel owner.
+Fresh products use the owner-confirmed service windows `Sat→Mon`,
+`Mon→Tue+Wed`, `Wed→Thu+Fri`, and `Fri→Sat`. The weekday columns are delivery
+allocations, but whether their cells mean intended, placed, confirmed, or
+delivered packs still needs focused confirmation.
 
 ## Target architecture
 
@@ -81,7 +84,9 @@ and controlled recovery. They are not the long-term editing workflow.
 
 The intended calculation is:
 
-1. Read daily dish forecast by location.
+1. Read daily dish forecast by service location and map/aggregate it once to the
+   inventory/planning location. The manual three-unit forecast is already
+   combined at the central prep kitchen and must not be tripled.
 2. Validate that the dish is active in the menu and select the effective BOM.
 3. Explode `Dish → Silo / pre-mix → Ingredient` into daily grams.
 4. Aggregate shared ingredients by location and day.
@@ -131,13 +136,16 @@ There is no blocker to the next engineering tranche: real KW parity work and
 the small parameterized Phase 2 calculation can continue now. The items below
 block only the named later outcome.
 
-- The 13 Excel-owner answers block business interpretation and final parity
-  sign-off, not continued engineering.
+- The original 13 Excel-owner answers are received. Only the focused remaining
+  details—timestamps, delivery-cell status, calendars/cut-offs, capacity, menu
+  horizon, and policy approval—block their corresponding business sign-offs.
 - A real committed KW33/KW34 golden fixture needs the recorded data-handling
   decision; a private/local fixture can still be used.
 - Joel's service account, `data-transformation` access, and the target Snowflake
   output schema/write pattern are needed for live integration.
-- Ops must identify the actual PO source before complete production netting.
+- Transgourmet pending-order history is the current PO process, but an approved
+  normalized export/API and Snowflake ingestion are still needed for complete
+  production netting.
 - Supabase ownership/access is needed only when the configuration UI tranche
   begins.
 
@@ -153,6 +161,7 @@ No further required V1-V12 Snowflake verification query remains.
 | [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Phase ownership and source status |
 | [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Stable engine contracts and file schemas |
 | [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Exact human/access actions and their impact |
+| [`docs/reports/planner-questionnaire-review/report.html`](docs/reports/planner-questionnaire-review/report.html) | Sanitized Q1-Q13 clarification and follow-up report |
 | [`docs/scratchpads/snowflake_verification_evidence.md`](docs/scratchpads/snowflake_verification_evidence.md) | Durable V1-V12 evidence without private CSVs |
 | [`MEMORY.md`](MEMORY.md) | Durable decisions that survive handovers |
 

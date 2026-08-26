@@ -1,6 +1,7 @@
 # Phase 2 Canonical Data Contracts
 
-**Status:** v1 contracts and canonical CSV/netting tranche implemented on 2026-08-25
+**Status:** v1 contracts and canonical CSV/netting tranche implemented on
+2026-08-25; manual forecast/planning-location semantics reconciled 2026-08-26
 
 **Code:** `src/supply_planning/domain/models.py`
 
@@ -20,7 +21,14 @@ Snowflake / CSV / XLSX
           pure planning engine
 ```
 
-When a source uses different names or grains, its adapter must transform, validate, and document that mapping. The engine must not import a database client or reference source-specific table/column names.
+When a source uses different names or grains, its adapter must transform,
+validate, and document that mapping. In particular, service/sales locations may
+roll up to one inventory/planning location. The adapter must aggregate each
+service location exactly once and emit the planning `location_id` used by
+forecast, menu, stock, and POs. It must not replicate an already aggregated
+forecast across child units. The engine must not import a database client or
+reference source-specific table/column names. Add a separate effective-dated
+location-map dataset only when the accepted Phase 1 source requires it.
 
 ## 2. Shared conventions
 
@@ -42,7 +50,7 @@ When a source uses different names or grains, its adapter must transform, valida
 
 | Field | Type | Required | Meaning |
 |---|---|---:|---|
-| `location_id` | string | yes | Stable kitchen/site ID |
+| `location_id` | string | yes | Stable inventory/planning kitchen or site ID |
 | `location_name` | string | yes | Display name only |
 | `timezone` | string | yes | IANA timezone, e.g. `Europe/Berlin` |
 | `active` | boolean | yes | Soft-delete flag |
@@ -60,7 +68,13 @@ When a source uses different names or grains, its adapter must transform, valida
 | `forecast_version` | string | yes | Manual/file/model version |
 | `provenance` | enum | yes | Value provenance |
 
-For the KW34 fixture, the weekly manual value is repeated across applicable service dates under an explicit legacy assumption. This does not decide whether `Demand/Silo Load` ultimately means sales demand, loading, or a capacity-constrained plan.
+For the KW34 fixture, the weekly manual value is repeated across applicable
+service dates under an explicit legacy assumption. The Excel owner confirmed
+that `Demand/Silo Load` is expected dishes sold per day across three REWE sales
+units combined at the central prep kitchen. It is not physical silo capacity.
+The fixture therefore uses one central planning `location_id`; future per-unit
+forecasts must be mapped/aggregated to that location rather than added on top of
+the combined manual value.
 
 ### 3.3 `menu_calendar`
 
@@ -108,7 +122,10 @@ The engine preserves the `Dish -> Silo -> Item` path during explosion. It may ag
 | `active` | boolean | yes | Soft-delete flag |
 | `provenance` | enum | yes | Source/default status |
 
-Aliases and supplier article numbers belong in mapping/supplier-item data, not in `item_id`.
+Aliases and supplier article numbers belong in mapping/supplier-item data, not
+in `item_id`. The owner-confirmed current examples are Creme Fraiche `5000 g`,
+Schnittlauch as the distinct `250 g` product, and `Oel` mapped to
+`Sonnenblumenoel`; none should be joined by display name in a live adapter.
 
 ### 3.6 `suppliers`
 
@@ -169,7 +186,11 @@ is deferred until a real requirement proves it necessary.
 | `partial_pack_g` | decimal | yes | Usable partial-pack grams, default zero |
 | `provenance` | enum | yes | Observed/manual/default status |
 
-Lot/expiry inventory is intentionally separate and optional until a source is available.
+Lot/expiry inventory is intentionally separate and optional until a source is
+available. The current manual stock process excludes expired, damaged,
+reserved, and otherwise unusable goods before upload to Apicbase. Exact count
+time and partial/open-pack representation remain adapter-acceptance questions;
+do not infer `partial_pack_g = 0` from their absence.
 
 ### 3.10 `purchase_orders`
 
@@ -188,7 +209,12 @@ Lot/expiry inventory is intentionally separate and optional until a source is av
 | `status` | enum | yes | `open`, `confirmed`, `partially_received`, `closed`, or `cancelled` |
 | `provenance` | enum | yes | Observed/manual/default status |
 
-An observed query returning zero rows is valid. An unavailable source represented by an empty placeholder is not equivalent and blocks shadow/production use.
+An observed query returning zero rows is valid. An unavailable source represented
+by an empty placeholder is not equivalent and blocks shadow/production use.
+The current manual process reads Transgourmet pending orders from downloaded
+PDFs and nets them outside the workbook. That identifies a candidate source but
+does not waive any canonical field: a portal export/API adapter must still
+provide stable line IDs, outstanding units, status, and expected receipt time.
 
 ### 3.11 Implemented canonical CSV package
 

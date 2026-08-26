@@ -1,0 +1,364 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "title": "What the Planner Answers Change",
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# What the Planner Answers Change"
+      },
+      {
+        "id": "executive-summary",
+        "type": "markdown",
+        "body": "## Executive Summary\n\n- **The answers remove the broad questionnaire blocker.** Three topics are specific enough to update the manual baseline, nine are partially clarified, and one is internally inconsistent; the remaining work is a focused set of source and policy confirmations.\n- **The largest design clarification is location grain.** `Demand/Silo Load` is sold-dish forecast per day across three REWE sales units combined at one central prep kitchen. Phase 2 must map service locations to the central planning location and must not copy this aggregate to every unit.\n- **The current process validates core target choices.** Open orders are netted, fresh demand is planned by delivery window, storage capacity can split orders, and Thursday planning is rechecked Monday. The automated engine should make those steps dated, explicit, and auditable.\n- **Production data are still not ready.** Transgourmet and Apicbase are now named candidates, but normalized exports/APIs, timestamps, status meanings, freshness, and owner-approved policies remain required before shadow or production promotion.",
+        "sourceId": "answer-review"
+      },
+      {
+        "id": "question-status-intro",
+        "type": "markdown",
+        "body": "## The answers narrow the blockers instead of eliminating every decision\n\nNine of the 13 question groups are only partially resolved, while three are confirmed for the manual baseline and one is inconclusive. The confirmed rows can update legacy/business interpretation now. Partial rows provide useful defaults or process facts but still lack exact fields, calendars, ownership, or approval. The single inconclusive answer must not be used as a global claim that data do not exist.",
+        "sourceId": "status-count-query"
+      },
+      {
+        "id": "question-status-chart",
+        "type": "chart",
+        "chartId": "answer-status-counts"
+      },
+      {
+        "id": "question-status-implication",
+        "type": "markdown",
+        "body": "The status count is a sequencing aid, not a score. Most answers materially narrow implementation, but only the detailed table shows which exact source or policy proof is still needed before acceptance."
+      },
+      {
+        "id": "question-status-table",
+        "type": "table",
+        "tableId": "question-status"
+      },
+      {
+        "id": "architecture-finding",
+        "type": "markdown",
+        "body": "## Central preparation changes how location keys must work\n\nThe manual forecast already combines three sales units because inventory and purchasing are held at one prep kitchen. The canonical daily contract can still scale to per-unit Phase 1 forecasts, but an adapter must roll those units into exactly one planning location before netting. Treating the combined workbook number as a per-unit value would triple demand.\n\nThis is a source-to-engine mapping rule, not Phase 1 forecasting logic. The pure engine continues to consume daily demand by stable planning-location and dish IDs.",
+        "sourceId": "engineering-brief"
+      },
+      {
+        "id": "process-finding",
+        "type": "markdown",
+        "body": "## The manual process confirms four target capabilities\n\n**First, open POs must be first-class dated inputs.** The planner already subtracts pending orders, but does so through supplier-portal PDFs outside the workbook. The target should preserve this business behavior through normalized PO lines rather than reproduce the PDF/AI workaround.\n\n**Second, one requirement may become several dated receipts.** Penne is split because of freezer space and frequent replenishment. The result must distinguish gross need, scheduled receipt quantities, and a visible capacity exception.\n\n**Third, fresh coverage follows service days, not column headings.** Saturday delivery covers Monday; Monday covers Tuesday and Wednesday; Wednesday covers Thursday and Friday; Friday covers Saturday. The engine must sum those actual daily forecasts.\n\n**Fourth, planning is not one weekly snapshot.** Thursday creates the next-week plan and Monday inventory triggers a sufficiency recheck. The same open order must not be counted twice across those runs.",
+        "sourceId": "answer-review"
+      },
+      {
+        "id": "recommended-next-steps",
+        "type": "markdown",
+        "body": "## Recommended next steps\n\n1. Rotate the supplier-portal credential that was exposed in the supplied response; keep all replacement credentials in an approved secret-sharing system.\n2. Obtain a sanitized Transgourmet export/API example with stable line/article IDs, outstanding quantity, status, order/expected-receipt timestamps, partial receipts, cancellations, and update time; then hand the accepted contract to data platform for Snowflake ingestion.\n3. Arrange read-only Apicbase access and assess stock, BOM, and item-master fitness separately, because the stock process is current while the owner reports stale master data.\n4. Confirm the service-location to central-planning-location mapping and the source/version of the two-week consumption-based forecast.\n5. Run one short planner walkthrough for the remaining delivery-cell, stock-time, cut-off/calendar, capacity, menu-horizon, cadence, and policy questions in HA-11.\n6. Continue the parameterized M2 config/scheduling implementation and scenario tests, but keep the unapproved values labelled and block shadow/production promotion where source contracts remain incomplete.",
+        "sourceId": "human-actions"
+      },
+      {
+        "id": "further-questions",
+        "type": "markdown",
+        "body": "## Further Questions\n\nThe next conversation should focus on eight grouped topics, not resend Q1-Q13: PO export/status semantics; central planning-location mapping and forecast source; lead-time/cut-off calendars; delivery-cell status and storage capacity; exact stock count/partial packs; forward-menu horizon and pod cancellations; Thursday/Monday ownership and urgent orders; and approval of interim yield, safety, shelf-life, max-cover, pack, and article-ID policy.\n\nThe answer `currently no` for other data also needs one clarification: whether those datasets truly do not exist or are simply not used or trusted in the weekly workflow.",
+        "sourceId": "human-actions"
+      },
+      {
+        "id": "caveats",
+        "type": "markdown",
+        "body": "## Caveats and Assumptions\n\nThe questionnaire is owner-authored process evidence, not a validated supplier API schema, source-system SLA, or complete data catalogue. `Confirmed` in this report means sufficiently specific to update the manual baseline; it does not mean production-source acceptance. The four blank KW34 orders are classified as likely misses from owner recollection, not from supplier records. No application-code policy was changed because the exact values and calendars needed for activation are still incomplete.",
+        "sourceId": "answer-review"
+      }
+    ],
+    "charts": [
+      {
+        "id": "answer-status-counts",
+        "title": "Q1-Q13 answer assessments",
+        "description": "Question groups by reconciliation status for the manual baseline; 13 groups reviewed on August 26, 2026.",
+        "showDescription": true,
+        "dataset": "status_counts",
+        "type": "horizontalBar",
+        "intent": "comparison",
+        "question": "How many question groups are confirmed, partial, or inconclusive for the manual baseline?",
+        "rationale": "Horizontal bars support direct comparison of the three status labels; the 13-row table carries the detailed audit.",
+        "comparisonContext": {
+          "denominator": "13 question groups",
+          "grain": "question group",
+          "unit": "groups"
+        },
+        "encodings": {
+          "x": {
+            "field": "assessment",
+            "type": "nominal",
+            "label": "Assessment"
+          },
+          "y": {
+            "field": "question_count",
+            "type": "quantitative",
+            "label": "Question groups"
+          }
+        },
+        "palette": {
+          "kind": "sequential",
+          "name": "blue"
+        },
+        "labels": {
+          "values": "all"
+        },
+        "source": {
+          "id": "status-count-query",
+          "label": "Answer-status count query",
+          "path": "docs/reports/planner-questionnaire-review/answer_status_counts.sql",
+          "query": {
+            "engine": "SQLite",
+            "language": "SQL",
+            "executed_at": "2026-08-26T09:01:09+02:00",
+            "description": "Count the reviewed Q1-Q13 assessment categories and retain their question IDs and share of all 13 groups.",
+            "sql": "WITH question_status(question_number, assessment) AS (\n    VALUES\n        (1, 'Partial'),\n        (2, 'Partial'),\n        (3, 'Partial'),\n        (4, 'Partial'),\n        (5, 'Confirmed baseline'),\n        (6, 'Partial'),\n        (7, 'Partial'),\n        (8, 'Partial'),\n        (9, 'Confirmed baseline'),\n        (10, 'Confirmed baseline'),\n        (11, 'Partial'),\n        (12, 'Inconclusive'),\n        (13, 'Partial')\n)\nSELECT\n    assessment,\n    COUNT(*) AS question_count,\n    GROUP_CONCAT('Q' || question_number, ', ') AS question_ids,\n    ROUND(CAST(COUNT(*) AS REAL) / 13.0, 6) AS share_of_13\nFROM question_status\nGROUP BY assessment\nORDER BY CASE assessment\n    WHEN 'Confirmed baseline' THEN 1\n    WHEN 'Partial' THEN 2\n    ELSE 3\nEND;",
+            "metric_definitions": [
+              "question_count = count of the 13 original question groups assigned to each reviewed assessment",
+              "share_of_13 = question_count divided by 13, rounded to six decimal places"
+            ]
+          }
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "question-status",
+        "title": "Q1-Q13 reconciliation",
+        "description": "Owner response reviewed August 26, 2026; assessment is for the manual baseline, not production-source acceptance.",
+        "showDescription": true,
+        "dataset": "question_status",
+        "columns": [
+          { "field": "number", "label": "Q" },
+          { "field": "topic", "label": "Topic" },
+          { "field": "assessment", "label": "Assessment" },
+          { "field": "clarified", "label": "Clarified" },
+          { "field": "remaining", "label": "Still needed" },
+          { "field": "project_effect", "label": "Project effect" }
+        ],
+        "defaultSort": {
+          "field": "number",
+          "direction": "asc"
+        },
+        "density": "dense",
+        "source": {
+          "id": "question-detail-query",
+          "label": "Question reconciliation query",
+          "path": "docs/reports/planner-questionnaire-review/question_reconciliation.sql",
+          "query": {
+            "engine": "SQLite",
+            "language": "SQL",
+            "executed_at": "2026-08-26T09:01:09+02:00",
+            "description": "Return the reviewed question-by-question assessment, clarified evidence, remaining proof, and project effect in Q1-Q13 order.",
+            "sql": "WITH q(number,topic,assessment,clarified,remaining,project_effect) AS (VALUES (1,'In-transit','Partial','Pending Transgourmet orders are downloaded and netted outside the workbook; four KW34 blanks were probably missed.','Export/API, line/status/remaining-qty/receipt fields, partial receipts and cancellations.','Keep dated open-PO netting; source identification is closed, production ingestion is not.'),(2,'Lead times','Partial','Current standard ~3 days, fresh ~5 days, future pods ~1 month.','Business/calendar-day semantics, cut-offs, item exceptions and pod go-live.','Remove global 4-week assumption; keep supplier/item config.'),(3,'Shelf life','Partial','No explicit current MHD cap for TK/Kuehl/RT; fresh ~3 days; future pods ~1 year.','Sealed/opened meaning, item exceptions and approved hard-cap/max-cover rules.','Use explicit optional policy; do not infer infinite shelf life.'),(4,'S/M/W/Fr','Partial','Delivery-day allocations; Penne split/reduced for freezer space and frequent replenishment.','Intended vs placed vs confirmed vs delivered status, units and exact capacity limits.','Separate gross need, dated receipt recommendations and capacity exceptions.'),(5,'Demand/Silo Load','Confirmed baseline','Sold-dish forecast/day across three REWE units combined at central prep; two-week consumption plus campaigns and approval.','Daily Phase 1 source/version and stable service-to-planning-location map.','Treat as demand, not capacity; never duplicate the combined value per unit.'),(6,'Stock count','Partial','Operators upload manual usable-stock counts to Apicbase and exclude unusable goods.','Exact timestamp, partial/open packs, API fields and legacy 2.5-day reason.','Apicbase is a stock candidate; timestamped canonical contract remains correct.'),(7,'Menu changes','Partial','Planner drives menus; Transgourmet orders can be cancelled, pods cannot.','Committed horizon, versioned source, publication and pod last-order rule.','Keep forward-menu coverage and late/non-cancellable PO exceptions.'),(8,'20% buffer','Partial','Broad assumption covering multiple operational scenarios.','Uniform applicability, override owner and separate yield/safety approval.','Keep 1.20 only in legacy; improved values remain explicit/unapproved.'),(9,'Master data','Confirmed examples','5,000 g Creme Fraiche; 250 g current Schnittlauch; Oel equals Sonnenblumenoel; fresh examples; article numbers exist.','Canonical ID precedence, extract, owner/freshness and accepted Excel-to-master migration.','Update fixture expectations; retain stable-ID and source-acceptance gates.'),(10,'Fresh products','Confirmed baseline','Sat->Mon, Mon->Tue+Wed, Wed->Thu+Fri, Fri->Sat.','Receipt times, holidays and item exceptions.','Implement actual service-day sums using these baseline windows.'),(11,'Weekly process','Partial','Thursday main plan; Monday inventory and sufficiency recheck.','Exact times, urgent path, final decision/order owner and override recording.','Support repeatable re-planning without duplicate PO counting.'),(12,'Other data','Inconclusive','Planner says no other data currently available for the listed topics.','Reconcile with the forecast sheet, Apicbase, Transgourmet history and Snowflake candidates.','Do not infer global absence or remove later calibration/source work.'),(13,'Planner experience','Partial','Historical stockouts came from unclear delivery models; step-by-step automation is considered viable.','Explicit human-judgement boundary and explanation/override requirements.','Preserve derivations and exceptions; do not add approval/dispatch workflow.')) SELECT number,topic,assessment,clarified,remaining,project_effect FROM q ORDER BY number;"
+          }
+        }
+      }
+    ],
+    "sources": [
+      {
+        "id": "answer-review",
+        "label": "Sanitized Q1-Q13 reconciliation",
+        "path": "docs/reports/planner-questionnaire-review/source_notes.md",
+        "description": "Credential-free, question-by-question extraction of the supplied planner response, conflicts, and validation notes."
+      },
+      {
+        "id": "engineering-brief",
+        "label": "Phase 2 engineering brief",
+        "path": "docs/descriptions/phase2_supply_planning_brief.md",
+        "description": "Current workbook interpretation, target logic, architecture, and received-answer reconciliation."
+      },
+      {
+        "id": "human-actions",
+        "label": "Human action register",
+        "path": "docs/plans/human_action_register.md",
+        "description": "Owners, exact remaining requests, fallbacks, and stage-gate impact."
+      },
+      {
+        "id": "status-count-query",
+        "label": "Answer-status count query",
+        "path": "docs/reports/planner-questionnaire-review/answer_status_counts.sql",
+        "query": {
+          "engine": "SQLite",
+          "language": "SQL",
+          "executed_at": "2026-08-26T09:01:09+02:00",
+          "description": "Count the reviewed Q1-Q13 assessment categories and retain their question IDs and share of all 13 groups.",
+          "sql": "WITH question_status(question_number, assessment) AS (\n    VALUES\n        (1, 'Partial'),\n        (2, 'Partial'),\n        (3, 'Partial'),\n        (4, 'Partial'),\n        (5, 'Confirmed baseline'),\n        (6, 'Partial'),\n        (7, 'Partial'),\n        (8, 'Partial'),\n        (9, 'Confirmed baseline'),\n        (10, 'Confirmed baseline'),\n        (11, 'Partial'),\n        (12, 'Inconclusive'),\n        (13, 'Partial')\n)\nSELECT\n    assessment,\n    COUNT(*) AS question_count,\n    GROUP_CONCAT('Q' || question_number, ', ') AS question_ids,\n    ROUND(CAST(COUNT(*) AS REAL) / 13.0, 6) AS share_of_13\nFROM question_status\nGROUP BY assessment\nORDER BY CASE assessment\n    WHEN 'Confirmed baseline' THEN 1\n    WHEN 'Partial' THEN 2\n    ELSE 3\nEND;",
+          "metric_definitions": [
+            "question_count = count of the 13 original question groups assigned to each reviewed assessment",
+            "share_of_13 = question_count divided by 13, rounded to six decimal places"
+          ]
+        }
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "status": "ready",
+    "generatedAt": "2026-08-26T09:01:09+02:00",
+    "datasets": {
+      "status_counts": [
+        {
+          "assessment": "Confirmed baseline",
+          "question_count": 3,
+          "question_ids": "Q5, Q9, Q10",
+          "share_of_13": 0.230769
+        },
+        {
+          "assessment": "Partial",
+          "question_count": 9,
+          "question_ids": "Q1, Q2, Q3, Q4, Q6, Q7, Q8, Q11, Q13",
+          "share_of_13": 0.692308
+        },
+        {
+          "assessment": "Inconclusive",
+          "question_count": 1,
+          "question_ids": "Q12",
+          "share_of_13": 0.076923
+        }
+      ],
+      "question_status": [
+        {
+          "number": 1,
+          "topic": "In-transit",
+          "assessment": "Partial",
+          "clarified": "Pending Transgourmet orders are downloaded and netted outside the workbook; four KW34 blanks were probably missed.",
+          "remaining": "Export/API, line/status/remaining-qty/receipt fields, partial receipts and cancellations.",
+          "project_effect": "Keep dated open-PO netting; source identification is closed, production ingestion is not."
+        },
+        {
+          "number": 2,
+          "topic": "Lead times",
+          "assessment": "Partial",
+          "clarified": "Current standard ~3 days, fresh ~5 days, future pods ~1 month.",
+          "remaining": "Business/calendar-day semantics, cut-offs, item exceptions and pod go-live.",
+          "project_effect": "Remove global 4-week assumption; keep supplier/item config."
+        },
+        {
+          "number": 3,
+          "topic": "Shelf life",
+          "assessment": "Partial",
+          "clarified": "No explicit current MHD cap for TK/Kuehl/RT; fresh ~3 days; future pods ~1 year.",
+          "remaining": "Sealed/opened meaning, item exceptions and approved hard-cap/max-cover rules.",
+          "project_effect": "Use explicit optional policy; do not infer infinite shelf life."
+        },
+        {
+          "number": 4,
+          "topic": "S/M/W/Fr",
+          "assessment": "Partial",
+          "clarified": "Delivery-day allocations; Penne split/reduced for freezer space and frequent replenishment.",
+          "remaining": "Intended vs placed vs confirmed vs delivered status, units and exact capacity limits.",
+          "project_effect": "Separate gross need, dated receipt recommendations and capacity exceptions."
+        },
+        {
+          "number": 5,
+          "topic": "Demand/Silo Load",
+          "assessment": "Confirmed baseline",
+          "clarified": "Sold-dish forecast/day across three REWE units combined at central prep; two-week consumption plus campaigns and approval.",
+          "remaining": "Daily Phase 1 source/version and stable service-to-planning-location map.",
+          "project_effect": "Treat as demand, not capacity; never duplicate the combined value per unit."
+        },
+        {
+          "number": 6,
+          "topic": "Stock count",
+          "assessment": "Partial",
+          "clarified": "Operators upload manual usable-stock counts to Apicbase and exclude unusable goods.",
+          "remaining": "Exact timestamp, partial/open packs, API fields and legacy 2.5-day reason.",
+          "project_effect": "Apicbase is a stock candidate; timestamped canonical contract remains correct."
+        },
+        {
+          "number": 7,
+          "topic": "Menu changes",
+          "assessment": "Partial",
+          "clarified": "Planner drives menus; Transgourmet orders can be cancelled, pods cannot.",
+          "remaining": "Committed horizon, versioned source, publication and pod last-order rule.",
+          "project_effect": "Keep forward-menu coverage and late/non-cancellable PO exceptions."
+        },
+        {
+          "number": 8,
+          "topic": "20% buffer",
+          "assessment": "Partial",
+          "clarified": "Broad assumption covering multiple operational scenarios.",
+          "remaining": "Uniform applicability, override owner and separate yield/safety approval.",
+          "project_effect": "Keep 1.20 only in legacy; improved values remain explicit/unapproved."
+        },
+        {
+          "number": 9,
+          "topic": "Master data",
+          "assessment": "Confirmed examples",
+          "clarified": "5,000 g Creme Fraiche; 250 g current Schnittlauch; Oel equals Sonnenblumenoel; fresh examples; article numbers exist.",
+          "remaining": "Canonical ID precedence, extract, owner/freshness and accepted Excel-to-master migration.",
+          "project_effect": "Update fixture expectations; retain stable-ID and source-acceptance gates."
+        },
+        {
+          "number": 10,
+          "topic": "Fresh products",
+          "assessment": "Confirmed baseline",
+          "clarified": "Sat->Mon, Mon->Tue+Wed, Wed->Thu+Fri, Fri->Sat.",
+          "remaining": "Receipt times, holidays and item exceptions.",
+          "project_effect": "Implement actual service-day sums using these baseline windows."
+        },
+        {
+          "number": 11,
+          "topic": "Weekly process",
+          "assessment": "Partial",
+          "clarified": "Thursday main plan; Monday inventory and sufficiency recheck.",
+          "remaining": "Exact times, urgent path, final decision/order owner and override recording.",
+          "project_effect": "Support repeatable re-planning without duplicate PO counting."
+        },
+        {
+          "number": 12,
+          "topic": "Other data",
+          "assessment": "Inconclusive",
+          "clarified": "Planner says no other data currently available for the listed topics.",
+          "remaining": "Reconcile with the forecast sheet, Apicbase, Transgourmet history and Snowflake candidates.",
+          "project_effect": "Do not infer global absence or remove later calibration/source work."
+        },
+        {
+          "number": 13,
+          "topic": "Planner experience",
+          "assessment": "Partial",
+          "clarified": "Historical stockouts came from unclear delivery models; step-by-step automation is considered viable.",
+          "remaining": "Explicit human-judgement boundary and explanation/override requirements.",
+          "project_effect": "Preserve derivations and exceptions; do not add approval/dispatch workflow."
+        }
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    {
+      "id": "answer-review",
+      "label": "Sanitized Q1-Q13 reconciliation",
+      "path": "docs/reports/planner-questionnaire-review/source_notes.md",
+      "description": "Credential-free, question-by-question extraction of the supplied planner response, conflicts, and validation notes."
+    },
+    {
+      "id": "engineering-brief",
+      "label": "Phase 2 engineering brief",
+      "path": "docs/descriptions/phase2_supply_planning_brief.md",
+      "description": "Current workbook interpretation, target logic, architecture, and received-answer reconciliation."
+    },
+    {
+      "id": "human-actions",
+      "label": "Human action register",
+      "path": "docs/plans/human_action_register.md",
+      "description": "Owners, exact remaining requests, fallbacks, and stage-gate impact."
+    },
+    {
+      "id": "status-count-query",
+      "label": "Answer-status count query",
+      "path": "docs/reports/planner-questionnaire-review/answer_status_counts.sql",
+      "query": {
+        "engine": "SQLite",
+        "language": "SQL",
+        "executed_at": "2026-08-26T09:01:09+02:00",
+        "description": "Count the reviewed Q1-Q13 assessment categories and retain their question IDs and share of all 13 groups.",
+        "sql": "WITH question_status(question_number, assessment) AS (\n    VALUES\n        (1, 'Partial'),\n        (2, 'Partial'),\n        (3, 'Partial'),\n        (4, 'Partial'),\n        (5, 'Confirmed baseline'),\n        (6, 'Partial'),\n        (7, 'Partial'),\n        (8, 'Partial'),\n        (9, 'Confirmed baseline'),\n        (10, 'Confirmed baseline'),\n        (11, 'Partial'),\n        (12, 'Inconclusive'),\n        (13, 'Partial')\n)\nSELECT\n    assessment,\n    COUNT(*) AS question_count,\n    GROUP_CONCAT('Q' || question_number, ', ') AS question_ids,\n    ROUND(CAST(COUNT(*) AS REAL) / 13.0, 6) AS share_of_13\nFROM question_status\nGROUP BY assessment\nORDER BY CASE assessment\n    WHEN 'Confirmed baseline' THEN 1\n    WHEN 'Partial' THEN 2\n    ELSE 3\nEND;",
+        "metric_definitions": [
+          "question_count = count of the 13 original question groups assigned to each reviewed assessment",
+          "share_of_13 = question_count divided by 13, rounded to six decimal places"
+        ]
+      }
+    }
+  ]
+}

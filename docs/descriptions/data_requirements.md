@@ -1,9 +1,9 @@
 # Phase 2 — Data Requirements and Source Status
 
-**Status:** reconciled through 2026-08-25 after reviewing the Lightdash results,
-the `CIRCUS_MODELS_READER` information-schema exports, and measured V1-V12
-outputs. This is the authoritative source-status document. Detailed counts and
-tested zero-row diagnostics are preserved in
+**Status:** reconciled through 2026-08-26 after reviewing the Lightdash results,
+the `CIRCUS_MODELS_READER` information-schema exports, measured V1-V12 outputs,
+and the Excel owner's Q1-Q13 response. This is the authoritative source-status
+document. Detailed counts and tested zero-row diagnostics are preserved in
 `docs/scratchpads/snowflake_verification_evidence.md`. The earlier
 build-sequencing report and `scripts/snowflake_discovery.sql` are historical
 evidence only.
@@ -28,8 +28,10 @@ and must not be used to prove that data is absent elsewhere.
 ### Phase ownership and storage
 
 - **Phase 1, outside this repository:** produces forecast portions at
-  `location × dish × service_date` grain. Historical sales, OOS, and related
-  demand signals belong primarily to forecasting.
+  `service location × dish × service_date` grain. When purchasing/stock is
+  centralized, the source or adapter must map service locations to one stable
+  inventory/planning location and aggregate once. Historical sales, OOS, and
+  related demand signals belong primarily to forecasting.
 - **Phase 2, this repository:** consumes that forecast and calculates
   ingredient/purchase requirements from menu/BOM, stock, open POs, lead time,
   shelf life, pack/MOQ/case, storage behaviour, and simple delivery rules.
@@ -77,12 +79,14 @@ both repositories.
 106 lines across 35 POs, all `Closed`, with ordered quantity equal to delivered
 quantity, no undelivered lines, and a last sync on 2025-10-20. Joel then
 confirmed that, to his knowledge, **no purchase-order data is currently
-ingested into Snowflake**. Source discovery has moved to Ops: Deepali, Dor, and
-Ilona can identify how POs and expected deliveries are currently tracked;
-Deepali is the likely detailed process owner. Once the source is known, Joel's
-team can establish ingestion, potentially with Fivetran, and publish a tested
-normalized model. This is a **production-netting/M4 blocker**, not a blocker
-to the pure engine or to manual/file PO scenarios.
+ingested into Snowflake**. The Excel owner has since identified Transgourmet
+order history as the current pending-order source: PDFs are downloaded and
+analysed outside the workbook before final quantities are entered. Source
+identification is therefore closed, while export/API fitness, field semantics,
+history, ownership, and normalized ingestion remain open. Joel's team can
+establish ingestion once an approved sanitized example is available. This is a
+**production-netting/M4 blocker**, not a blocker to the pure engine or to
+manual/file PO scenarios.
 
 Joel will create a stable Snowflake service account authenticated with RSA
 credentials shared through 1Password. This resolves the intended connection
@@ -192,24 +196,59 @@ How this matrix is used:
 - `D1`-`D4`, `D7`, and historical receipt analysis in `D12` are reference or
   later calibration work; they do not block the minimum Phase 2 engine.
 
+### Interim V1 source map — decided 2026-08-26
+
+The first planner-feedback run uses the existing `Supply_Planning_Rewe.xlsx`
+week as one historical fixture. It does not require another data request to the
+Excel owner before the run. Every value extracted from the workbook must retain
+its workbook/tab/week provenance. Workbook data are evidence for that historical
+run, not a recurring operational source.
+
+For recurring file-based runs, use a manual, versioned CSV source of truth until
+an accepted automated source is available. Operational sources should ultimately
+be published to Snowflake; editable planning policy should ultimately be stored
+in Supabase. A table that merely exists in Snowflake is a candidate, not an
+accepted source.
+
+| Information | Historical feedback V1 | Interim recurring source of truth | Intended automated source | Current status / next action |
+|---|---|---|---|---|
+| Comparison baseline | Original KW33/KW34 workbook, including observed final quantities | Not applicable | None required | **AVAILABLE.** Use read-only as the historical comparison fixture; do not commit raw workbook data without approval |
+| Daily forecast | `Demand/Silo Load` and week context from the original workbook | Versioned `forecast_daily.csv`, manually supplied by Phase 1 | New Phase 1 daily forecast table in Snowflake | **TARGET KNOWN, TABLE OPEN.** Existing `FACT_CG_*_FORECASTS` models are abandoned; do not use them as live sources |
+| Menu by service date | Original workbook week/tabs | Versioned `menu_calendar.csv`; it may be produced from the Phase 1 file only if Phase 1 explicitly carries the complete active dish/date schedule | Accepted forward-menu model in Snowflake | **SOURCE UNCLEAR.** Historical Snowflake menu candidates exist, but the current committed forward-menu source/horizon is not accepted |
+| BOM / grams per portion | Use workbook values that are actually present and label any derived ingredient requirement as legacy evidence, not as a complete authoritative BOM | Versioned `bom_lines.csv` from a reviewed export | Accepted BOM model in Snowflake, potentially sourced from Apicbase or the existing recipe models | **AUTHORITY UNCLEAR.** Snowflake has a strong flattened/versioned candidate; Apicbase is intended but reported stale. Validate the read-only endpoint/export rather than assuming authority |
+| Item master, pack size, unit, storage class | Original workbook values plus the owner-confirmed corrections | Versioned `items.csv` maintained manually from the best reviewed export | Accepted item model in Snowflake, potentially sourced from Apicbase | **AUTHORITY UNCLEAR.** Request Apicbase item/pack endpoints or exports and validate freshness; Excel remains the current operational fallback |
+| Current usable stock | Historical `Stock KWxx` values from the original workbook | Versioned `inventory_snapshots.csv` from the current manual count or an Apicbase export | Snowflake stock model after an Apicbase source is accepted/ingested | **ACCESS/CONTRACT OPEN.** Request the Apicbase stock endpoint/export, timestamp, unit, usable-stock semantics, and partial-pack representation |
+| Open POs / in-transit | Not required to create the workbook-only legacy fixture; use only if available to explain off-sheet historical overrides | Raw manual Transgourmet download kept outside git, transformed into versioned `open_pos.csv` | Normalized Snowflake PO table after Transgourmet API ingestion | **INTERIM DECIDED.** Manual raw-file-to-CSV flow now; Transgourmet API later. Snowflake has no accepted live PO table |
+| Cross-system item mapping | Workbook labels may be used only inside the historical fixture with an explicit mapping record | Manually maintained mapping from canonical `item_id` to Apicbase ID and Transgourmet article number | Accepted normalized item/supplier-item mapping in Snowflake | **MISSING.** Request available IDs/article fields with the Apicbase assessment and map Transgourmet lines before producing `open_pos.csv` |
+| Lead time, shelf life, delivery windows, safety/yield, MOQ/case, capacity | Workbook constants and received owner answers, explicitly labelled as legacy or provisional | Versioned manual config CSV/YAML maintained by the planning owner | Supabase editable configuration | **MANUAL SOURCE OF TRUTH.** Exact policies can remain provisional for the first comparison and must not be inferred from operational observations |
+
+The immediate external request is therefore limited to read-only Apicbase
+access/documentation or exports for three domains—current stock, BOM/recipes,
+and item master/pack sizes—plus available IDs needed to map Transgourmet article
+numbers. API access is desirable for automation but is not required if a
+reviewed manual export can populate the interim CSVs.
+
 | # | Planning need | Best current candidate | Status and remaining proof |
 |---|---|---|---|
-| D0 | Daily dish-demand forecast input | `REPORTING.FACT_CG_DISH_DEMAND_FORECASTS`; ingredient forecast as derived/reference output | **MEASURED/ABANDONED OUTPUT; reference only.** Five current dates, one location, 23 PLUs/day; tested candidate-key checks are clean. Ingredient follow-up finds placeholder rows and one stable ID mixing `g`/`ml`, so it is not a canonical engine input. A replacement's method, owner, coverage, cutoff/timezone, freshness SLA, unit contract, and acceptance remain open; Phase 1 stays pluggable |
+| D0 | Daily dish-demand forecast input | Current manual forecast in a separate Google Sheet; `REPORTING.FACT_CG_DISH_DEMAND_FORECASTS` is abandoned reference output | **OWNER-CONFIRMED MANUAL BASELINE; live contract OPEN.** The workbook value is expected dishes sold/day across three REWE sales units combined at central prep, based on roughly two weeks of consumption plus campaigns, customer-approved, manually trend-adjusted, and entered as one flat weekly rate. The abandoned Snowflake output remains reference only. A replacement needs daily grain, method/owner/version/horizon/cutoff/freshness, source of consumption history, stable service-location IDs, and an explicit service-to-planning-location map so the combined value is not tripled |
 | D1 | Sold dishes by unit × day × dish | `REPORTING.FACT_CG_SALES` | **MEASURED/CANDIDATE.** Corrected `CLOSED/SERVED` output returns 622 portions across 221 deployed dish-unit-days; 39 are zero-sale days. Six observed location names each map to one unit, while the corrected per-unit result covers five selling/production units and reconciles to the same 622 portions. Confirm one line item equals one portion, establish stable location IDs, source owner/freshness, and the workbook-field semantics before adapter acceptance |
 | D2 | Dishes cooked, including unsold | `REPORTING.FACT_CG_DISH_PRODUCTION` | **CATALOGUED/CANDIDATE**; validate row grain and which statuses/counts represent completed portions before adapter acceptance |
 | D3 | Physical ingredient disposal | `REPORTING.FACT_CG_WASTE` | **MEASURED FIELD SUM/CANDIDATE; semantics OPEN.** V4 reproduces 3,750.3 kg and EUR 31,339 across six units, 63 ingredients, and 2026-06-01 through 2026-08-22. Row ratios are strongly bounded, so derivation is possible. `WASTE_QTY_G`, `STRANDED_QTY_G`, `SILO_END_OF_DAY_QTY_G`, and valuation require definitions/lineage before the figures are called physical disposal or used for calibration |
 | D4 | Out-of-stock exposure | `REPORTING.FACT_CG_OOS_SILO` plus product/ingredient views | **CATALOGUED/CANDIDATE**. Validate event grain, hard-OOS semantics, duration overlap, and menu join coverage |
-| D5 | Current unit stock and expiry observation | `REPORTING.FACT_UNIT_SILO_STOCK_DAILY`; raw `BASE_STOCK_UPDATES` | **MEASURED/CANDIDATE.** V10 found expiry on all 6,497 tested silo-days; the V3 200-row key sample had no composite duplicates. Validate snapshot cutoff/unit semantics, all-class coverage, transition handling, and expiry outliers before adapter acceptance |
-| D6 | Menu by unit and day | `INTERMEDIATE.INT_UNIT_DAY_MENU`; `BASE_UCS_MENU` | **MEASURED/CANDIDATE for history; forward horizon OPEN.** All 763 materialized unit-days/26 menu keys resolve to the BOM, but the materialized table ended on 2026-08-24 when queried on 2026-08-25. Base rows extend later but mix operational-looking menus with training/demo/pilot, far-future, long-running, and terminated records. Identify the operational-unit filter, committed forward-menu source, publication timing, and business commitment rule before production planning |
+| D5 | Current unit stock and expiry observation | Apicbase manual prep-kitchen counts; `REPORTING.FACT_UNIT_SILO_STOCK_DAILY` and raw `BASE_STOCK_UPDATES` as measured candidates | **OWNER-IDENTIFIED PROCESS plus MEASURED WAREHOUSE CANDIDATES.** Operators count manually, upload to Apicbase, and exclude expired, damaged, reserved, or otherwise unusable goods. Count timestamp, partial/open-pack treatment, API/export fields, planning-location scope, freshness/history, and source authority still require read-only validation. V10 found expiry on all 6,497 tested silo-days, but robot-silo data alone does not establish all-class central prep stock |
+| D6 | Menu by unit and day | Planner-controlled current process; `INTERMEDIATE.INT_UNIT_DAY_MENU` and `BASE_UCS_MENU` as measured history candidates | **OWNER PROCESS PARTIAL; forward horizon OPEN.** The planner drives menu changes and can cancel Transgourmet orders but not future pod orders. The owner did not provide the committed horizon or versioned source. All 763 materialized unit-days/26 menu keys resolve to the BOM, but the materialized table ended on 2026-08-24 when queried on 2026-08-25. Identify the operational-unit filter, committed forward-menu source/publication timing, change owner, and non-cancellable pod last-order rule before production planning |
 | D7 | Loaded and consumed grams per day | Daily silo snapshots plus raw stock-update events | **OPEN.** The lagged profile confirms a high-frequency state stream with 12.0% ingredient changes, 62.1% unchanged transitions, gross positive/negative changes above 15 tonnes, and jumps above 7 kg. It does not reconcile to daily net depletion. Filter same-ingredient transitions and confirm event semantics only when calibration is in scope |
 | D8 | Versioned `Dish → Silo → Ingredient` BOM in grams | Flattened `FACT_CG_MENU_DISH_INGREDIENTS`, history dimension, raw `BASE_RECIPE_*`, and active-menu/resource stock context | **MEASURED/CANDIDATE for flattened grams and versioning.** 1,193 current rows have complete keys/positive grams/no tested revision-key duplicates; all materialized menu keys resolve; 11,990 valid history intervals and pre-mix decomposition exist. Physical silo/slot topology is still **OPEN**. Corrected V3B found 1,636/2,576 stock keys with menu context through `INGREDIENT_KEY`, but zero resource-position or exact-slot matches; the direct `SILO_RESOURCE_ID ↔ RECIPE_SLOT_INSERTING_POSITION` hypothesis is rejected. Inspect upstream lineage or obtain the authoritative unit/resource/dock-to-effective-slot bridge before using physical capacity |
-| D9 | Item/SKU master, pack size, EAN, storage class | `BASE_INGREDIENT_LIST`; `STORAGE_TYPE` is visible on the abandoned generated-recommendation model | **MEASURED/CANDIDATE for pack quantity and unit; partial identity/metadata.** V5 returned 76 rows/75 non-null IDs: one blank ID, zero bad pack quantities, zero missing units, seven missing EANs, and ten missing `APICBASE_ID`s. No non-null duplicate/conflict exception was returned. The abandoned recommendation model's `FRESH`/`FROZEN` values are lineage clues only; resolve the blank record, authoritative storage-class source, ownership, freshness, and whether EAN/Apicbase are required for each adapter |
-| D10 | Supplier identity and purchasing terms | Supplier names occur in `BASE_INVENTORY`; article numbers occur in `BASE_STOCKS` | **MEASURED but unsuitable:** three supplier names occur in the stale closed-order extract, while all 21 `BASE_STOCKS` rows lack supplier article numbers. No authoritative supplier-terms master is confirmed. Lead time, MOQ, case size, delivery weekdays, and cutoffs remain **POLICY/OPEN** |
-| D11 | Open POs and dated in-transit receipts | No current Snowflake source; operational source to be identified with Deepali/Dor/Ilona | **CONFIRMED MISSING FROM SNOWFLAKE / production Phase 2 blocker.** V7 proves `BASE_INVENTORY` is not the feed, and Joel confirmed no PO data is currently ingested to his knowledge. Ops must identify the system/sheet/process and owner; then data platform must ingest it and publish a normalized source with PO/line ID, item/SKU, location, supplier, ordered and remaining quantities/units, status, order date, expected receipt date, partial receipts, cancellations/date changes, and source update timestamp. Until then, file/manual PO inputs are allowed only with explicit provenance and production mode fails closed |
-| D12 | Goods receipts | No current trusted source; stale `BASE_INVENTORY` is reference only | **OPEN in the same Ops/ingestion workstream.** The old extract is stale (last sync 2025-10-20), all 106 delivery strings failed `TRY_TO_DATE`, and no order timestamp exists. The target source/model must preserve actual and partial receipt events, units, timestamps, cancellations/corrections, and linkage to PO line; completeness and history retention must be tested before lead-time or supplier-performance analysis |
+| D9 | Item/SKU master, pack size, EAN, storage class | Excel operational fallback; Apicbase intended but stale; `BASE_INGREDIENT_LIST` measured candidate | **OWNER-CONFIRMED EXAMPLES, authority OPEN.** Creme Fraiche is 5,000 g; current Schnittlauch is the distinct 250 g product; Oel equals Sonnenblumenoel; Paprika-big/Mischsalat are fresh; supplier article numbers exist. The owner reports Apicbase maintenance backlog, so Excel is used now. V5 pack/unit coverage is strong but still has one blank ID and incomplete EAN/Apicbase IDs. Obtain the supplier-article extract, define canonical ID precedence, owner/freshness/change history, and validate pack/unit/storage mappings before acceptance |
+| D10 | Supplier identity and purchasing terms | Transgourmet current assortment and supplier portal; future Circus pods; stale warehouse extracts only as reference | **OWNER-REPORTED POLICY STARTING POINTS, exact terms OPEN.** Current planning uses about 3 days for standard goods and 5 days for fresh; future pods are about one month and non-cancellable. Supplier article numbers exist. Calendar/business-day semantics, cut-offs, delivery times, item exceptions, MOQ/case, pod go-live, and the future assortment need approved records/configuration |
+| D11 | Open POs and dated in-transit receipts | Transgourmet order-history pending orders/PDFs; no current Snowflake source | **OPERATIONAL PROCESS IDENTIFIED / Snowflake ingestion still missing / production blocker.** The planner reviews pending orders, downloads PDFs, and subtracts them before workbook final quantities. V7 proves `BASE_INVENTORY` is not the feed, and Joel confirmed no current PO ingestion. Validate export/API access and publish a normalized source with PO/line/article IDs, planning location, ordered and remaining quantities/units, status, order/expected-receipt timestamps, partial receipts, cancellations/date changes, and update time. Manual files require explicit provenance; production fails closed until accepted |
+| D12 | Goods receipts | Transgourmet may contain order history, but no receipt-history contract was established; stale `BASE_INVENTORY` is reference only | **OPEN in the same ingestion workstream.** Pending-order visibility does not prove actual/partial receipt events or retained history. The old extract is stale (last sync 2025-10-20), all 106 delivery strings failed `TRY_TO_DATE`, and no order timestamp exists. The target model must preserve actual/partial receipts, units, timestamps, cancellations/corrections, PO-line linkage, completeness, and retention before lead-time or supplier-performance analysis |
 
-`BASE_INGREDIENT_LIST.APICBASE_ID` makes Apicbase a plausible upstream master
-system. It does not prove authority; Joel must confirm the source and owner.
+`BASE_INGREDIENT_LIST.APICBASE_ID` and the owner's operational description make
+Apicbase a plausible upstream source for stock, recipes, and item identity. They
+do not prove one field-level authority: the owner explicitly reports stale
+master data. Assess stock, BOM, and item-master fitness separately through
+read-only API/export evidence.
 
 ## Configuration entered by a planner or purchasing owner for now
 
@@ -220,23 +259,25 @@ an external source.
 
 | Configuration | Current approach | Evidence that may inform it |
 |---|---|---|
-| Planning lead time | Item/supplier default plus explicit override | Future order and receipt history once a complete source with both timestamps is found |
-| Shelf-life rule and safety margin | Sealed/opened rule, conservative days, and override owner | Observed expiration timestamps; observations do not define the policy |
+| Planning lead time | Owner-reported starting classes: Transgourmet standard ~3 days, fresh ~5 days, future pods ~1 month; store exact supplier/item defaults and overrides only after calendar/cut-off approval | Future order and receipt history once a complete source with both timestamps is found |
+| Shelf-life rule and safety margin | Current practice applies no explicit MHD cap to TK/Kuehl/RT in the short cycle, about 3 days for fresh, and anticipates about one year for pods; preserve sealed/opened rule, conservative days, and override owner | Observed expiration timestamps; current non-use does not mean infinite shelf life and observations do not define policy |
 | MOQ and case/order multiple | Supplier-item configuration | Supplier contract, ERP, or approved purchasing record if later connected |
-| Simple delivery weekdays/cutoffs | Supplier/location configuration; no external calendar integration | Planner and supplier operating process |
+| Simple delivery weekdays/cutoffs | Supplier/planning-location configuration; current fresh windows are `Sat→Mon`, `Mon→Tue+Wed`, `Wed→Thu+Fri`, `Fri→Sat`; receipt times/cutoffs/holidays remain open | Planner and supplier operating process |
 | Safety days | Simple versioned default by storage class with item override | Backtests may refine it later |
-| Yield factor | Simple versioned default/override with provenance | Consumption and physical-disposal history may calibrate it later |
+| Yield factor | Legacy `1.20` remains compatibility-only; improved mode uses a separate versioned default/override with provenance | The owner confirms `1.20` is a broad assumption; consumption and physical-disposal history may calibrate it later |
 | Which classes are stocked vs delivery-to-delivery | Versioned storage policy | Current operating practice; today `Frisch` is treated delivery-to-delivery |
 
 ## Question ownership and timing
 
-### Excel owner
+### Excel owner — original Q1-Q13 complete, focused follow-up open
 
-The original 13 questions have already been sent and remain appropriate. They
-ask the workbook owner to explain the manual process, hidden logic, assumptions,
-inputs, overrides, and other information they consult. Do not send a correction
-or ask them to validate Snowflake implementation details. Wait for their
-answers; section 10 of the brief contains the audience/topic map.
+The response was received and reconciled on 2026-08-26. Do not resend the
+original questionnaire or request duplicate historical inputs before the first
+comparison: use the workbook already available. Return to the Excel owner with
+the first output and ask only the narrowed questions needed to explain material
+differences or approve affected policies. Section 10 of the brief and HA-11
+retain those follow-ups. HA-12 tracks the separate read-only Apicbase source
+assessment with the data analyst/Apicbase owner.
 
 ### Joel/data platform—confirmed 2026-08-25
 
@@ -249,14 +290,14 @@ answers; section 10 of the brief contains the audience/topic map.
 - Joel will create a stable Snowflake service account using RSA authentication;
   the credential handoff will occur through 1Password. Provisioning is pending.
 
-### Purchase-order source and ingestion—confirmed next workstream
+### Purchase-order source and ingestion—source identified, contract open
 
 Joel confirmed that purchase-order data is not currently ingested into
-Snowflake to his knowledge. Valentin should now ask Deepali and Dor (with Ilona
-as another Ops contact) for a short walkthrough of the current PO and expected-
-delivery process, source system/sheet, ownership, history, and export/API
-capability. After the source is identified, return to Joel to agree ingestion—
-potentially via Fivetran—and a normalized, quality-tested Snowflake model.
+Snowflake to his knowledge. The Excel owner identified Transgourmet pending
+order history as the current source and described a manual PDF-analysis step.
+Valentin should now obtain a read-only, sanitized export/API walkthrough with
+the required line/status/quantity/date fields, then return to Joel to agree
+ingestion and a normalized, quality-tested Snowflake model.
 
 The data platform is responsible for source ingestion/publication; Ops explains
 and owns the operational process/source; this repository consumes those inputs,
@@ -289,7 +330,7 @@ warehouse field sums as physical waste or use them to calibrate yield.
 | Stage | Can continue now? | Required before acceptance/promotion |
 |---|---|---|
 | M0/M1 foundation and legacy reproduction | Yes | Planner interpretation is needed for business sign-off, not for synthetic engineering |
-| M2 improved file-driven engine | Yes; canonical inputs and policy-free dated netting are implemented | Complete and approve demand semantics, protection periods, simple yield/safety settings, constraints, and fresh delivery rules before M2 business acceptance |
+| M2 improved file-driven engine | Yes; canonical inputs and policy-free dated netting are implemented | Demand meaning and baseline fresh windows are confirmed; approve planning-location mapping, exact receipt/cut-off calendars, protection periods, simple yield/safety settings, and capacity/shelf-life constraints before M2 business acceptance |
 | M3 Snowflake/Supabase integration | Discovery can continue | Accepted source grain/units/freshness, service account, target result schema/write pattern, and approved Supabase config ownership |
 | M4 shadow run | Not yet | Trustworthy current stock, open POs with expected receipt dates, forward menu, canonical IDs/packs, and comparable planner outputs |
 | Scheduled production result | Not yet | All M4 source/config gates plus reliable internal Snowflake write and monitoring; supplier/ERP dispatch is out of scope |

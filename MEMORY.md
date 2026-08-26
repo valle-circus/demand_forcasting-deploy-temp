@@ -33,6 +33,43 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/plans/phase2_supply_planning_master_backlog.md`, and
   `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
 
+- 2026-08-26: **Excel-owner Q1-Q13 answers are reconciled; HA-01 is complete.**
+  `Demand/Silo Load` is the expected dishes sold per day across three REWE sales
+  units combined at one central prep/purchasing location, based on roughly two
+  weeks of consumption plus campaigns, customer-approved and manually trend-
+  adjusted. An explicit service-location-to-planning-location map is therefore
+  required; never copy the combined value to each unit. Pending Transgourmet
+  orders are reviewed in the supplier portal, downloaded as PDFs, analysed
+  outside the workbook, and subtracted before final quantities; the four blank
+  KW34 gaps were probably missed. Current lead assumptions are about 3 days
+  standard and 5 days fresh, versus about one month for future non-cancellable
+  pods. Fresh coverage is `Sat→Mon`, `Mon→Tue+Wed`, `Wed→Thu+Fri`, and
+  `Fri→Sat`. Operators upload usable-stock counts to Apicbase, while its master
+  data is currently stale and Excel is the operational fallback; supplier
+  article numbers exist. Creme Fraiche is `5000 g`, current Schnittlauch is the
+  distinct `250 g` product, and `Oel` equals `Sonnenblumenoel`. Exact PO export/
+  API fields, stock timestamp/partial packs, `S/M/W/Fr` status, cut-offs,
+  storage capacity, menu horizon, and approved safety/yield/shelf-life rules
+  remain focused gates. Evidence:
+  `docs/descriptions/phase2_supply_planning_brief.md` sections 3-5 and 10;
+  `docs/plans/human_action_register.md` HA-01/HA-04/HA-06/HA-08/HA-11/HA-12;
+  `docs/reports/planner-questionnaire-review/source_notes.md`. Status: `active`.
+
+- 2026-08-26: **The interim feedback-V1 source plan is fixed.** Use the original
+  KW33/KW34 workbook already available as the historical comparison fixture and
+  preserve workbook/tab/week provenance for every extracted value; do not ask
+  the Excel owner to resend historical forecast, menu, stock, or item data before
+  the first comparison. Keep raw manual Transgourmet downloads outside git and
+  transform them into versioned `open_pos.csv`; the API is a later automation
+  path. Recurring inputs without an accepted automated source use versioned
+  manual CSVs. The immediate data request is read-only Apicbase access/API docs
+  or exports for current stock, BOM/recipes, item master/pack sizes, and IDs for
+  Transgourmet mapping. Assess each Apicbase domain separately because its master
+  data is reported stale. Forecast moves from manual CSV to the future Phase 1
+  Snowflake table; editable rules remain manual/versioned until Supabase exists.
+  Evidence: `docs/descriptions/data_requirements.md` interim V1 source map;
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
+
 - 2026-08-24: **A correction notice supersedes four earlier same-day entries.**
   Findings first recorded on 2026-08-24 were produced under the Lightdash
   service role, which reads 1 of 4 accessible schemas, and several were then
@@ -143,14 +180,14 @@ not a task log or a replacement for the detailed engineering brief.
   `scripts/snowflake_verification.sql` blocks V3/V10/V12;
   `docs/descriptions/data_requirements.md` D7-D8. Status: `active`.
 
-- 2026-08-24: **Apicbase is a master-data-source candidate, not yet confirmed
-  as authority.** `BASE_INGREDIENT_LIST` carries `APICBASE_ID` alongside `EAN`,
-  `QUANTITY` (pack size) and `PACKAGE_PRICE`. Most `BASE` tables carry
-  `_FIVETRAN_SYNCED`, indicating Fivetran ingestion. This makes Apicbase a
-  plausible source for ingredient data, but column names alone do not establish
-  system ownership or field-level authority. Joel must confirm it; Xentral must
-  likewise not be assumed. Evidence:
-  `docs/descriptions/data_requirements.md` source-authority questions. Status: `active`.
+- 2026-08-24: **Apicbase is a source candidate, not one accepted authority.**
+  `BASE_INGREDIENT_LIST` carries `APICBASE_ID` alongside `EAN`, `QUANTITY`
+  (pack size) and `PACKAGE_PRICE`. The Excel owner later confirmed that prep-
+  kitchen operators upload stock counts to Apicbase and that it is the intended
+  recipe/item source, but also reported a master-data maintenance backlog that
+  forces current Excel use. Assess stock, BOM, and item master separately; do
+  not assume Apicbase or Xentral authority from names alone. Evidence:
+  `docs/descriptions/data_requirements.md` D5/D8/D9. Status: `active`.
 
 - 2026-08-24: **`FACT_CG_SALES_DAILY` cannot satisfy D1.** It has no dish
   dimension; grain is `DAY x LOCATION_NAME x CUSTOMER_ID x REVENUE_SOURCE`
@@ -162,16 +199,18 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/descriptions/data_requirements.md` D1. Status: `active`.
 
 - 2026-08-25: **The old three-location `Demand/Silo Load` comparison is
-  superseded; the workbook field's meaning is still open.** A zero-inclusive
+  superseded.** A zero-inclusive
   corrected V2 dish run for 2026-08-17 through 2026-08-22 uses only
   `CLOSED/SERVED` rows and finds 622 portions, 221 dish-unit-days, 39 zero-sale
   dish-unit-days and a maximum dish-unit-day of 15. The provisional 626 total
   is superseded. V1 maps each of six observed location names to one unit serial;
   corrected V2B reconciles the 622 portions across five selling/production
   units at 8.4–31.8 portions per service day. Do not quote the former 82.5/day,
-  27.5/location-day, 3.2x or 9.5x results. The planner must still confirm
-  whether `Demand/Silo Load` is expected sales, target fill, refill quantity or
-  capacity, and whether it is per unit or network-wide. Evidence:
+  27.5/location-day, 3.2x or 9.5x results. The 2026-08-26 planner response now
+  confirms the workbook field is expected sold dishes/day across all three REWE
+  units combined at central prep, not capacity. The measured Snowflake sales
+  definition and stable roll-up mapping remain separate source-contract work.
+  Evidence:
   `docs/scratchpads/snowflake_verification_evidence.md` V1/V2;
   `scripts/snowflake_verification.sql` blocks V1/V2. Status: `active`.
 
@@ -424,22 +463,18 @@ not a task log or a replacement for the detailed engineering brief.
   grain, freshness, and other technical matters are investigated through SQL
   first. The waste-definition question is deferred until waste will be shared
   or used for calibration. Evidence: `docs/descriptions/phase2_supply_planning_brief.md`
-  section 10 and `docs/plans/human_action_register.md` HA-01/HA-07/HA-13. Status:
-  `active`.
+  section 10 and `docs/plans/human_action_register.md`. Status: `superseded` by
+  the received-answer reconciliation dated 2026-08-26.
 
 ## Open high-impact questions
 
 These are intentionally unresolved and must not be silently converted into
 implementation assumptions:
 
-- Is the current `Demand/Silo Load` value portions sold per day or a silo refill
-  level? **Narrowed 2026-08-24, not closed:** measured sales are far below the
-  sheet value at every dish in a representative week, which is strong evidence
-  against "portions sold". The remaining question is which non-demand quantity
-  it is — target fill, refill quantity, or physical silo capacity — and whether
-  it applies per unit or across all Rewe units. Testing the capacity hypothesis
-  requires an exact `RESOURCE_ID`/`DOCK_ID` to effective menu/recipe-slot map;
-  an ingredient-only join is invalid. Planner confirmation is still required.
+- Which stable IDs and effective-dated mapping roll the three REWE service/sales
+  units into the one central inventory/planning location, and where does the
+  two-week consumption signal for the owner-confirmed combined dish forecast
+  originate? An already combined forecast must not be duplicated per unit.
 - Which repository owns each part of the target implementation: normalized
   Snowflake input/output models in `data-transformation` versus the pure Phase 2
   calculation engine in this repository? Inspect the data-model repository
@@ -447,22 +482,31 @@ implementation assumptions:
 - Which of `WASTE_QTY_G`, `STRANDED_QTY_G` and `SILO_END_OF_DAY_QTY_G` is
   physical disposal, and how is `WASTE_VALUE_EUR` valued? Blocks the yield
   factor.
-- Which operational system/sheet/process contains actual PO lines and expected
-  receipts, who owns it, and can it expose history through export/API for
-  ingestion? Snowflake currently has no PO ingestion to Joel's knowledge.
+- Can Transgourmet expose a safe CSV/export/API with stable PO/line/article IDs,
+  outstanding units, statuses, expected receipts, partial receipts,
+  cancellations/date changes, and history, and how will future pod orders be
+  represented? Snowflake still has no PO ingestion to Joel's knowledge.
 - What is the committed forward-menu source/process? `INT_UNIT_DAY_MENU` ended
   on 2026-08-24 when queried on 2026-08-25, while later `BASE_UCS_MENU` rows mix
   operational-looking and pilot/demo/training/far-future/terminated records.
-- Is the master-data source system Apicbase rather than Xentral?
-- What is the exact stock-count timestamp and why does the legacy sheet use a
-  2.5-day bridge?
-- Are planning lead times item-specific or supplier-specific? Does the planner
-  currently track the open-order pipeline outside the workbook while the live
-  system/source remains unidentified?
-- What constraints explain the differences between calculated and booked orders?
+- Can Apicbase be accepted separately for stock, BOM, and item master despite
+  the owner's reported master-data backlog, and which supplier article/
+  Apicbase/EAN ID is canonical?
+- What is the exact stock-count timestamp, how are opened/partial packs stored
+  in Apicbase, and why does the legacy sheet use a 2.5-day bridge?
+- Are the reported 3-day standard, 5-day fresh, and one-month pod lead times
+  calendar or business days; what cut-offs/events bound them; and which item/
+  supplier exceptions apply?
+- Beyond the confirmed Penne freezer-space split, what capacity, pipeline,
+  pack/case, or other constraints explain calculated-versus-delivery-cell
+  differences, and do those cells mean intended, placed, confirmed, or
+  delivered units?
 - Is silo capacity binding, and does sealed or opened shelf life govern each
   item?
 - How many weeks ahead is the menu fixed and committed?
+- Does the planner's Q12 “currently no” mean that no additional historical data
+  exists, or only that the forecast sheet, Apicbase, Transgourmet history, and
+  Snowflake candidates are not currently used/trusted for weekly planning?
 - Which catalogued Snowflake models are authoritative and operationally fit for
   stock, BOM, menu, sales, waste and OOS, and how should the newly identified
   Ops PO/receipt source be ingested and modeled? Read access itself is resolved.
