@@ -35,6 +35,22 @@ class StorageClass(StrEnum):
     FRISCH = "Frisch"
 
 
+class ItemType(StrEnum):
+    POD = "POD"
+    INGREDIENT = "INGREDIENT"
+
+
+class StockQuantityUnit(StrEnum):
+    PACK = "PACK"
+    ORDER_UNIT = "ORDER_UNIT"
+
+
+class ShelfLifeAnchor(StrEnum):
+    ORDER_DATE = "ORDER_DATE"
+    RECEIPT_DATE = "RECEIPT_DATE"
+    LOT_EXPIRY = "LOT_EXPIRY"
+
+
 class Provenance(StrEnum):
     OBSERVED = "observed"
     MANUAL = "manual"
@@ -211,6 +227,92 @@ class SupplierItem:
 
 
 @dataclass(frozen=True, slots=True)
+class ItemPlanningPolicy:
+    item_id: str
+    item_type: ItemType
+    official_supplier: str
+    ordering_channel: str
+    supplier_id: str
+    supplier_article_number: str | None
+    supplier_description_match: str | None
+    packs_per_order_unit: Decimal
+    order_unit: str
+    stock_qty_unit: StockQuantityUnit
+    apicbase_uid: str | None
+    apicbase_stock_item_name: str | None
+    lead_time_calendar_days: int
+    shelf_life_anchor: ShelfLifeAnchor | None
+    yield_factor: Decimal
+    moq_order_units: Decimal
+    case_multiple_order_units: Decimal
+    data_status: str
+    provenance: Provenance = Provenance.MANUAL
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "item_id",
+            "official_supplier",
+            "ordering_channel",
+            "supplier_id",
+            "order_unit",
+            "data_status",
+        ):
+            _require_text(getattr(self, field_name), field_name)
+        _require_positive(self.packs_per_order_unit, "packs_per_order_unit")
+        _require_positive(self.yield_factor, "yield_factor")
+        _require_non_negative(self.moq_order_units, "moq_order_units")
+        _require_positive(self.case_multiple_order_units, "case_multiple_order_units")
+        if self.lead_time_calendar_days < 0:
+            raise ValueError("lead_time_calendar_days must be greater than or equal to zero")
+
+
+@dataclass(frozen=True, slots=True)
+class DeliveryCoverageRule:
+    delivery_rule_id: str
+    location_id: str
+    ordering_channel: str
+    storage_class: StorageClass
+    delivery_weekday: int | None
+    covered_service_weekdays: tuple[int, ...]
+    order_weekday: int | None
+    review_period_days: int
+    effective_from: date
+    effective_to: date | None
+    active: bool
+    data_status: str
+    provenance: Provenance = Provenance.MANUAL
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "delivery_rule_id",
+            "location_id",
+            "ordering_channel",
+            "data_status",
+        ):
+            _require_text(getattr(self, field_name), field_name)
+        for field_name in ("delivery_weekday", "order_weekday"):
+            value = getattr(self, field_name)
+            if value is not None and not 0 <= value <= 6:
+                raise ValueError(f"{field_name} must use Python weekday values 0 through 6")
+        if any(not 0 <= weekday <= 6 for weekday in self.covered_service_weekdays):
+            raise ValueError("covered_service_weekdays must use Python weekday values 0 through 6")
+        if self.storage_class is StorageClass.FRISCH:
+            if self.delivery_weekday is None or not self.covered_service_weekdays:
+                raise ValueError(
+                    "fresh delivery rules require delivery_weekday and covered service days"
+                )
+        if self.review_period_days <= 0:
+            raise ValueError("review_period_days must be greater than zero")
+        if self.effective_to is not None and self.effective_to < self.effective_from:
+            raise ValueError("effective_to must not be before effective_from")
+
+    def is_active_on(self, value: date) -> bool:
+        return self.active and self.effective_from <= value and (
+            self.effective_to is None or value <= self.effective_to
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class DeliveryScheduleRule:
     delivery_schedule_id: str
     supplier_id: str
@@ -376,6 +478,15 @@ class PlanningLine:
     rounding_delta_g: Decimal
     order_date: date
     expected_delivery_date: date
+    schedule_rule_id: str | None = None
+    coverage_start_date: date | None = None
+    coverage_end_date: date | None = None
+    protection_days: int | None = None
+    adjusted_requirement_g: Decimal = Decimal("0")
+    order_unit_size_g: Decimal = Decimal("1")
+    moq_order_units: Decimal = Decimal("0")
+    case_multiple_order_units: Decimal = Decimal("1")
+    data_status: str = "UNSPECIFIED"
 
     def __post_init__(self) -> None:
         for field_name in ("planning_line_id", "run_id", "location_id", "item_id"):
@@ -385,6 +496,7 @@ class PlanningLine:
         _require_positive(self.yield_factor, "yield_factor")
         for field_name in (
             "gross_requirement_g",
+            "adjusted_requirement_g",
             "safety_stock_g",
             "usable_on_hand_g",
             "open_po_due_g",
@@ -394,6 +506,20 @@ class PlanningLine:
             "rounding_delta_g",
         ):
             _require_non_negative(getattr(self, field_name), field_name)
+        _require_positive(self.order_unit_size_g, "order_unit_size_g")
+        _require_non_negative(self.moq_order_units, "moq_order_units")
+        _require_positive(self.case_multiple_order_units, "case_multiple_order_units")
+        if self.protection_days is not None and self.protection_days <= 0:
+            raise ValueError("protection_days must be greater than zero when supplied")
+        if (
+            self.coverage_start_date is not None
+            and self.coverage_end_date is not None
+            and self.coverage_end_date < self.coverage_start_date
+        ):
+            raise ValueError("coverage_end_date must not be before coverage_start_date")
+        if self.schedule_rule_id is not None:
+            _require_text(self.schedule_rule_id, "schedule_rule_id")
+        _require_text(self.data_status, "data_status")
         for field_name in ("shelf_life_cap_g", "max_cover_cap_g"):
             value = getattr(self, field_name)
             if value is not None:

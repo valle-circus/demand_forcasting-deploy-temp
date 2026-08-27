@@ -1,366 +1,245 @@
 # Phase 2 Supply Planning — Master Backlog
 
 **Created:** 2026-08-22
-**Reconciled:** 2026-08-26 after Excel-owner Q1-Q13 answers
-**Source of truth:** this file controls implementation order and status.
-**Detailed evidence:** `docs/descriptions/phase2_supply_planning_brief.md` and
-`docs/scratchpads/snowflake_verification_evidence.md`.
+
+**Rebased:** 2026-08-27 for the template-first local V1
+
+**Source of truth:** this file controls priority and milestone status.
+
+**Active implementation checklist:**
+`docs/plans/v1_template_first_delivery_plan.md`
 
 ## Goal and boundary
 
-Automate the Phase 2 calculation currently performed in the KW33/KW34 Excel
-workbook:
+This repository consumes a daily dish forecast and calculates auditable
+ingredient and purchase recommendations:
 
 ```text
-Phase 1 daily dish forecast
-        + menu/BOM + stock + open POs + editable Phase 2 rules
-        ↓
-internal ingredient and purchase recommendations in Snowflake
+daily dish demand + dated menu/BOM + item/rule master
+                  + current stock + open POs
+                                  ↓
+       recommendations + derivations + exceptions
 ```
 
-Phase 1 produces forecast portions by `location_id × dish_id × service_date`.
-It is an independent upstream input and is not implemented in this repository.
+Phase 1 forecasting is an upstream input and is not implemented here. Supplier
+dispatch, ERP writes, and an approval workflow are outside scope.
 
-Phase 2, this repository, determines ingredient requirements and recommended
-purchase quantities. Stock, open POs, lead time, shelf life, pack size,
-delivery cadence, MOQ/case, and storage class belong to Phase 2 because they
-change what must be available or purchased.
+The pure Python engine remains independent from files, UI, and databases. The
+same canonical rows must support local files now, a maintainer UI next, and
+Snowflake/Supabase persistence later.
 
-Sales, OOS, waste, and forecast error are useful for Phase 1 or later Phase 2
-calibration. They are not required to reproduce the initial workbook logic.
+## Active delivery sequence
 
-## Target architecture
+### Milestone 1 — local template-driven V1
 
-| Component | Responsibility |
-|---|---|
-| Snowflake source models | Forecast, menu/BOM, item identity/pack data, stock, and open POs |
-| Supabase | Versioned application-owned rules editable by internal users |
-| Internal React UI + Python API | Validate and edit lead time, shelf life, storage-class defaults, safety settings, MOQ/case, and simple delivery rules |
-| Pure Python engine | Deterministic Phase 2 calculation with no database/UI code |
-| Snowflake result tables | Run metadata, recommendation lines, derivations, and exceptions |
+**Outcome:** one selected location can be planned locally from two maintained
+templates, one Apicbase stock export, and cumulative Transgourmet PDFs.
 
-CSV/JSON remain fixture, test, development, import, and recovery formats. They
-are not the final non-technical workflow.
+- [x] Define canonical daily forecast, menu, three-level BOM, item, stock, PO,
+      provenance, and audit contracts.
+- [x] Implement three-level BOM explosion, daily aggregation, current-stock
+      selection, dated PO projection/netting, source gates, and deterministic
+      audit output.
+- [x] Implement the interim private Transgourmet PDF importer, including
+      content deduplication, total reconciliation, history, dated open rows,
+      undated quarantine, and the confirmed `Liefertag` rule.
+- [x] Create and prefill the two project-owned Excel templates with the new
+      pod/ingredient/menu evidence and a labelled six-week one-location demo.
+- [x] Create one maintainer-facing assumptions/parameters/questions brief so
+      active values are not hidden in code or spread across documentation.
+- [ ] **Operational approval gate:** obtain maintainer review of the templates,
+      yellow/ambiguous fields, and
+      assumptions brief.
+- [x] **Work package 1 — template readers:** implement strict readers for the
+      two project-owned workbook schemas.
+- [x] **Work package 2 — stock normalizer:** implement the Apicbase stock-report
+      XLSX normalizer with upload-selected
+      `location_id`, export timestamp as `counted_at`, and UID/exact-name
+      mapping review.
+- [x] **Work package 3 — PO mappings:** feed the reviewed item/location mapping
+      into the Transgourmet importer.
+- [x] **Work package 4 — recommendation engine:** finish protection horizons,
+      explicit safety/yield, dated netting, fresh scheduling, shelf/max-cover,
+      MOQ/case and order-unit logic, with visible derivations/exceptions.
+- [x] **Work package 5 — acceptance run and outputs:** emit table-ready
+      recommendation, derivation, exception and audit files, then validate the
+      complete one-location demonstration.
 
-The UI is an internal configuration tool. This backlog contains no supplier or
-ERP dispatch integration and no proposal-approval workflow.
+Detailed steps and exit criteria are in
+`docs/plans/v1_template_first_delivery_plan.md`.
+
+### Milestone 2 — maintainer upload UI
+
+**Outcome:** a planner selects a location, uploads the same four inputs, sees
+field/mapping errors, and views/downloads the calculated recommendation.
+
+- [ ] Add a thin upload/validation API around the existing normalizers.
+- [ ] Add location selection and the four upload inputs.
+- [ ] Show actionable field and rejected-mapping errors.
+- [ ] Show/download recommendations, derivations, and exceptions.
+- [ ] Decide and implement the minimum authentication and retention controls.
+
+**Entry decision:** UI planning and implementation may start. The completed
+local scenario contracts are stable. Maintainer feedback is a gate before the
+UI can present a run as operational/shadow-approved, not before the upload and
+review experience is built.
+
+Do not add supplier dispatch, ERP writes, approval workflow, complex calendar
+integration, or optimization in this milestone.
+
+### Milestone 3 — persistence and source automation
+
+**Outcome:** accepted operational sources and run history no longer depend on
+local files, without changing engine contracts.
+
+- [ ] Agree Snowflake result schema, write grants, run-history/latest-view
+      behavior, and scheduling ownership.
+- [ ] Complete least-privilege service-account and `data-transformation`
+      access.
+- [ ] Persist application-maintained item/rule data in the agreed Supabase or
+      master-data store with versions/change history.
+- [ ] Write append-only run/recommendation/exception history to Snowflake.
+- [ ] Replace manual forecast/menu, stock, and PO inputs individually only when
+      an accepted API/table has proven grain, IDs, units, freshness, lineage,
+      and ownership.
+- [ ] Keep the local file path as fixture/import/recovery support.
+
+### Milestone 4 — shadow validation and scheduling
+
+- [ ] Compare representative improved runs with the maintainer's decisions.
+- [ ] Separate calculation differences from missing-source/policy effects.
+- [ ] Approve initial rules and operating measures.
+- [ ] Schedule idempotent runs with freshness gates, retries, failure logging,
+      and a runbook.
+
+## Historical compatibility track — not a Milestone 1 blocker
+
+The KW33/KW34 profile remains regression evidence, not the recurring input
+format:
+
+- [x] Reconcile 27/27 filled stocked order cells and 28/28 bridge values.
+- [x] Isolate the legacy `1.20`, six-day horizon, and `×2.5` arithmetic.
+- [x] Implement compatibility CSV/audit and synthetic tests.
+- [ ] Decide whether a sanitized real fixture may be committed or remains
+      private.
+- [ ] Add the real workbook extraction/golden assertions if that fixture is
+      approved.
+- [ ] Preserve the four likely missed blanks and fresh-path differences as
+      explicit evidence.
+
+Understanding the operational meaning of `×2.5` can improve the historical
+walkthrough, but it does not affect the dated template-driven V1 policy.
 
 ## Current status
 
 | Area | Status |
 |---|---|
-| KW33/KW34 displayed-value reconstruction | Complete: 27/27 filled orders and 28/28 bridge values reconciled |
-| Real KW33/KW34 automated golden fixture | Open: synthetic tests only; private/local or approved sanitized fixture needed |
-| Canonical file contracts and validation | Implemented |
-| Three-level BOM explosion | Implemented |
-| Dated stock/open-PO ledger and netting | Implemented for file inputs |
-| Full configurable Phase 2 policy | Not implemented |
-| Required Snowflake discovery SQL | Complete; no required rerun remains |
-| Live Snowflake adapters/output writes | Not implemented; access/output design pending |
-| Excel-owner Q1-Q13 | Received/reconciled; focused policy/source follow-ups remain |
-| Live PO source | Transgourmet pending-order process identified; normalized export/API and Snowflake ingestion missing |
-| Supabase configuration store | Planned, not created |
-| Internal configuration UI | Planned after config schemas/integration |
+| Canonical contracts and validation | Implemented for nine normalized datasets plus table-ready results |
+| Project-owned workbook templates | Created and prefilled; maintainer review open |
+| BOM explosion and dated stock/PO projection | Implemented |
+| Actual purchase recommendation calculation | Implemented and locally accepted in scenario mode |
+| Transgourmet PDF normalization | Implemented; unresolved lines are quarantined for maintainer mapping |
+| Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
+| Live Snowflake input dependency for local V1 | None |
+| Snowflake result persistence | Later; ownership/schema open |
+| Supabase configuration store | Later; not created |
+| Maintainer UI | Milestone 2; ready to plan/build, not started |
+| Current repository check | 44 passing tests on 2026-08-27; deterministic 7-file replay passed |
 
-The repository verification wrapper currently passes 32 tests.
+## Source of truth for local V1
 
-## Definition of done for the first useful release
+| Information | V1 source | Location-aware? | Maintainer action |
+|---|---|---:|---|
+| Items, pods, pack/order mapping, policy fields | `Phase2_Master_Data_Template_v1.xlsx` → `Items` | No | maintain one row per item and resolve review flags |
+| Planning locations | master template → `Locations` | Defines locations | maintain stable IDs |
+| Delivery/service coverage rules | master template → `Delivery_Rules` | Yes | maintain per applicable location/rule |
+| Daily demand | `Phase2_Planning_Input_Template_v1.xlsx` → `Demand_Plan` | Yes | maintain dated portions and version |
+| Menu schedule | planning template → `Menu_Calendar` | Yes | maintain dated active dishes/version |
+| Dish → silo → item BOM | planning template → `BOM_Lines` | No | maintain effective recipe rows |
+| Current usable stock | Apicbase stock-report XLSX | Yes, selected at upload | export current view and choose location |
+| Open POs | Transgourmet PDFs | Yes, selected at upload | maintain cumulative PDF folder |
+| Recommendations/results | engine-generated CSV/JSON | Yes | no manual input |
 
-- [ ] A daily Phase 1 forecast can be read through a documented adapter.
-- [ ] Menu/BOM, item/pack, stock, and PO inputs are validated at stable-ID grain.
-- [ ] The Phase 2 result matches approved KW33/KW34 legacy fixtures where the
-      legacy profile is selected.
-- [ ] The improved profile produces explainable ingredient and pack
-      recommendations from approved Phase 2 rules.
-- [ ] Snowflake result rows include a run ID, calculation time, input/config
-      versions, intermediate values, and exceptions.
-- [ ] Rerunning the same inputs/config is deterministic and does not create
-      uncontrolled duplicate output.
-- [ ] Non-technical users can edit the approved planning-rule fields through
-      the internal UI without editing repository files or database rows.
-- [ ] No missing source or policy value is silently converted to zero.
-- [ ] No supplier/ERP write is implemented.
+The supplied `CW36_*` and pod metadata workbooks are migration evidence only.
+The implementation reads the project-owned schema; it does not chase arbitrary
+future tab/column changes in those source workbooks.
 
-## Human and access gates
+## Snowflake and Supabase boundary
 
-The detailed requests and owners are in `human_action_register.md`.
+A complete controlled local V1 needs no current Snowflake runtime table. The
+previously investigated forecast/recommendation models and `BASE_INVENTORY` are
+abandoned and must not be wired into the run.
 
-| Gate | Needed for | Does not block |
-|---|---|---|
-| Focused post-Q1-Q13 planner confirmations | Exact delivery-cell semantics, count/cut-off timing, capacity, menu horizon, and improved-policy sign-off | Synthetic/parameterized implementation and adapter scaffolding |
-| KW33/KW34 fixture handling decision | Committed golden fixture | Private/local validation |
-| Snowflake service account and `data-transformation` access | Live adapter tests and lineage inspection | Pure engine work |
-| Snowflake output ownership/schema/write pattern | End-to-end persistence | Output contract and writer interface |
-| Current PO source and ingestion | Complete production netting | Manual/synthetic PO scenarios |
-| Approved lead-time/shelf-life/MOQ/delivery-rule values | Business-valid improved recommendations | Parameterized calculations and tests |
-| Supabase project/access | Persistent non-technical rule editing | Engine and Snowflake adapter work |
-| Live Phase 1 forecast contract | Scheduled production runs | Manual/file forecast testing |
+Snowflake remains the intended home for an accepted future Phase 1 forecast,
+normalized operational inputs when ingestion exists, and append-only Phase 2
+run/recommendation history. Supabase (or the agreed editable master store) is a
+future home for application-maintained item/rule data. Neither is a reason to
+delay the local template-driven milestone.
 
-## Milestone 0 — Evidence and contracts
+## Remaining human gates
 
-**Outcome:** preserve what the workbook actually does and keep unknowns visible.
+The authoritative details are in `human_action_register.md`. For Milestone 1,
+the short maintainer questions are:
 
-- [x] Record the workbook and relevant `Plan KWxx`/`Stock KWxx` tabs.
-- [x] Reconcile all 27 filled KW34 stocked-order cells at displayed precision.
-- [x] Reconcile all 28 continuing bridge values to KW33 demand.
-- [x] Document the exact rounding order and constants.
-- [x] Document four positive-gap blank order cells.
-- [x] Document `Paprika - big` and `Mischsalat` missing from `Stock KW34`.
-- [x] Document Creme Fraiche/Schnittlauch pack-size conflicts and label drift.
-- [x] Reconcile the Excel-owner answers: combined central-prep demand semantics,
-      likely missed blank orders, fresh coverage windows, current/future lead
-      classes, master-data corrections, and Thursday/Monday cadence.
-- [x] Define daily Phase 1 input and three-level BOM contracts.
-- [x] Define source provenance and actionable validation errors.
-- [ ] Decide whether the real fixture may be committed, anonymized, or must
-      remain private.
-- [ ] Obtain raw formula evidence or an owner walkthrough if available.
-- [ ] Produce the minimal real KW33/KW34 fixture locally or in approved form.
+1. pod Transgourmet article/description, ordered unit, MOQ, and case multiple;
+2. Apicbase stock quantity unit and partial-pack treatment per active item;
+3. resolution of duplicate/ambiguous article `350570`;
+4. approval/correction of the proposed seven-day stocked review period plus
+   cut-off/receipt fields; ordinary/fresh/pod lead durations remain confirmed
+   as 3/5/28 days; and
+5. approval/correction of the proposed safety policy (`7` days pods, `2` days
+   ordinary stocked, `0.5` day fresh), item-specific yield losses if any, and
+   hard max-cover values.
 
-## Milestone 1 — Legacy KW33/KW34 parity
+Already decided for the local demo: one selected location, the supplied menu
+remains effective until superseded and is repeated across six dated dummy
+weeks, stock export time as latest knowledge, 28-calendar-day pod lead,
+order-date-plus-365-day pod shelf-life approximation, Transgourmet for pod POs,
+and the four fresh service windows.
 
-**Outcome:** one deterministic command reproduces the manual baseline before
-we replace its assumptions.
+## Cross-cutting verification
 
-- [x] Implement isolated `legacy_kw34/v1` stocked-item arithmetic.
-- [x] Preserve exact displayed rounding and the `1.20`, `6`, and `2.5` values.
-- [x] Use previous-week `Daily` for the bridge.
-- [x] Preserve observed blank/different order cells as exceptions.
-- [x] Add a compatibility CSV adapter and deterministic JSON audit.
-- [x] Add synthetic boundary and determinism tests.
-- [ ] Implement the workbook-to-fixture extraction/adapter needed for actual
-      KW33/KW34 rows.
-- [ ] Add golden assertions for all 27 filled order cells and 28 bridge cells.
-- [ ] Add explicit assertions for the four likely missed blanks, two fresh rows
-      handled outside the stocked path, and owner-resolved master-data cases.
-- [ ] Implement and validate the fresh Sa/Mo/We/Fr legacy path.
-- [ ] Review all differences with the Excel owner and record explanations.
+- [x] Multi-dish aggregation and pre-mix/pod preservation.
+- [x] Multiple locations and shared ingredients in canonical engine tests.
+- [x] Zero forecast, duplicate/orphan/menu/BOM/input validation, and
+      deterministic replay.
+- [x] Open PO within/after horizon, same-day receipt ordering, stale inventory,
+      and placeholder source gates.
+- [x] Strict template-schema and provenance tests.
+- [x] Apicbase mapping/unit/fractional-stock tests.
+- [x] Lead/review horizon, proposed safety-days policy, and unavoidable
+      pre-arrival stockout tests.
+- [x] Fresh unequal-day coverage tests.
+- [x] Shelf-life/max-cover/MOQ/case/order-unit boundary tests.
+- [x] Full local template → normalized inputs → recommendation acceptance run.
 
-### Milestone 1 exit
+## Immediate next slice
 
-- [ ] The approved real fixture runs with one documented command.
-- [ ] All known filled cells match or have an explicit accepted explanation.
-- [ ] Blank/missing/conflicting rows remain visible.
-
-## Milestone 2 — Minimum improved Phase 2 engine
-
-**Outcome:** replace the workbook's structural weaknesses without building
-advanced optimization or infrastructure first.
-
-### Implemented foundation
-
-- [x] Load daily forecast, menu, BOM, items, inventory, and `open_pos.csv`.
-- [x] Validate required fields, types, stable-ID joins, duplicates, units,
-      effective BOM coverage, menu coverage, and timezone-aware timestamps.
-- [x] Explode and aggregate shared ingredients by location/day.
-- [x] Build a pure dated inventory/open-PO event ledger.
-- [x] Net demand without double-counting it.
-- [x] Emit projected stockout, stale-stock, overdue-PO, and late-PO exceptions.
-- [x] Fail closed in shadow/production mode when a critical source is unknown.
-- [x] Prove deterministic improved audit output with synthetic scenarios.
-
-### Next core calculation
-
-- [ ] Define one small versioned config contract for:
-  - lead time and review period;
-  - shelf life/max cover where used;
-  - storage-class behaviour;
-  - pack size and optional MOQ/case size;
-  - simple delivery weekdays/cut-off only where they affect the calculation;
-  - safety/yield values and provenance.
-- [ ] Calculate the protection horizon from lead time plus review/delivery
-      cadence; do not restore an unexplained global six-day target.
-- [ ] Keep legacy `1.20` only in `legacy_kw34`; make the improved safety/yield
-      rule explicit and simple until calibration exists.
-- [ ] Apply shelf-life/max-cover only when configured and expose a binding cap.
-- [ ] Apply pack, MOQ, and case rounding once at the end.
-- [ ] Report infeasible cases when rounding conflicts with a hard cap.
-- [ ] Implement fresh coverage from actual daily forecast using the confirmed
-      `Sat→Mon`, `Mon→Tue+Wed`, `Wed→Thu+Fri`, `Fri→Sat` service-day windows;
-      keep receipt-time/holiday semantics configurable and unapproved.
-- [ ] Produce internal `PlanningRecommendation` rows with derivations and
-      exception codes; do not add workflow statuses or approvals.
-- [ ] Add focused tests for zero demand, long lead, empty/open pipeline, late
-      receipt, fresh unequal days, shelf-life cap, MOQ/case boundary, and shared
-      ingredients.
-
-### Explicitly later, not P0
-
-- [ ] Statistical safety stock from forecast sigma.
-- [ ] Yield calibration from physical consumption/waste.
-- [ ] OOS uncensoring and forecast-quality analysis.
-- [ ] Lot-level FEFO.
-- [ ] Complex multi-supplier optimization or split deliveries.
-- [ ] Advanced launch/discontinuation optimization beyond validating the
-      supplied forecast/menu horizon.
-
-### Milestone 2 exit
-
-- [ ] File-driven recommendations are explainable and deterministic.
-- [ ] Every default/manual rule is labelled with provenance/version.
-- [ ] Results can be compared line-by-line with the legacy profile.
-
-## Milestone 3 — Snowflake inputs, Snowflake outputs, and Supabase configuration
-
-**Outcome:** replace file placeholders with real sources while giving internal
-users a durable place to maintain Phase 2 rules.
-
-### Snowflake and data-platform work
-
-- [x] Verify broad read access and complete V1-V12 source investigation.
-- [x] Record that the discovered forecast/recommendation models and
-      `BASE_INVENTORY` are abandoned.
-- [x] Rule out current Snowflake tables as a usable live PO ledger.
-- [ ] Obtain `data-transformation` repository access.
-- [ ] Receive Joel's RSA Snowflake service account through 1Password.
-- [ ] Agree with Joel:
-  - which upstream transformations belong in `data-transformation`;
-  - which Python job/repository owns Phase 2 calculation;
-  - the target Snowflake database/schema/table names;
-  - whether result runs append or replace a latest view;
-  - required read/write grants and scheduling owner.
-- [x] Identify the current PO process: Transgourmet pending-order history/PDFs
-      are netted manually outside the workbook.
-- [ ] Obtain an approved sanitized export/API contract and have data platform
-      ingest normalized PO/receipt history; do not automate portal credentials
-      or PDF/Claude handling inside the engine.
-- [ ] Implement read adapters only for accepted sources with freshness,
-      uniqueness, unit, key, and coverage checks.
-- [ ] Implement an idempotent Snowflake result writer.
-- [ ] Persist `run_id`, `generated_at`, input snapshot/version, active config
-      version/hash, recommendation derivations, and exceptions.
-- [ ] Reconcile each SQL adapter against an equivalent reviewed file fixture.
-
-### Supabase configuration
-
-- [ ] Approve project owner, region, environments, credentials, backup, and
-      retention before creating infrastructure.
-- [ ] Store only application-owned editable configuration and its change
-      history in Supabase; Snowflake remains the source/output warehouse.
-- [ ] Start with the minimum tables needed for active policy version,
-      storage-class defaults, item overrides, supplier-item constraints, and
-      simple delivery schedules.
-- [ ] Validate configuration before activation and keep one authoritative
-      active version per environment.
-- [ ] Include the active config version/hash in every Snowflake result run.
-- [ ] Keep CSV/YAML only for fixtures, controlled import/export, and recovery.
-
-### Milestone 3 exit
-
-- [ ] Accepted real inputs can run through the engine.
-- [ ] Results are written safely and reproducibly to Snowflake.
-- [ ] An active Supabase config version can replace bootstrap files.
-- [ ] Unknown PO/current-stock/forecast inputs block production output.
-
-## Milestone 4 — Internal validation against the manual process
-
-**Outcome:** demonstrate usefulness before scheduling the job broadly.
-
-- [ ] Run legacy output beside the Excel owner and reconcile every line.
-- [ ] Run improved results beside the manual plan for representative weeks.
-- [ ] Capture reasons for overrides, blanks, emergency orders, and fresh-slot
-      changes.
-- [ ] Include the now-known comparison reasons: off-sheet PO netting, freezer/
-      storage-driven split orders, likely missed blank orders, and fresh items
-      handled outside the stocked path.
-- [ ] Separate calculation differences from missing-source and policy effects.
-- [ ] Agree simple first-release measures: missing-demand coverage, projected
-      stockout warnings, recommendation differences, and planner time.
-- [ ] Add waste/service-level calibration only when definitions and historical
-      coverage are trustworthy.
-- [ ] Record the decision to continue, adjust rules, or extend comparison.
-
-## Milestone 5 — Internal configuration UI and scheduled job
-
-**Outcome:** non-technical users maintain the Phase 2 rules and the internal job
-runs reliably.
-
-### Minimum UI
-
-- [ ] Add a thin Python API over validated Supabase configuration operations.
-- [ ] Add internal authentication appropriate to the hosting environment.
-- [ ] Let authorized internal users view/edit:
-  - storage-category defaults;
-  - item/supplier overrides;
-  - lead time and review period;
-  - shelf life/max cover;
-  - MOQ/case size;
-  - fresh/stocked classification and simple delivery schedule;
-  - safety/yield setting and provenance.
-- [ ] Validate before save/activation and show clear field-level errors.
-- [ ] Show current active version and basic change history.
-- [ ] Optionally provide a read-only result/exception view if it materially
-      helps users; Snowflake remains the result store.
-
-The first UI does not include proposal approval, assignment/comments, supplier
-send, ERP export, or a broad planning workflow.
-
-### Scheduled internal job
-
-- [ ] Connect the accepted live Phase 1 daily forecast contract.
-- [ ] Schedule the Snowflake/Supabase → engine → Snowflake run.
-- [ ] Add idempotency, retries, freshness checks, failure logging, and a small
-      runbook.
-- [ ] Verify that a failed run cannot replace the last successful result view.
-
-### Milestone 5 exit
-
-- [ ] A non-technical user can safely edit and activate the supported rules.
-- [ ] A scheduled run writes reproducible internal Snowflake output.
-- [ ] Source/config failures remain visible and do not produce trusted results.
-
-## Cross-cutting tests
-
-- [x] Multi-dish aggregation and pre-mix preservation.
-- [x] Multiple locations and shared ingredients.
-- [x] Zero forecast and deterministic replay.
-- [x] Duplicate/orphan/menu/BOM/input validation.
-- [x] Open PO within/after horizon and same-day receipt ordering.
-- [x] Missing/placeholder source gates and stale inventory.
-- [ ] Real KW33/KW34 parity cases.
-- [ ] Fresh unequal daily demand and delivery-to-delivery coverage.
-- [ ] Lead/review horizon boundaries.
-- [ ] Shelf-life/max-cover and MOQ/case conflicts.
-- [ ] Supabase config validation/version selection.
-- [ ] Snowflake read/write idempotency and failure behavior.
-
-## Immediate next execution slice
-
-1. [x] Correct the architecture and backlog: Snowflake inputs/results,
-   Supabase editable rules, internal config UI, no approval/dispatch workflow.
-2. [ ] Build or run the minimal real KW33/KW34 fixture locally; commit only
-   after the recorded data-handling decision.
-3. [x] Record the Excel-owner answers and map confirmed versus partial details
-   to legacy/improved rules, sources, and human gates.
-4. [ ] Ask Joel to confirm the Snowflake output ownership/schema/write pattern,
-   finish service-account provisioning, and grant `data-transformation` access.
-5. [ ] Validate a sanitized Transgourmet export/API and continue normalized
-   PO/receipt ingestion with data platform.
-6. [ ] Arrange read-only Apicbase assessment for stock/item/BOM fields; accept
-   each domain separately because the owner reports stale master data.
-7. [ ] Implement the small Phase 2 config contract and the remaining minimum
-   calculation rules; keep advanced calibration out of P0.
-8. [ ] Implement Snowflake adapters/result writer once source contracts and
-   access are accepted.
-9. [ ] Create Supabase/config UI only after the config contract is stable.
+1. Send the two templates, assumptions brief, maintainer review summary, and
+   recommendation/exception outputs to the maintainer.
+2. Start Milestone 2 UI planning/building over the existing schemas, while
+   displaying proposal/unapproved statuses explicitly.
+3. Receive corrected/approved templates and answers; resolve the four stock
+   mappings, seven currently unmatched open-PO lines, item policy fields, and
+   fresh timing/pack-cap decisions.
+4. Rerun the same one-command workflow and pass the operational-approval gate
+   before shadow/production use.
+5. Plan Supabase only for editable master/rule/mapping data and change history;
+   leave operational result persistence to the agreed Snowflake path.
 
 ## Dated progress
 
-- 2026-08-22: Workbook inspected read-only; KW33/KW34 displayed values and
-  known gaps were reconstructed.
-- 2026-08-24: First M0/M1 Python foundation implemented with synthetic tests.
-- 2026-08-25: Snowflake V1-V12 investigation completed; abandoned models and
-  missing PO ingestion confirmed with Joel/data platform.
-- 2026-08-25: Canonical file adapters, BOM explosion, dated event ledger,
-  open-PO netting, strict gates, deterministic audit output, and synthetic
-  improved scenarios implemented.
-- 2026-08-25: Scope reconciled after architecture drift. Phase 1 remains the
-  independent daily forecast input. Phase 2 owns ingredient/order calculation.
-  Snowflake owns operational inputs/results; Supabase plus an internal UI owns
-  editable Phase 2 rules. Approval/dispatch workflows and speculative advanced
-  optimization were removed from the active plan.
-- 2026-08-26: Excel-owner Q1-Q13 answers reconciled. Demand is a combined
-  three-unit central-prep forecast; Transgourmet pending orders are netted
-  off-sheet; fresh service windows and several master-data cases are confirmed;
-  current standard/fresh versus future-pod lead classes are separated. Focused
-  timing, calendar, capacity, menu, source-contract, and approval gates remain.
+- 2026-08-22 to 2026-08-25: legacy reconstruction, canonical contracts,
+  validation, BOM explosion, dated projection/netting, and Snowflake source
+  investigation completed.
+- 2026-08-26: Excel-owner answers reconciled; Transgourmet PDF importer
+  implemented; new menu/pod sheets and two Apicbase stock examples analysed.
+- 2026-08-27: route rebased to project-owned templates. Two prefilled workbook
+  templates and the template-first local V1 plan were created. The supplied
+  workbooks are now migration evidence, not recurring adapter contracts; the UI
+  is explicitly the next milestone after a complete local recommendation run.
+- 2026-08-27: all five local V1 work packages completed. Scenario run
+  `improved-67fb3838775f` produced 23 dated recommendations across 11 items with
+  zero blockers; seven result files replayed byte-identically and 44 tests
+  passed. UI work is unblocked; maintainer approval remains the gate before
+  operational/shadow use.

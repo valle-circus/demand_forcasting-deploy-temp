@@ -13,14 +13,19 @@ from supply_planning.domain.issues import ExceptionCode, PlanningIssue, Severity
 from supply_planning.domain.models import (
     InputSourceStatus,
     InventorySnapshot,
+    PlanningLine,
+    PlanningRecommendation,
+    Provenance,
     RunMode,
     RunStatus,
 )
 from supply_planning.engine.explode import aggregate_item_demand, explode_bom
 from supply_planning.engine.netting import CandidateReceipt, NettingResult, project_inventory
+from supply_planning.engine.recommend import schedule_recommendations
 from supply_planning.validation.gates import evaluate_run_mode
 
 PROFILE = "improved_file/v1"
+POLICY_VERSION = "template-recommendation-v1-2026-08-27"
 
 
 def _normalize(value: Any) -> Any:
@@ -47,6 +52,7 @@ def _run_hash_payload(
 ) -> dict[str, Any]:
     return {
         "profile": PROFILE,
+        "policy_version": POLICY_VERSION,
         "planning_as_of_at": planning_as_of_at.isoformat(),
         "run_mode": run_mode.value,
         "source_statuses": _normalize(bundle.source_statuses),
@@ -56,6 +62,9 @@ def _run_hash_payload(
         "items": _normalize(bundle.items),
         "inventory_snapshots": _normalize(bundle.inventory_snapshots),
         "purchase_orders": _normalize(bundle.purchase_orders),
+        "locations": _normalize(bundle.locations),
+        "item_policies": _normalize(bundle.item_policies),
+        "delivery_rules": _normalize(bundle.delivery_rules),
         "candidate_receipts": _normalize(candidate_receipts),
     }
 
@@ -70,12 +79,15 @@ class ImprovedRunResult:
     source_statuses: tuple[InputSourceStatus, ...]
     issues: tuple[PlanningIssue, ...]
     netting_results: tuple[NettingResult, ...]
+    planning_lines: tuple[PlanningLine, ...]
+    recommendations: tuple[PlanningRecommendation, ...]
 
     def as_dict(self) -> dict[str, Any]:
         blocker_count = sum(issue.severity is Severity.BLOCKER for issue in self.issues)
         return {
             "schema_version": 1,
             "profile": PROFILE,
+            "policy_version": POLICY_VERSION,
             "run_id": self.run_id,
             "input_hash": self.input_hash,
             "planning_as_of_at": self.planning_as_of_at.isoformat(),
@@ -87,12 +99,23 @@ class ImprovedRunResult:
                 "issue_count": len(self.issues),
                 "blocker_count": blocker_count,
                 "projected_stockout_lines": sum(
-                    result.first_stockout_date is not None
-                    for result in self.netting_results
+                    issue.code is ExceptionCode.PROJECTED_STOCKOUT
+                    for issue in self.issues
                 ),
                 "net_requirement_g": str(
                     sum(
                         (result.net_requirement_g for result in self.netting_results),
+                        start=Decimal("0"),
+                    )
+                ),
+                "planning_line_count": len(self.planning_lines),
+                "recommendation_count": len(self.recommendations),
+                "proposed_order_units": str(
+                    sum(
+                        (
+                            recommendation.proposed_qty_units
+                            for recommendation in self.recommendations
+                        ),
                         start=Decimal("0"),
                     )
                 ),
@@ -108,6 +131,10 @@ class ImprovedRunResult:
             ],
             "issues": [issue.as_dict() for issue in self.issues],
             "netting_results": [result.as_dict() for result in self.netting_results],
+            "planning_lines": [_normalize(line) for line in self.planning_lines],
+            "recommendations": [
+                _normalize(recommendation) for recommendation in self.recommendations
+            ],
         }
 
 
@@ -129,10 +156,14 @@ def _blocked_result(
         source_statuses=source_statuses,
         issues=issues,
         netting_results=(),
+        planning_lines=(),
+        recommendations=(),
     )
 
 
-def _netting_issues(result: NettingResult) -> tuple[PlanningIssue, ...]:
+def _netting_issues(
+    result: NettingResult, *, risk_horizon_end: date | None = None
+) -> tuple[PlanningIssue, ...]:
     record_ref = f"location_id={result.location_id},item_id={result.item_id}"
     issues: list[PlanningIssue] = []
     if result.overdue_open_po_g > 0:
@@ -191,7 +222,15 @@ def _netting_issues(result: NettingResult) -> tuple[PlanningIssue, ...]:
                 remedy="Escalate, expedite, substitute, or adjust the explicit receipt scenario.",
             )
         )
-    if result.first_stockout_date is not None:
+    scoped_stockout_days = [
+        day
+        for day in result.days
+        if day.stockout_g > 0
+        and (risk_horizon_end is None or day.projection_date <= risk_horizon_end)
+    ]
+    if scoped_stockout_days:
+        first_stockout = scoped_stockout_days[0]
+        maximum_stockout_g = max(day.stockout_g for day in scoped_stockout_days)
         issues.append(
             PlanningIssue(
                 code=ExceptionCode.PROJECTED_STOCKOUT,
@@ -200,7 +239,8 @@ def _netting_issues(result: NettingResult) -> tuple[PlanningIssue, ...]:
                 record_ref=record_ref,
                 message=(
                     f"Projected balance first falls below zero on "
-                    f"{result.first_stockout_date.isoformat()}."
+                    f"{first_stockout.projection_date.isoformat()} and reaches a "
+                    f"{maximum_stockout_g} g shortage within the active recommendation horizon."
                 ),
                 remedy="Review dated demand, stock, open POs, and any explicit candidate receipt.",
             )
@@ -347,9 +387,91 @@ def run_improved_plan(
             ),
         )
         results.append(result)
-        issues.extend(_netting_issues(result))
 
     results.sort(key=lambda result: (result.location_id, result.item_id))
+    planning_lines: tuple[PlanningLine, ...] = ()
+    recommendations: tuple[PlanningRecommendation, ...] = ()
+    if bundle.item_policies and bundle.delivery_rules:
+        recommendation_result = schedule_recommendations(
+            run_id=run_id,
+            planning_as_of_date=projection_start,
+            daily_item_demand=daily_item_demand,
+            items=bundle.items,
+            item_policies=bundle.item_policies,
+            delivery_rules=bundle.delivery_rules,
+            snapshots=tuple(selected_snapshots.values()),
+            purchase_orders=bundle.purchase_orders,
+        )
+        planning_lines = recommendation_result.planning_lines
+        recommendations = recommendation_result.recommendations
+        issues.extend(recommendation_result.issues)
+        lines_by_id = {line.planning_line_id: line for line in planning_lines}
+        planned_receipts = tuple(
+            CandidateReceipt(
+                candidate_receipt_id=recommendation.recommendation_id,
+                location_id=recommendation.location_id,
+                item_id=recommendation.item_id,
+                receipt_date=recommendation.expected_delivery_date,
+                quantity_g=(
+                    recommendation.proposed_qty_units
+                    * lines_by_id[recommendation.planning_line_id].order_unit_size_g
+                ),
+                provenance=Provenance.POLICY_DEFAULT,
+            )
+            for recommendation in recommendations
+        )
+        if planned_receipts:
+            projected_results: list[NettingResult] = []
+            for baseline in results:
+                snapshot = selected_snapshots[(baseline.location_id, baseline.item_id)]
+                demands = tuple(
+                    demand
+                    for demand in daily_item_demand
+                    if demand.location_id == baseline.location_id
+                    and demand.item_id == baseline.item_id
+                )
+                projected_results.append(
+                    project_inventory(
+                        location_id=baseline.location_id,
+                        item_id=baseline.item_id,
+                        projection_start_date=baseline.projection_start_date,
+                        projection_end_date=baseline.projection_end_date,
+                        demands=demands,
+                        snapshot=snapshot,
+                        item=items[baseline.item_id],
+                        purchase_orders=(
+                            po
+                            for po in bundle.purchase_orders
+                            if po.location_id == baseline.location_id
+                            and po.item_id == baseline.item_id
+                        ),
+                        demand_provenance=demand_provenance,
+                        candidate_receipts=(
+                            receipt
+                            for receipt in (*candidate_receipts, *planned_receipts)
+                            if receipt.location_id == baseline.location_id
+                            and receipt.item_id == baseline.item_id
+                        ),
+                    )
+                )
+            results = projected_results
+    risk_horizon_by_key: dict[tuple[str, str], date] = {}
+    for line in planning_lines:
+        if line.coverage_end_date is None:
+            continue
+        key = (line.location_id, line.item_id)
+        current = risk_horizon_by_key.get(key)
+        if current is None or line.coverage_end_date > current:
+            risk_horizon_by_key[key] = line.coverage_end_date
+    for result in results:
+        issues.extend(
+            _netting_issues(
+                result,
+                risk_horizon_end=risk_horizon_by_key.get(
+                    (result.location_id, result.item_id)
+                ),
+            )
+        )
     return ImprovedRunResult(
         run_id=run_id,
         input_hash=input_hash,
@@ -359,4 +481,6 @@ def run_improved_plan(
         source_statuses=bundle.source_statuses,
         issues=tuple(issues),
         netting_results=tuple(results),
+        planning_lines=planning_lines,
+        recommendations=recommendations,
     )

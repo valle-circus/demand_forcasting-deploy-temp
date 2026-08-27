@@ -3,16 +3,22 @@
 This repository automates the ingredient and purchasing-demand calculation
 currently maintained in `Supply_Planning_Rewe.xlsx`.
 
-> **Current status:** the displayed KW33/KW34 stocked-item arithmetic is
+> **Current status (2026-08-27):** the displayed KW33/KW34 stocked-item arithmetic is
 > independently reconciled and implemented as `legacy_kw34/v1`. The real
 > workbook rows are not yet an automated golden fixture; current tests use safe
 > synthetic data. The first improved file path can validate daily forecast,
 > menu, BOM, item, inventory, and open-PO inputs, explode demand, and project
-> inventory through time. All 32 tests pass. Required Snowflake verification is
-> complete and the Excel-owner Q1-Q13 response is reconciled. The current PO
-> process is identified, but live forecast/PO/stock adapters, exact scheduling/
-> capacity rules, and approved editable policy values still require the focused
-> follow-ups.
+> inventory through time. The interim Transgourmet PDF adapter is implemented
+> and locally validated. Two project-owned Excel templates are now prefilled
+> for a six-week, one-location pod/ingredient demonstration. The recurring V1
+> no longer adapts arbitrary maintainer workbook layouts and requires no current
+> Snowflake input. The strict template readers, Apicbase stock normalizer,
+> reviewed Transgourmet mapping bridge, purchase-recommendation policy, and
+> table-ready outputs are implemented. A complete scenario run for
+> `LOC_DEMO_001` is byte-stable, has zero blockers, and produces 23 dated
+> recommendation lines across 11 items. The local technical V1 is complete;
+> maintainer approval of highlighted policy/mapping fields is the gate before
+> operational/shadow use, not before starting the thin upload UI.
 
 ## Phase boundary
 
@@ -50,6 +56,15 @@ bridge values at displayed precision. The owner thinks the four positive-gap
 blank orders were missed; two planned fresh ingredients are handled outside the
 stocked path; and selected item/pack conflicts are now resolved. Historical
 cells remain explicit evidence, not values to silently repair.
+
+Improved V1 preserves the intent of the old 20% extra-demand buffer—to reduce
+OOS risk—but separates it from recipe yield. Proposed safety is 7 days for
+pods, 2 days for ordinary stocked items
+and 0.5 day for fresh; `yield_factor=1.00` unless deterministic loss is known.
+The fixed six-day target becomes item-specific `lead + review` coverage (35
+days for pods and 10 for ordinary stocked items under the proposed seven-day
+weekly review). The `×2.5` bridge becomes day-by-day projection from the stock
+timestamp with dated demand and open POs.
 
 Fresh products use the owner-confirmed service windows `Sat→Mon`,
 `Mon→Tue+Wed`, `Wed→Thu+Fri`, and `Fri→Sat`. The weekday columns are delivery
@@ -111,34 +126,51 @@ write in this project.
 - pure three-level BOM explosion and shared-item aggregation;
 - exact displayed-value `legacy_kw34/v1` arithmetic;
 - canonical multi-file CSV adapters with actionable errors;
+- a local Transgourmet PDF-to-CSV helper with content deduplication, delivery-total
+  reconciliation, full history output, canonical dated `open_pos.csv`, and an
+  explicit undated-open review output;
 - timestamped inventory and dated open-PO event ledger;
 - daily projected balance and late/stale/stockout exceptions;
 - deterministic audit JSON and strict shadow/production source gates;
-- synthetic legacy and multi-location improved scenarios.
+- strict project-owned Excel-template readers and actionable schema validation;
+- Apicbase stock XLSX normalization with export timestamp, fractional stock,
+  UID/exact-name mapping review, and explicit scenario-only zero assumptions;
+- location-aware Transgourmet PDF normalization with dated-PO quarantine and
+  carton-to-pack conversion;
+- item-specific lead/review coverage, explicit safety/yield, fresh service
+  windows, shelf/max-cover, MOQ/case and final order-unit rounding;
+- table-ready recommendations, derivations, exceptions, mapping-review files,
+  a concise maintainer summary, and byte-stable replay; and
+- synthetic legacy/multi-location scenarios plus the complete local demo run.
 
-The improved path currently stops at unrounded net requirement. It does not yet
-apply the full configurable Phase 2 policy or persist to Snowflake/Supabase.
+Snowflake/Supabase persistence and the maintainer UI are intentionally not part
+of the completed local V1 calculation.
 
 ## Delivery order
 
-1. Complete the real KW33/KW34 golden validation and planner interpretation.
-2. Finish the minimum improved Phase 2 calculation with explicit config inputs.
-3. Connect verified Snowflake inputs/results and establish Supabase config
-   storage for the same validated rule contract.
-4. Compare automated results with the Excel owner over representative runs.
-5. Add the small internal config UI for non-technical users.
-6. Schedule and monitor the internal job.
-7. Add advanced calibration only when it proves useful.
+1. Send the completed local V1 packet to the maintainer and collect approved or
+   corrected template/policy/mapping rows. Rerun before operational use.
+2. Start the thin maintainer upload UI over exactly the same contracts; keep
+   demo/unapproved values visibly labelled until the maintainer gate passes.
+3. Add Snowflake result persistence and the agreed editable master/rule store;
+   replace manual inputs individually when accepted APIs/tables exist.
+4. Shadow-validate representative runs and then schedule/monitor the job.
+5. Keep KW33/KW34 parity as a separate compatibility track and add advanced
+   calibration only when it proves useful.
 
 ## What is blocked and what can continue
 
-There is no blocker to the next engineering tranche: real KW parity work and
-the small parameterized Phase 2 calculation can continue now. The items below
-block only the named later outcome.
+There is no remaining local V1 implementation tranche. The items below block
+only operational approval or the named later outcome.
 
-- The original 13 Excel-owner answers are received. Only the focused remaining
-  details—timestamps, delivery-cell status, calendars/cut-offs, capacity, menu
-  horizon, and policy approval—block their corresponding business sign-offs.
+- The original 13 Excel-owner answers are received. Local V1 now keeps the
+  current menu effective until superseded and repeats it for six dummy weeks,
+  uses an upload-selected location and stock export time as `counted_at`,
+  and pod expiry as order date + 365 days. Ordinary, fresh and pod lead
+  durations are confirmed as 3 days, 5 days and 28 calendar days respectively.
+  Only the
+  focused stock/order-unit, article-mapping, delivery cut-off/receipt timing,
+  and policy values block production sign-off.
 - A real committed KW33/KW34 golden fixture needs the recorded data-handling
   decision; a private/local fixture can still be used.
 - Joel's service account, `data-transformation` access, and the target Snowflake
@@ -158,8 +190,10 @@ No further required V1-V12 Snowflake verification query remains.
 | [`AGENTS.md`](AGENTS.md) | Repository implementation boundaries |
 | [`docs/descriptions/phase2_supply_planning_brief.md`](docs/descriptions/phase2_supply_planning_brief.md) | Workbook evidence, target logic, and architecture |
 | [`docs/plans/phase2_supply_planning_master_backlog.md`](docs/plans/phase2_supply_planning_master_backlog.md) | Prioritized implementation backlog |
+| [`docs/plans/v1_template_first_delivery_plan.md`](docs/plans/v1_template_first_delivery_plan.md) | Active local V1 checklist and acceptance criteria |
 | [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Phase ownership and source status |
 | [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Stable engine contracts and file schemas |
+| [`docs/descriptions/v1_assumptions_and_admin_validation.md`](docs/descriptions/v1_assumptions_and_admin_validation.md) | Concise maintainer review of active values, assumptions, legacy factors, and questions |
 | [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Exact human/access actions and their impact |
 | [`docs/reports/planner-questionnaire-review/report.html`](docs/reports/planner-questionnaire-review/report.html) | Sanitized Q1-Q13 clarification and follow-up report |
 | [`docs/scratchpads/snowflake_verification_evidence.md`](docs/scratchpads/snowflake_verification_evidence.md) | Durable V1-V12 evidence without private CSVs |
@@ -167,7 +201,8 @@ No further required V1-V12 Snowflake verification query remains.
 
 ## Quick start
 
-The core targets Python 3.12 and has no third-party runtime dependencies.
+The project targets Python 3.12. `openpyxl` is the small base dependency for
+read-only XLSX normalization; `pdfplumber` is optional for Transgourmet PDFs.
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
@@ -187,6 +222,71 @@ Or run:
 ```powershell
 .\scripts\check.ps1 -PythonExecutable "C:\path\to\python.exe"
 ```
+
+### Complete local template-driven V1
+
+Use the two fixed templates, one current Apicbase stock report, the cumulative
+Transgourmet PDF folder, and an explicit planning location:
+
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+python -m supply_planning v1-run `
+  --master-workbook "C:\path\Phase2_Master_Data_Template_v1.xlsx" `
+  --planning-workbook "C:\path\Phase2_Planning_Input_Template_v1.xlsx" `
+  --stock-workbook "C:\path\current-stock-report.xlsx" `
+  --po-pdf-dir "C:\path\transgourmet-pdfs" `
+  --output-dir "C:\path\private-v1-output" `
+  --location-id "LOC_DEMO_001" `
+  --run-mode scenario
+```
+
+The planning cutoff defaults to the stock export timestamp. The output folder
+contains normalized table rows, recommendations, derivations, exceptions,
+mapping reviews, a deterministic audit, and `maintainer_review_summary.md`.
+Keep it private because normalized stock and PO rows can contain operational
+data. Use `shadow` or `production` only after the maintainer approval gate.
+
+### Manual Transgourmet PO import
+
+Install the optional PDF dependency once:
+
+```powershell
+python -m pip install -e ".[pdf-import]"
+```
+
+Then run the Windows helper. It scans the top level of Downloads, ignores
+unrelated PDFs, deduplicates repeated downloads by normalized document content,
+and writes only to the ignored private-data directory:
+
+```powershell
+.\scripts\extract_transgourmet_pos.ps1 `
+  -LocationId "REWE_CENTRAL_PREP" `
+  -AsOfDate "2026-08-26"
+```
+
+Outputs under `data/private/transgourmet/` are:
+
+- `transgourmet_po_history.csv`: every extracted line with source hashes,
+  supplier article metadata, ordered quantity, scheduled delivery date, and
+  status derived for the selected as-of date;
+- `transgourmet_supplier_items.csv`: one mapping-review row per supplier article;
+- `open_pos.csv`: canonical purchase-order rows whose `Liefertag` is strictly
+  after the explicit as-of date;
+- `undated_open_pos.csv`: open rows with no `Liefertag`, kept visible but not
+  passed into dated inventory netting; and
+- `import_summary.json`: counts, a deterministic source version, and the
+  assumptions that require review.
+
+Status follows the confirmed portal rule for the explicit as-of date: no
+`Liefertag` or a future `Liefertag` means `open`; a `Liefertag` on that date or
+in the past means `closed`/received. The PDF still has no remaining quantity,
+so open rows use displayed ordered quantity as `open_qty_units`. An undated row
+cannot safely enter the current dated netting contract without inventing a
+receipt date, so it is quarantined in `undated_open_pos.csv`. With no
+`-ItemMap`, the helper uses visibly provisional `TG-<article number>` item IDs;
+pass a reviewed two-column CSV with `supplier_article_number,item_id` once the
+canonical mapping is available. Raw PDFs and generated private CSVs are ignored
+by Git.
 
 ## Safeguards
 

@@ -15,6 +15,86 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-27: **The local template-driven technical V1 is complete; maintainer
+  approval is an operational gate, not a UI-start gate.** Strict readers load
+  the two project-owned workbook schemas; the Apicbase adapter reads the
+  standard stock-report export timestamp, preserves fractional stock, maps UID
+  then exact reviewed name, and exposes scenario-only zero assumptions; the
+  Transgourmet adapter reuses the PDF parser, applies the confirmed
+  `Liefertag` cutoff and converts order units to inner packs using maintained
+  mappings. The pure engine now calculates item-specific lead+review coverage,
+  explicit safety/yield, fresh service windows, shelf/max-cover, MOQ/case and
+  final pack/carton rounding, then writes table-ready recommendations,
+  derivations, exceptions, mapping reviews and deterministic audit output.
+  Scenario run `improved-67fb3838775f` at
+  `2026-08-26T17:10:00+02:00` produced 23 dated recommendations across 11 items,
+  103 order units and zero blockers; seven result files replayed byte-identically
+  and 44 tests pass. Four stock gaps used visible scenario-zero rows and seven
+  open-PO lines were quarantined; these are not production facts. UI/Supabase
+  schema work may start against the stable contracts, but the UI must label
+  proposal values until the maintainer returns approved/corrected templates and
+  a rerun passes the operational gate. Evidence:
+  `docs/plans/v1_template_first_delivery_plan.md`,
+  `docs/plans/phase2_supply_planning_master_backlog.md`,
+  `docs/descriptions/v1_assumptions_and_admin_validation.md`, and
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
+
+- 2026-08-27: **The recurring local V1 is template-first and has one active
+  delivery path.** The project owns `Phase2_Master_Data_Template_v1.xlsx`
+  (`Items`, `Locations`, `Delivery_Rules`) and
+  `Phase2_Planning_Input_Template_v1.xlsx` (`Demand_Plan`, `Menu_Calendar`,
+  `BOM_Lines`). The supplied `CWxx_*` and pod metadata workbooks are migration
+  evidence used to prefill these schemas, not recurring layouts that adapters
+  must support. Item data are global; demand/menu are location-aware; BOM is
+  location-independent. Purchased pods and ordinary ingredients coexist as
+  first-class `Dish -> Silo -> Item` components. Pods store official supplier
+  `Circus`, ordering channel `Transgourmet`, 28-calendar-day lead, 1 kg inner
+  packs, five packs/carton, and the V1 expiry approximation order date + 365
+  days. The local demo uses `LOC_DEMO_001`, repeats the current menu/demand for
+  six dated dummy weeks (the menu remains effective until superseded), and
+  treats the Apicbase export timestamp as current `counted_at`; a future upload
+  selects location. Initial improved-policy proposals are a seven-day stocked
+  review period, safety days of `7` pods, `2` ordinary stocked and `0.5` fresh,
+  and `yield_factor=1.00` unless deterministic loss is known. These preserve
+  the intent of the old 20% extra-demand buffer to reduce OOS risk without
+  treating the old global `1.20` as yield. The
+  maintainer edits only the two templates and drops
+  cumulative Transgourmet PDFs plus a current Apicbase stock XLSX. Normalizers
+  produce table-ready CSVs. No current Snowflake input is required for this
+  milestone. That deterministic local run is now complete, so the upload UI may
+  begin under the separate maintainer-approval gate above. Evidence:
+  `docs/plans/v1_template_first_delivery_plan.md`,
+  `docs/plans/phase2_supply_planning_master_backlog.md`,
+  `docs/descriptions/canonical_data_contracts.md` section 3.11, and
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
+
+- 2026-08-26: **The interim Transgourmet PDF-to-CSV bridge is implemented and
+  locally validated.** `scripts/extract_transgourmet_pos.ps1` scans local
+  `Bestelldetails` PDFs, ignores unrelated files, deduplicates normalized
+  document content, fails on partial extraction or delivery-total mismatch, and
+  writes private history, supplier-item review, canonical `open_pos.csv`, and a
+  deterministic summary/source version under ignored `data/private/`. The
+  2026-08-26 local run found 80 unique documents, 364 history lines and 47
+  supplier articles. The confirmed rule is: missing/future `Liefertag` is open;
+  today/past is closed/received. At that cutoff, 356 history lines are closed
+  (including 14 same-day lines), while the 8 strictly future-dated rows pass the
+  canonical PO parser; no current line lacks `Liefertag`. Missing-date open rows
+  are retained in a separate undated-open CSV rather than assigned an invented
+  receipt date. One
+  supplier article has multiple displayed package/base-unit combinations and
+  remains a pack-mapping review item. The PDF
+  does not provide remaining quantity, partial receipt/cancellation detail, or
+  receipt time. Therefore ordered quantity copied to open quantity, 00:00
+  delivery time, `REWE_CENTRAL_PREP`, and `TG-<article>` IDs are explicit interim
+  assumptions, not accepted production facts. Raw PDFs/generated CSVs stay
+  outside git; API/Snowflake ingestion and approved location/item mappings
+  remain open. This one adapter also covers Circus-labelled pod orders because
+  the orders are placed through Transgourmet; no separate Circus PO register is
+  needed. Evidence:
+  `src/supply_planning/adapters/transgourmet_pdf.py`,
+  `tests/test_transgourmet_pdf.py`, `README.md`, and
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
+
 - 2026-08-25: **Architecture and scope correction.** Phase 1 is an independent
   upstream input that produces forecast portions by location/dish/service day.
   This repository is Phase 2: BOM explosion, stock/open-PO netting, and internal
@@ -40,35 +120,41 @@ not a task log or a replacement for the detailed engineering brief.
   adjusted. An explicit service-location-to-planning-location map is therefore
   required; never copy the combined value to each unit. Pending Transgourmet
   orders are reviewed in the supplier portal, downloaded as PDFs, analysed
-  outside the workbook, and subtracted before final quantities; the four blank
-  KW34 gaps were probably missed. Current lead assumptions are about 3 days
-  standard and 5 days fresh, versus about one month for future non-cancellable
-  pods. Fresh coverage is `Sat→Mon`, `Mon→Tue+Wed`, `Wed→Thu+Fri`, and
+  outside the workbook, and subtracted before final quantities; this includes
+  pod orders. The four blank KW34 gaps were probably missed. Current lead
+  lead durations are confirmed as 3 days standard and 5 days fresh; pods are confirmed at
+  4 calendar weeks and are non-cancellable. Fresh coverage is `Sat→Mon`,
+  `Mon→Tue+Wed`, `Wed→Thu+Fri`, and
   `Fri→Sat`. Operators upload usable-stock counts to Apicbase, while its master
   data is currently stale and Excel is the operational fallback; supplier
   article numbers exist. Creme Fraiche is `5000 g`, current Schnittlauch is the
   distinct `250 g` product, and `Oel` equals `Sonnenblumenoel`. Exact PO export/
-  API fields, stock timestamp/partial packs, `S/M/W/Fr` status, cut-offs,
-  storage capacity, menu horizon, and approved safety/yield/shelf-life rules
-  remain focused gates. Evidence:
+  API fields, stock quantity/partial-pack semantics, `S/M/W/Fr` status,
+  cut-offs, storage capacity, and approved safety/yield rules remain focused
+  gates. Local V1 separately fixes a menu-valid-until-superseded rule with six
+  dummy weeks, upload-selected location, export time as `counted_at`, and pod
+  expiry as order date + 365
+  days. Evidence:
   `docs/descriptions/phase2_supply_planning_brief.md` sections 3-5 and 10;
   `docs/plans/human_action_register.md` HA-01/HA-04/HA-06/HA-08/HA-11/HA-12;
   `docs/reports/planner-questionnaire-review/source_notes.md`. Status: `active`.
 
-- 2026-08-26: **The interim feedback-V1 source plan is fixed.** Use the original
+- 2026-08-26: **The historical feedback-V1 source plan is retained only as a
+  compatibility track.** Use the original
   KW33/KW34 workbook already available as the historical comparison fixture and
   preserve workbook/tab/week provenance for every extracted value; do not ask
-  the Excel owner to resend historical forecast, menu, stock, or item data before
-  the first comparison. Keep raw manual Transgourmet downloads outside git and
+  the Excel owner to resend historical forecast, menu, stock, or item data.
+  This track does not block the template-driven local V1. Keep raw manual Transgourmet downloads outside git and
   transform them into versioned `open_pos.csv`; the API is a later automation
-  path. Recurring inputs without an accepted automated source use versioned
-  manual CSVs. The immediate data request is read-only Apicbase access/API docs
-  or exports for current stock, BOM/recipes, item master/pack sizes, and IDs for
-  Transgourmet mapping. Assess each Apicbase domain separately because its master
-  data is reported stale. Forecast moves from manual CSV to the future Phase 1
-  Snowflake table; editable rules remain manual/versioned until Supabase exists.
+  path. For recurring new-standard runs, the superseding active entry above
+  replaces six human-maintained CSVs with two maintained workbooks and two raw
+  drops. Apicbase recipe/item data are not a V1 blocker because the reduced
+  assortment is maintained manually; its stock export remains a required
+  operational snapshot. Forecast moves from the dated manual plan to the future
+  Phase 1 Snowflake table; editable rules remain manual/versioned until
+  Supabase exists.
   Evidence: `docs/descriptions/data_requirements.md` interim V1 source map;
-  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `active`.
+  `docs/scratchpads/phase2_supply_planning_execution.md`. Status: `superseded`.
 
 - 2026-08-24: **A correction notice supersedes four earlier same-day entries.**
   Findings first recorded on 2026-08-24 were produced under the Lightdash
@@ -471,39 +557,39 @@ not a task log or a replacement for the detailed engineering brief.
 These are intentionally unresolved and must not be silently converted into
 implementation assumptions:
 
-- Which stable IDs and effective-dated mapping roll the three REWE service/sales
-  units into the one central inventory/planning location, and where does the
-  two-week consumption signal for the owner-confirmed combined dish forecast
-  originate? An already combined forecast must not be duplicated per unit.
+- For future Phase 1 automation, which stable IDs/effective mapping roll service
+  locations into an inventory/planning location, and where does the two-week
+  consumption signal originate? Local V1 instead uses the selected planning
+  location and must not duplicate an already combined forecast.
 - Which repository owns each part of the target implementation: normalized
   Snowflake input/output models in `data-transformation` versus the pure Phase 2
   calculation engine in this repository? Inspect the data-model repository
   after access is granted and decide explicitly so logic is not duplicated.
 - Which of `WASTE_QTY_G`, `STRANDED_QTY_G` and `SILO_END_OF_DAY_QTY_G` is
-  physical disposal, and how is `WASTE_VALUE_EUR` valued? Blocks the yield
-  factor.
+  physical disposal, and how is `WASTE_VALUE_EUR` valued? This blocks later
+  calibrated yield, not an explicit manual V1 value.
 - Can Transgourmet expose a safe CSV/export/API with stable PO/line/article IDs,
   outstanding units, statuses, expected receipts, partial receipts,
-  cancellations/date changes, and history, and how will future pod orders be
-  represented? Snowflake still has no PO ingestion to Joel's knowledge.
-- What is the committed forward-menu source/process? `INT_UNIT_DAY_MENU` ended
-  on 2026-08-24 when queried on 2026-08-25, while later `BASE_UCS_MENU` rows mix
-  operational-looking and pilot/demo/training/far-future/terminated records.
-- Can Apicbase be accepted separately for stock, BOM, and item master despite
-  the owner's reported master-data backlog, and which supplier article/
-  Apicbase/EAN ID is canonical?
-- What is the exact stock-count timestamp, how are opened/partial packs stored
-  in Apicbase, and why does the legacy sheet use a 2.5-day bridge?
-- Are the reported 3-day standard, 5-day fresh, and one-month pod lead times
-  calendar or business days; what cut-offs/events bound them; and which item/
-  supplier exceptions apply?
+  cancellations/date changes, and history? Pods use this same ordering source;
+  the remaining pod-specific question is article/order-unit mapping. Snowflake
+  still has no PO ingestion to Joel's knowledge.
+- For local V1, confirm pod article/description, five-pack carton order unit,
+  MOQ/case; resolve article `350570`; and approve/correct the proposed safety
+  values (`7` pod, `2` ordinary stocked, `0.5` fresh), deterministic yield loss
+  if any, and hard max-cover values.
+- What unit does Apicbase `Current Stock (qty)` use for each active item, and
+  how are usable opened/partial packs represented? Local V1 already selects the
+  planning location at upload and uses row-1 export time as `counted_at`.
+- Approve/correct the proposed seven-day stocked review period, confirm whether
+  Monday is a normal reorder opportunity, and provide material cut-offs/
+  availability events or item exceptions around the confirmed 3-day standard,
+  5-day fresh and 28-calendar-day pod lead durations.
 - Beyond the confirmed Penne freezer-space split, what capacity, pipeline,
   pack/case, or other constraints explain calculated-versus-delivery-cell
   differences, and do those cells mean intended, placed, confirmed, or
   delivered units?
 - Is silo capacity binding, and does sealed or opened shelf life govern each
   item?
-- How many weeks ahead is the menu fixed and committed?
 - Does the planner's Q12 “currently no” mean that no additional historical data
   exists, or only that the forecast sheet, Apicbase, Transgourmet history, and
   Snowflake candidates are not currently used/trusted for weekly planning?

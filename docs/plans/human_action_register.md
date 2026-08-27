@@ -32,26 +32,33 @@ Status values: `OPEN`, `IN PROGRESS`, `DONE`, `NOT NEEDED YET`.
 
 ## HA-03 — Formula or workbook walkthrough
 
-- **Status:** `OPEN`
+- **Status:** `NOT NEEDED YET`
 - **Owner:** Valentin / Excel owner
 - **Action:** provide an approved raw XLSX with formulas or a short walkthrough
   if available.
-- **Blocks:** claiming exact cell-reference parity.
+- **Blocks:** only a future claim of exact legacy cell-reference parity. It is
+  not part of the template-driven V1 exit criteria.
 - **Fallback:** the displayed-value arithmetic is independently reconciled.
 
 ## HA-04 — Phase 2 planning-rule ownership and values
 
 - **Status:** `IN PROGRESS`
 - **Owner:** planner / purchasing / operations
-- **Evidence received 2026-08-26:** current Transgourmet planning uses about
-  3 days for standard goods and 5 days for fresh goods; fresh is treated as
-  about 3 days MHD; TK/Kuehl/RT have no explicit MHD cap in the current short
-  cycle; future pods are described as about one month lead time and one year
-  MHD; the legacy 20% buffer is a broad assumption rather than calibrated
-  policy. These are owner-reported starting points, not yet exact calendar or
-  supplier-rule records.
+- **Evidence received 2026-08-26:** current Transgourmet planning uses 3 days
+  for standard goods and 5 days for fresh goods; fresh is treated as about 3 days
+  MHD; TK/Kuehl/RT have no explicit MHD cap in the current short cycle; pods
+  have a confirmed lead of 4 calendar weeks and about one year MHD. The local
+  V1 approximates pod expiry as order date plus 365 days. The legacy 20% extra-
+  demand buffer was intended to reduce OOS risk but mixes safety and yield.
+  The V1 improvement proposal makes it explicit as `7` safety days for pods,
+  `2` for ordinary stocked items and `0.5` for fresh, with
+  `yield_factor=1.00` unless deterministic loss is known. The 3/5-day
+  durations and pod day type are settled;
+  review period, cut-off/receipt timing, receipt age and supplier-rule details
+  are not.
 - **Action:** approve the versioned values users will maintain through the
-  internal UI: lead time and review period, calendar/business-day semantics,
+  internal UI: lead time, the proposed seven-day stocked review period and
+  safety days, calendar/business-day semantics,
   shelf-life/max-cover and storage-capacity rules, MOQ/case size, simple
   delivery weekdays/cut-offs, and separate initial safety/yield settings.
 - **Important:** observed expiry and receipt history may inform a policy but do
@@ -92,20 +99,29 @@ Suggested message to Joel:
   Snowflake to his knowledge. The Excel owner identified Transgourmet order
   history as the current pending-order source: pending orders are downloaded as
   PDFs, analysed outside the workbook, and subtracted before the final visible
-  quantities. This identifies the process but not an accepted data contract.
+  quantities. The repository now contains a private/local PDF importer that
+  deduplicates documents, reconciles extracted line values to delivery totals,
+  and writes history plus canonical CSV columns. The operational status rule is
+  now confirmed: missing/future `Liefertag` is open; today/past is
+  closed/received. The PDFs still do not expose remaining quantity, partial
+  receipts, cancellations, or receipt time, so this is not an accepted live
+  data contract. The same Transgourmet PDFs contain pod orders; `Circus` is the
+  official pod supplier, not a separate V1 ordering system.
 - **Actions:**
   1. Confirm owner, history retention, and CSV/export/API capability without
      storing portal credentials in code or documentation.
-  2. Define which portal statuses count as open and how Monday rechecks avoid
-     double-counting quantities already ordered on Thursday.
+  2. Confirm how Monday rechecks handle partial receipts, cancellations, and
+     quantities already ordered on Thursday without double-counting.
   3. Obtain one approved sanitized example covering PO/line ID, item, location, supplier,
      ordered and remaining quantity/unit, status, order date, expected receipt,
      partial receipts, cancellations/date changes, and source update time.
-  4. Confirm how future non-cancellable pod orders are tracked and whether they
-     use the same source.
+  4. Confirm which pod article/order unit appears in the PDF and map it to the
+     Circus pack/carton master; no separate pod-order register is needed.
   5. Return the findings to Joel for normalized ingestion and quality tests.
 - **Blocks:** complete production inventory-position netting.
-- **Fallback:** synthetic/manual `open_pos.csv` for development only.
+- **Fallback:** the implemented manual PDF-to-CSV helper for controlled file
+  runs, using the confirmed date rule, an undated-open quarantine, and explicit
+  remaining-quantity/item-mapping limitations.
 
 ## HA-07 — Supabase configuration store
 
@@ -136,7 +152,16 @@ Suggested message to Joel:
   source of the two-week consumption signal and do not duplicate an already
   aggregated three-location forecast across units.
 - **Blocks:** scheduled production Phase 2 runs.
-- **Fallback:** manual/file daily forecasts for parity and scenarios.
+- **Additional evidence:** the new active `CW36_Menu` still contains
+  `Demand/Silo Load`, but no explicit `service_date` column. REWE communicates
+  the fixed menu at least 4 weeks ahead and changes become effective only after
+  that notice period. Until a dated change supersedes it, the current menu
+  remains effective.
+- **Fallback:** a maintained `Demand_Plan` tab at
+  `location_id × dish_id × service_date`, with forecast/menu versions. The
+  local V1 repeats the current menu/demand as six dated dummy weeks so the
+  proposed 35-calendar-day pod protection horizon can be tested. This is a
+  declared demo assumption, not an unresolved implementation blocker.
 
 ## HA-09 — Physical silo-slot bridge
 
@@ -163,49 +188,96 @@ Suggested message to Joel:
 
 - **Status:** `OPEN`
 - **Owner:** Valentin / Excel owner / purchasing
-- **Timing:** after the first comparison using the workbook already available;
-  do not request duplicate historical inputs before that run.
+- **Timing:** during maintainer review of the project-owned templates. Do not
+  request duplicate historical inputs.
 - **Action:** obtain a short walkthrough or written confirmation for the
-  remaining operational details only where they explain a material comparison
-  difference or are needed to approve the affected policy:
-  1. exact count weekday/time and opened/partial-pack treatment;
-  2. whether `S/M/W/Fr` values are intended, placed, confirmed, or delivered
-     quantities and in which units;
-  3. whether 3/5-day lead times are calendar or business days, measured from
-     which cutoff to which availability event, and which item exceptions exist;
-  4. receipt times, holiday behavior, and whether all fresh items use
-     `Sat→Mon`, `Mon→Tue+Wed`, `Wed→Thu+Fri`, `Fri→Sat`;
-  5. freezer/storage limits that cause split or reduced orders;
-  6. forward-menu source, committed horizon, and the non-cancellable pod
-     last-order rule;
-  7. Thursday and Monday run/cut-off times, urgent-order path, final decision
-     owner, and which override reasons should be recorded;
-  8. whether the same interim 20% applies to all items/classes and who may
-     override it.
-- **Blocks:** final legacy interpretation for manual delivery columns and
-  business approval of the affected improved scheduling/constraint policies.
-- **Does not block:** parameterized implementation and scenario tests.
+  remaining operational details needed to approve a production-quality run:
+  1. whether pod PO quantity is a 1 kg pack or `5 × 1 kg` carton, which article
+     appears in Transgourmet, and the MOQ/case multiple;
+  2. what unit Apicbase `Current Stock (qty)` represents for each active item
+     and whether usable partial packs are included;
+  3. which exact description or corrected article resolves the duplicate
+     Transgourmet article `350570`;
+  4. approve/correct the proposed seven-day stocked review period, confirm
+     whether Monday is a normal reorder opportunity, and fill only cut-off/
+     receipt fields that materially affect scheduling; current lead durations
+     remain 3 days ordinary, 5 days fresh and 28 calendar days pods; and
+  5. approve/correct `7` pod, `2` ordinary-stocked and `0.5` fresh safety days;
+     identify any deterministic yield loss and hard max-cover values.
+- **Already settled for local V1:** pod lead is 28 calendar days; pod POs use
+  Transgourmet; fresh service windows are `Sat→Mon`, `Mon→Tue+Wed`,
+  `Wed→Thu+Fri`, `Fri→Sat`; the current menu remains effective until superseded
+  and is repeated for six dummy weeks; the selected
+  upload location is authoritative for the demo; stock export time is
+  `counted_at`; and pod expiry is approximated as order date plus 365 days.
+  The legacy `×2.5` is compatibility-only and must not be re-asked as a V1
+  policy blocker.
+- **Evidence 2026-08-27:** the local V1 now exercises the proposed values. The
+  three pods show unavoidable pre-arrival shortages under zero demo stock; four
+  fresh lines show a pack-rounding versus max-cover conflict. These are the
+  concrete results to review, not abstract blockers.
+- **Blocks:** business approval of the affected scheduling/constraint policies
+  and any operational/shadow use.
+- **Does not block:** the completed local V1 or Milestone 2 UI planning/building.
 
-## HA-12 — Apicbase stock and master-data assessment
+## HA-12 — Apicbase stock-export assessment
 
 - **Status:** `OPEN`
 - **Owner:** Valentin / data analyst / Culinary or Apicbase owner
 - **Evidence received 2026-08-26:** prep-kitchen operators upload manual stock
   counts to Apicbase and exclude unusable goods. Apicbase is the intended item/
-  recipe source, but its master data is currently stale because maintenance has
-  a backlog; Excel is used operationally and supplier article numbers exist.
-- **Action:** arrange read-only access/API documentation or reviewed exports for
-  (1) current stock, including count timestamp, unit, usable-stock semantics and
-  partial packs; (2) BOM/recipes, including stable dish/item IDs and grams per
-  portion; and (3) item master/pack sizes, including units, storage class and
-  available IDs for mapping Transgourmet article numbers. Check ownership,
-  freshness, completeness, and change history separately for the three domains.
-  A reviewed manual export is sufficient for the feedback V1; API access is the
-  later automation path.
-- **Blocks:** accepting a live current-stock adapter and a canonical operational
-  item master.
-- **Does not block:** file contracts, synthetic engine work, or the legacy
-  workbook fixture.
+  recipe source, but its master is stale; the new Excel standard will therefore
+  maintain the smaller pod/ingredient BOM and item set manually for V1. Two
+  current stock-report XLSX samples were inspected: location/export time are in
+  row 1, headers in row 3, and current quantity is present. Most rows lack UID
+  and supplier article number, so a reviewed name fallback is required.
+- **Decision for local V1:** the user selects the planning `location_id` when
+  uploading a stock file, and the export timestamp is the latest-known
+  `counted_at`. Supplied examples may be treated as the same demo location.
+- **Action:** approve the remaining stock-export contract only: quantity unit,
+  usable-stock semantics, opened/partial packs, filename cadence, and mapping
+  precedence of Apicbase UID then exact reviewed stock name. API access is later automation. Recipe/item
+  API assessment may continue separately but is not a V1 blocker.
+- **Evidence 2026-08-27:** the stock adapter is implemented and tested against
+  the standard report. The PREP-CGN run mapped 12 required items and visibly
+  defaulted four missing mappings to zero in scenario mode only. Strict modes
+  do not make that assumption.
+- **Blocks:** approving current-stock semantics and mappings for operational use.
+- **Does not block:** the completed scenario adapter, local V1, or the UI upload/
+  mapping-review flow.
+
+## HA-13 — Approve the new-standard V1 input contract
+
+- **Status:** `AWAITING MAINTAINER REVIEW`
+- **Owner:** Valentin / Excel maintainer / planning owner
+- **Action:** approve the maintainer-facing contract in
+  `canonical_data_contracts.md` section 3.11:
+  1. `Phase2_Master_Data_Template_v1.xlsx` with `Items`, `Locations`, and
+     `Delivery_Rules`;
+  2. `Phase2_Planning_Input_Template_v1.xlsx` with `Demand_Plan`,
+     `Menu_Calendar`, and `BOM_Lines`;
+  3. cumulative Transgourmet PDF drop for ingredients and pods; and
+  4. current Apicbase stock-report XLSX drop per relevant prep location.
+- **Evidence 2026-08-27:** both project-owned templates were created and
+  prefilled from the supplied menu/pod evidence. Item rows are global;
+  demand/menu are location-aware; BOM rows are location-independent.
+- **Acceptance evidence 2026-08-27:** all five local work packages are
+  implemented. Run `improved-67fb3838775f` produced 23 dated recommendations
+  across 11 items with zero blockers; seven result files replayed
+  byte-identically and 44 tests pass. The packet includes a concise maintainer
+  result summary plus stock/PO mapping-review CSVs.
+- **Review packet:** validate the two templates together with
+  `docs/descriptions/v1_assumptions_and_admin_validation.md`, which identifies
+  confirmed rules, V1 approximations, demo defaults, legacy-only constants and
+  the exact remaining questions.
+- **Important:** the maintainer edits these two project-owned schemas and
+  supplies the two raw exports. The supplied `CWxx_*` workbooks are migration
+  inputs, not layouts that code must support indefinitely. Normalizers generate
+  canonical table/CSV rows; those are not additional manual files.
+- **Blocks:** declaring the highlighted master fields operationally approved
+  and presenting a UI result as shadow/production-ready.
+- **Does not block:** local technical V1 completion or starting the thin UI and
+  Supabase schema planning over the same contracts.
 
 ## Maintenance rule
 

@@ -212,11 +212,153 @@ do not infer `partial_pack_g = 0` from their absence.
 An observed query returning zero rows is valid. An unavailable source represented
 by an empty placeholder is not equivalent and blocks shadow/production use.
 The current manual process reads Transgourmet pending orders from downloaded
-PDFs and nets them outside the workbook. That identifies a candidate source but
-does not waive any canonical field: a portal export/API adapter must still
-provide stable line IDs, outstanding units, status, and expected receipt time.
+PDFs and nets them outside the workbook. This includes pod orders: `Circus` is
+the official pod supplier label, while `Transgourmet` is the ordering channel.
+The target supplier-item contract must therefore preserve both concepts; the
+current single `supplier_id` field is insufficient for that distinction and is
+a recorded extension before supplier datasets are loaded. The PDF source does
+not waive any canonical field: a portal export/API adapter must still provide
+stable line IDs, outstanding units, status, and expected receipt time.
 
-### 3.11 Implemented canonical CSV package
+#### Interim Transgourmet PDF adapter
+
+`python -m supply_planning transgourmet-import` and the Windows wrapper
+`scripts/extract_transgourmet_pos.ps1` implement the temporary manual adapter
+outside the pure engine. The importer:
+
+- detects `Bestelldetails` PDFs while ignoring unrelated files in the selected
+  directory;
+- extracts order timestamp, scheduled delivery date when present, supplier article number,
+  description, displayed order quantity, package-content count/base-unit code,
+  and line value;
+- deduplicates re-downloads by normalized document-content hash;
+- fails rather than emitting partial data if any item is not parsed or the sum
+  of extracted line values differs from a displayed delivery total; and
+- writes a complete `transgourmet_po_history.csv`, a supplier-item review file,
+  canonical dated `open_pos.csv`, `undated_open_pos.csv`, and an
+  `import_summary.json` source version.
+
+The importer is the one interim PO route for both pods and ordinary
+ingredients. No separate Circus order register or adapter is required.
+
+For an explicit as-of date, the confirmed portal rule derives status as follows:
+a missing or future `Liefertag` is `open`; a `Liefertag` on/before the as-of date
+is `closed`/received. Only future-dated open rows enter canonical `open_pos.csv`;
+their date is encoded at 00:00 in the configured timezone. Missing-date open
+rows remain in `undated_open_pos.csv` and full history, because the current
+engine cannot net a receipt safely without its date. The PDF supplies ordered
+quantity, not remaining quantity, so the interim outputs copy ordered quantity
+to `open_qty_units`. Partial receipts, cancellations, date changes, and receipt
+time remain unavailable from these files. The adapter accepts an explicit
+`supplier_article_number,item_id` map; its opt-in `TG-<article number>` IDs are
+provisional until the cross-system mapping is approved. Use the summary's
+`source_version` with `provenance=manual` in the canonical source manifest.
+This path is suitable for controlled file/scenario work; it does not remove the
+production gate for remaining quantity, receipt-event detail, accepted
+item/location IDs, API ingestion, and freshness/ownership checks.
+
+### 3.11 Project-owned maintainer-facing V1 files
+
+The project owns two fixed workbook schemas. The supplied `CWxx_*` and pod
+metadata workbooks were used to populate the first version; they are migration
+evidence, not recurring layouts that adapters must chase. The maintainer edits
+the project-owned files and makes two raw-file drops. Normalizers, not the
+maintainer, emit the canonical CSV/table rows.
+
+#### `Phase2_Master_Data_Template_v1.xlsx`
+
+`Items` has one global row per canonical purchasable item. It is deliberately
+not location-aware:
+
+| Field group | Exact fields |
+|---|---|
+| Identity | `item_id`, `item_name`, `item_type`, `active` |
+| Supplier/channel and PO match | `official_supplier`, `ordering_channel`, `po_article_no`, `po_description_match` |
+| Inner pack / ordered unit | `inner_pack_article_no`, `inner_pack_ean`, `order_unit_ean`, `pack_size_g`, `packs_per_order_unit`, `order_unit` |
+| Stock crosswalk | `stock_qty_unit`, `apicbase_uid`, `apicbase_stock_item_name` |
+| Planning policy | `storage_class`, `lead_time_calendar_days`, `shelf_life_days`, `shelf_life_anchor`, `min_safety_days`, `yield_factor`, `max_cover_days`, `moq_order_units`, `case_multiple_order_units` |
+| Review/audit | `data_status`, `source_note` |
+
+`item_type` is `POD` or `INGREDIENT`; `storage_class` is exactly `TK`, `Kuehl`,
+`RT`, or `Frisch`; `order_unit` is `PACK` or `CARTON`; `stock_qty_unit` is
+`PACK` or `ORDER_UNIT`. IDs/EANs are text identifiers. Unknown MOQ/case, stock
+unit, mappings, or policy values remain explicit review fields rather than
+being inferred from a blank cell.
+
+Pods store `official_supplier=Circus` and
+`ordering_channel=Transgourmet`. The current `9100x` carton to `100x` inner-pack
+mapping is materialized from an exact unique name match. It is never repeated
+as an unconstrained runtime fuzzy join. Pod V1 policy uses
+`lead_time_calendar_days=28`, `shelf_life_days=365`, and
+`shelf_life_anchor=ORDER_DATE`. The initial safety proposal uses
+`min_safety_days=7` for pods, `2` for ordinary stocked items and `0.5` for
+fresh; `yield_factor=1.00` unless deterministic loss is known. This means
+estimated pod expiry is order date plus 365 days until a real lot/expiry source
+exists, while shortage protection remains explicit and reviewable.
+
+`Locations` has:
+`location_id, location_name, timezone, active, data_status, source_note`.
+Future uploads select one of these IDs. The local demonstration uses
+`LOC_DEMO_001`; a source filename/header does not silently override the selected
+planning location.
+
+`Delivery_Rules` has:
+`delivery_rule_id, location_id, ordering_channel, storage_class,
+delivery_weekday, covered_service_days, order_weekday, order_cutoff_local,
+receipt_available_local, review_period_days, effective_from, effective_to,
+active, data_status, source_note`.
+The four confirmed fresh windows are prefilled as `Sat→Mon`,
+`Mon→Tue+Wed`, `Wed→Thu+Fri`, and `Fri→Sat`. Missing cut-off/receipt times remain
+review fields. A proposed weekly stocked review rule uses
+`review_period_days=7`; confirm whether the Monday recheck is a normal reorder
+opportunity. No external calendar integration is implied.
+
+`Data_Dictionary` and `Lists` are part of the file contract. Machine-read data
+tabs have headers in row 1.
+
+#### `Phase2_Planning_Input_Template_v1.xlsx`
+
+`Demand_Plan` is location-aware and has:
+`location_id, service_date, dish_id, dish_name, forecast_portions,
+forecast_version, provenance, source_note`.
+
+`Menu_Calendar` is location-aware and has:
+`location_id, service_date, dish_id, dish_name, menu_version, active,
+provenance, source_note`.
+
+`BOM_Lines` is not location-aware and has:
+`bom_line_id, dish_id, dish_name, silo_id, silo_name, item_id, item_name,
+grams_per_portion, effective_from, effective_to, active, provenance,
+source_note`.
+
+A purchased pod is one `item_id`; its internal recipe is not a procurement
+line. The demo file repeats the supplied CW36 daily values across six dated
+Mon-Sat weeks under explicit dummy provenance. This covers the proposed
+`28-day pod lead + 7-day review = 35-day` protection horizon. Operational use
+must replace those rows with a maintained plan covering the longest active
+protection horizon; the current menu remains effective until superseded.
+
+#### Controlled raw inputs and table-ready normalization
+
+- `data/private/incoming/transgourmet_pdfs/`: cumulative top-level archive of
+  downloaded `Bestelldetails` PDFs for ingredients and pods. The existing
+  importer deduplicates re-downloads and derives open status from `Liefertag`.
+- `data/private/incoming/apicbase_stock/`: current stock-report XLSX. The
+  upload/run supplies an explicit `location_id`; row-1 export time is the V1
+  latest-known `counted_at`. The implemented adapter maps UID first and an exact
+  reviewed stock name second and quarantines unknown mappings/units.
+- `data/private/incoming/manual/`: dated snapshots of the two maintained
+  templates with filename, hash, version/export time, and selected location
+  retained in the run manifest.
+
+The implemented workbook normalizer emits `locations.csv`, `items.csv`,
+`delivery_rules.csv`, `forecast_daily.csv`, `menu_calendar.csv`, and
+`bom_lines.csv`. The stock and PO normalizers emit `inventory_snapshots.csv`
+and `open_pos.csv` plus row-level mapping/quarantine outputs. These are local
+files now and future database rows later; they are not additional files the
+maintainer edits. Raw operational files remain ignored by git.
+
+### 3.12 Implemented canonical CSV package
 
 `python -m supply_planning improved-run` reads one directory containing:
 
@@ -257,14 +399,15 @@ Critical sources currently enforced in code are `forecast_daily`,
 `menu_calendar`, `bom_lines`, `items`, `inventory_snapshots`, and
 `purchase_orders`. Pack size is validated by the item contract. Unknown or
 placeholder critical sources warn in fixture/scenario mode and block before any
-netting result is emitted in shadow/production mode. Lead-time/delivery-rule policy
-gates remain open until scheduling is implemented.
+netting result is emitted in shadow/production mode. Lead-time/delivery-rule
+policy values are loaded and used by scheduling; proposal/default statuses stay
+visible until the maintainer approves them.
 
 ## 5. Canonical output contracts
 
-The v1 typed output records define the calculation-to-Snowflake boundary even
-though the improved engine does not populate every record yet. Supabase is not
-the result store.
+The V1 typed output records define the calculation-to-Snowflake boundary, and
+the template-driven improved engine now populates them. Supabase is not the
+result store.
 
 ### 5.1 `planning_runs`
 
@@ -302,11 +445,13 @@ The current `legacy_kw34/v1` CLI emits deterministic JSON containing:
 ### 5.6 Current improved-file audit envelope
 
 The implemented `improved_file/v1` path emits deterministic JSON containing
-the normalized input hash, run mode/status, source statuses, structured issues,
-and one dated netting result per location/item. Each result retains the opening
-stock, daily demand and receipt events, daily signed balances, in-horizon PO
-quantity, overdue and post-horizon PO quantities, first projected stockout,
-and the unrounded net requirement in grams.
+the normalized input hash, explicit policy version, run mode/status, source
+statuses, structured issues, one dated netting result per location/item,
+planning derivations and purchase recommendations. Each netting result retains
+the opening stock, daily demand and receipt events, signed balances, in-horizon
+PO quantity, overdue and post-horizon PO quantities, first projected stockout,
+and unrounded net requirement in grams. Separate table-ready CSVs persist final
+order units, all policy intermediates, exceptions and mapping reviews.
 
 The selected snapshot is treated as the opening balance at the projection
 start. If its calendar date is older, the assumption is a warning in
@@ -317,10 +462,10 @@ start are reported but not silently counted; POs after the horizon are reported
 separately. Candidate receipts are scenario inputs and remain separate from
 open POs and from the net-requirement calculation.
 
-This tranche deliberately stops before configured yield/safety policy, protection-period
-selection, shelf-life/max-cover constraints, MOQ/case rounding, supplier
-scheduling, recommendation rounding, Snowflake persistence, Supabase
-configuration, or the internal UI.
+Configured yield/safety, protection-period selection, shelf-life/max-cover,
+MOQ/case, supplier scheduling and recommendation rounding are implemented for
+the local V1. Snowflake persistence, Supabase configuration, and the internal
+UI remain later adapter/persistence work.
 
 ## 6. SQL/source discovery deliverable
 

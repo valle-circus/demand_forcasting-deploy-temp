@@ -10,18 +10,24 @@ from typing import Callable, TypeVar
 from supply_planning.adapters.errors import InputFileError
 from supply_planning.domain.models import (
     BomLine,
+    DeliveryCoverageRule,
     ForecastDaily,
     InputSourceStatus,
     InventorySnapshot,
     Item,
+    ItemPlanningPolicy,
+    ItemType,
+    Location,
     MenuCalendarEntry,
     Provenance,
     PurchaseOrderLine,
     PurchaseOrderStatus,
+    ShelfLifeAnchor,
+    StockQuantityUnit,
     StorageClass,
 )
 
-DATASET_FILES = {
+CORE_DATASET_FILES = {
     "forecast_daily": "forecast_daily.csv",
     "menu_calendar": "menu_calendar.csv",
     "bom_lines": "bom_lines.csv",
@@ -29,6 +35,12 @@ DATASET_FILES = {
     "inventory_snapshots": "inventory_snapshots.csv",
     "purchase_orders": "open_pos.csv",
 }
+OPTIONAL_DATASET_FILES = {
+    "locations": "locations.csv",
+    "item_policies": "item_policies.csv",
+    "delivery_rules": "delivery_rules.csv",
+}
+DATASET_FILES = {**CORE_DATASET_FILES, **OPTIONAL_DATASET_FILES}
 
 MANIFEST_FIELDS = ("dataset", "provenance", "source_version")
 FORECAST_FIELDS = (
@@ -76,6 +88,41 @@ PURCHASE_ORDER_FIELDS = (
     "open_qty_units",
     "status",
 )
+LOCATION_FIELDS = ("location_id", "location_name", "timezone", "active")
+ITEM_POLICY_FIELDS = (
+    "item_id",
+    "item_type",
+    "official_supplier",
+    "ordering_channel",
+    "supplier_id",
+    "supplier_article_number",
+    "supplier_description_match",
+    "packs_per_order_unit",
+    "order_unit",
+    "stock_qty_unit",
+    "apicbase_uid",
+    "apicbase_stock_item_name",
+    "lead_time_calendar_days",
+    "shelf_life_anchor",
+    "yield_factor",
+    "moq_order_units",
+    "case_multiple_order_units",
+    "data_status",
+)
+DELIVERY_RULE_FIELDS = (
+    "delivery_rule_id",
+    "location_id",
+    "ordering_channel",
+    "storage_class",
+    "delivery_weekday",
+    "covered_service_weekdays",
+    "order_weekday",
+    "review_period_days",
+    "effective_from",
+    "effective_to",
+    "active",
+    "data_status",
+)
 
 T = TypeVar("T")
 
@@ -89,6 +136,9 @@ class CanonicalInputBundle:
     inventory_snapshots: tuple[InventorySnapshot, ...]
     purchase_orders: tuple[PurchaseOrderLine, ...]
     source_statuses: tuple[InputSourceStatus, ...]
+    locations: tuple[Location, ...] = ()
+    item_policies: tuple[ItemPlanningPolicy, ...] = ()
+    delivery_rules: tuple[DeliveryCoverageRule, ...] = ()
 
     def source_status(self, dataset: str) -> InputSourceStatus:
         for status in self.source_statuses:
@@ -284,7 +334,7 @@ def _load_manifest(path: Path) -> dict[str, tuple[Provenance, str]]:
         source_version = _text(path, row_number, "source_version", row["source_version"])
         manifest[dataset] = (provenance, source_version)
 
-    missing = [dataset for dataset in DATASET_FILES if dataset not in manifest]
+    missing = [dataset for dataset in CORE_DATASET_FILES if dataset not in manifest]
     if missing:
         raise InputFileError(
             f"{path}: missing dataset rows {', '.join(missing)}; "
@@ -446,6 +496,17 @@ def load_inventory_snapshots_csv(
 ) -> tuple[InventorySnapshot, ...]:
     parsed: list[tuple[int, InventorySnapshot]] = []
     for row_number, row in _read_rows(path, INVENTORY_FIELDS):
+        row_provenance = (
+            _enum(
+                path,
+                row_number,
+                "provenance",
+                row.get("provenance", ""),
+                Provenance,
+            )
+            if row.get("provenance", "").strip()
+            else provenance
+        )
         record = _construct(
             path,
             row_number,
@@ -462,7 +523,7 @@ def load_inventory_snapshots_csv(
                 partial_pack_g=_decimal(
                     path, row_number, "partial_pack_g", row["partial_pack_g"]
                 ),  # type: ignore[arg-type]
-                provenance=provenance,
+                provenance=row_provenance,
             ),
         )
         parsed.append((row_number, record))
@@ -518,9 +579,216 @@ def load_purchase_orders_csv(
     return tuple(record for _, record in parsed)
 
 
+def load_locations_csv(path: Path) -> tuple[Location, ...]:
+    parsed: list[tuple[int, Location]] = []
+    for row_number, row in _read_rows(path, LOCATION_FIELDS):
+        record = _construct(
+            path,
+            row_number,
+            lambda row=row, row_number=row_number: Location(
+                location_id=_text(path, row_number, "location_id", row["location_id"]),
+                location_name=_text(
+                    path, row_number, "location_name", row["location_name"]
+                ),
+                timezone=_text(path, row_number, "timezone", row["timezone"]),
+                active=_boolean(path, row_number, "active", row["active"]),
+            ),
+        )
+        parsed.append((row_number, record))
+    _ensure_unique(
+        path,
+        parsed,
+        dataset="locations",
+        fields="location_id",
+        key=lambda row: (row.location_id,),
+    )
+    return tuple(record for _, record in parsed)
+
+
+def load_item_policies_csv(
+    path: Path, provenance: Provenance
+) -> tuple[ItemPlanningPolicy, ...]:
+    parsed: list[tuple[int, ItemPlanningPolicy]] = []
+    for row_number, row in _read_rows(path, ITEM_POLICY_FIELDS):
+        anchor = (
+            None
+            if not row["shelf_life_anchor"].strip()
+            else _enum(
+                path,
+                row_number,
+                "shelf_life_anchor",
+                row["shelf_life_anchor"],
+                ShelfLifeAnchor,
+            )
+        )
+        record = _construct(
+            path,
+            row_number,
+            lambda row=row, row_number=row_number, anchor=anchor: ItemPlanningPolicy(
+                item_id=_text(path, row_number, "item_id", row["item_id"]),
+                item_type=_enum(
+                    path, row_number, "item_type", row["item_type"], ItemType
+                ),
+                official_supplier=_text(
+                    path, row_number, "official_supplier", row["official_supplier"]
+                ),
+                ordering_channel=_text(
+                    path, row_number, "ordering_channel", row["ordering_channel"]
+                ),
+                supplier_id=_text(
+                    path, row_number, "supplier_id", row["supplier_id"]
+                ),
+                supplier_article_number=(
+                    row["supplier_article_number"].strip() or None
+                ),
+                supplier_description_match=(
+                    row["supplier_description_match"].strip() or None
+                ),
+                packs_per_order_unit=_decimal(
+                    path,
+                    row_number,
+                    "packs_per_order_unit",
+                    row["packs_per_order_unit"],
+                ),  # type: ignore[arg-type]
+                order_unit=_text(path, row_number, "order_unit", row["order_unit"]),
+                stock_qty_unit=_enum(
+                    path,
+                    row_number,
+                    "stock_qty_unit",
+                    row["stock_qty_unit"],
+                    StockQuantityUnit,
+                ),
+                apicbase_uid=row["apicbase_uid"].strip() or None,
+                apicbase_stock_item_name=(
+                    row["apicbase_stock_item_name"].strip() or None
+                ),
+                lead_time_calendar_days=_integer(
+                    path,
+                    row_number,
+                    "lead_time_calendar_days",
+                    row["lead_time_calendar_days"],
+                ),  # type: ignore[arg-type]
+                shelf_life_anchor=anchor,
+                yield_factor=_decimal(
+                    path, row_number, "yield_factor", row["yield_factor"]
+                ),  # type: ignore[arg-type]
+                moq_order_units=_decimal(
+                    path, row_number, "moq_order_units", row["moq_order_units"]
+                ),  # type: ignore[arg-type]
+                case_multiple_order_units=_decimal(
+                    path,
+                    row_number,
+                    "case_multiple_order_units",
+                    row["case_multiple_order_units"],
+                ),  # type: ignore[arg-type]
+                data_status=_text(
+                    path, row_number, "data_status", row["data_status"]
+                ),
+                provenance=provenance,
+            ),
+        )
+        parsed.append((row_number, record))
+    _ensure_unique(
+        path,
+        parsed,
+        dataset="item_policies",
+        fields="item_id",
+        key=lambda row: (row.item_id,),
+    )
+    return tuple(record for _, record in parsed)
+
+
+def _optional_weekday(path: Path, row_number: int, field: str, value: str) -> int | None:
+    parsed = _integer(path, row_number, field, value, optional=True)
+    if parsed is not None and not 0 <= parsed <= 6:
+        raise InputFileError(
+            f"{path} row {row_number}, field {field}: {parsed} is outside 0 through 6"
+        )
+    return parsed
+
+
+def _covered_weekdays(path: Path, row_number: int, value: str) -> tuple[int, ...]:
+    if not value.strip():
+        return ()
+    result: list[int] = []
+    for raw in value.split("|"):
+        parsed = _optional_weekday(path, row_number, "covered_service_weekdays", raw)
+        if parsed is None:
+            raise InputFileError(
+                f"{path} row {row_number}: covered_service_weekdays contains a blank value"
+            )
+        result.append(parsed)
+    return tuple(result)
+
+
+def load_delivery_rules_csv(
+    path: Path, provenance: Provenance
+) -> tuple[DeliveryCoverageRule, ...]:
+    parsed: list[tuple[int, DeliveryCoverageRule]] = []
+    for row_number, row in _read_rows(path, DELIVERY_RULE_FIELDS):
+        record = _construct(
+            path,
+            row_number,
+            lambda row=row, row_number=row_number: DeliveryCoverageRule(
+                delivery_rule_id=_text(
+                    path, row_number, "delivery_rule_id", row["delivery_rule_id"]
+                ),
+                location_id=_text(
+                    path, row_number, "location_id", row["location_id"]
+                ),
+                ordering_channel=_text(
+                    path, row_number, "ordering_channel", row["ordering_channel"]
+                ),
+                storage_class=_enum(
+                    path,
+                    row_number,
+                    "storage_class",
+                    row["storage_class"],
+                    StorageClass,
+                ),
+                delivery_weekday=_optional_weekday(
+                    path, row_number, "delivery_weekday", row["delivery_weekday"]
+                ),
+                covered_service_weekdays=_covered_weekdays(
+                    path, row_number, row["covered_service_weekdays"]
+                ),
+                order_weekday=_optional_weekday(
+                    path, row_number, "order_weekday", row["order_weekday"]
+                ),
+                review_period_days=_integer(
+                    path,
+                    row_number,
+                    "review_period_days",
+                    row["review_period_days"],
+                ),  # type: ignore[arg-type]
+                effective_from=_date(
+                    path, row_number, "effective_from", row["effective_from"]
+                ),
+                effective_to=_optional_date(
+                    path, row_number, "effective_to", row["effective_to"]
+                ),
+                active=_boolean(path, row_number, "active", row["active"]),
+                data_status=_text(
+                    path, row_number, "data_status", row["data_status"]
+                ),
+                provenance=provenance,
+            ),
+        )
+        parsed.append((row_number, record))
+    _ensure_unique(
+        path,
+        parsed,
+        dataset="delivery_rules",
+        fields="delivery_rule_id",
+        key=lambda row: (row.delivery_rule_id,),
+    )
+    return tuple(record for _, record in parsed)
+
+
 def _validate_bundle(bundle: CanonicalInputBundle, input_dir: Path) -> None:
     errors: list[str] = []
     items = {item.item_id: item for item in bundle.items}
+    policies = {policy.item_id: policy for policy in bundle.item_policies}
     menu_locations = {entry.location_id for entry in bundle.menu_entries}
 
     active_menu: dict[tuple[str, str, date], int] = {}
@@ -565,6 +833,11 @@ def _validate_bundle(bundle: CanonicalInputBundle, input_dir: Path) -> None:
                 f"bom_lines bom_line_id={line.bom_line_id!r} references unknown "
                 f"item_id={line.item_id!r}; add the item or correct the stable ID"
             )
+        if bundle.item_policies and line.item_id not in policies:
+            errors.append(
+                f"bom_lines bom_line_id={line.bom_line_id!r} references item_id="
+                f"{line.item_id!r} without item_policies; add the Items policy row"
+            )
 
     for snapshot in bundle.inventory_snapshots:
         item = items.get(snapshot.item_id)
@@ -608,6 +881,14 @@ def _validate_bundle(bundle: CanonicalInputBundle, input_dir: Path) -> None:
                 "empty the placeholder file"
             )
 
+    location_ids = {location.location_id for location in bundle.locations}
+    for rule in bundle.delivery_rules:
+        if location_ids and rule.location_id not in location_ids:
+            errors.append(
+                f"delivery_rules delivery_rule_id={rule.delivery_rule_id!r} references "
+                f"unknown location_id={rule.location_id!r}"
+            )
+
     if errors:
         formatted = "\n".join(f"- {error}" for error in errors)
         raise InputFileError(
@@ -638,6 +919,25 @@ def load_canonical_bundle(input_dir: Path) -> CanonicalInputBundle:
     purchase_orders = load_purchase_orders_csv(
         input_dir / DATASET_FILES["purchase_orders"], provenance("purchase_orders")
     )
+    locations = (
+        load_locations_csv(input_dir / DATASET_FILES["locations"])
+        if "locations" in manifest
+        else ()
+    )
+    item_policies = (
+        load_item_policies_csv(
+            input_dir / DATASET_FILES["item_policies"], provenance("item_policies")
+        )
+        if "item_policies" in manifest
+        else ()
+    )
+    delivery_rules = (
+        load_delivery_rules_csv(
+            input_dir / DATASET_FILES["delivery_rules"], provenance("delivery_rules")
+        )
+        if "delivery_rules" in manifest
+        else ()
+    )
 
     counts = {
         "forecast_daily": len(forecasts),
@@ -646,6 +946,9 @@ def load_canonical_bundle(input_dir: Path) -> CanonicalInputBundle:
         "items": len(items),
         "inventory_snapshots": len(inventory_snapshots),
         "purchase_orders": len(purchase_orders),
+        "locations": len(locations),
+        "item_policies": len(item_policies),
+        "delivery_rules": len(delivery_rules),
     }
     statuses = tuple(
         InputSourceStatus(
@@ -654,7 +957,7 @@ def load_canonical_bundle(input_dir: Path) -> CanonicalInputBundle:
             record_count=counts[dataset],
             source_version=manifest[dataset][1],
         )
-        for dataset in DATASET_FILES
+        for dataset in manifest
     )
     bundle = CanonicalInputBundle(
         forecasts=forecasts,
@@ -664,6 +967,9 @@ def load_canonical_bundle(input_dir: Path) -> CanonicalInputBundle:
         inventory_snapshots=inventory_snapshots,
         purchase_orders=purchase_orders,
         source_statuses=statuses,
+        locations=locations,
+        item_policies=item_policies,
+        delivery_rules=delivery_rules,
     )
     _validate_bundle(bundle, input_dir)
     return bundle
