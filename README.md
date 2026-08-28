@@ -156,8 +156,9 @@ write in this project.
   boundary with CORS configuration and tests;
 - a basic React/TypeScript/Vite/Tailwind status shell with browser/server
   environment separation; and
-- additive Supabase master/run/output and minimal import/input/netting-summary
-  migrations, a synthetic UI seed, and Render/Vercel deployment configuration.
+- additive Supabase master/run/output and minimal import/input/netting-summary/
+  daily-projection migrations, a synthetic UI seed, and Render/Vercel
+  deployment configuration.
 
 The foundation does not yet implement upload/run endpoints, authentication,
 master-data repositories/forms, source/result repository writes, or the three
@@ -171,8 +172,9 @@ pure local V1 calculation.
 
 1. Send the completed local V1 packet to the maintainer and collect approved or
    corrected template/policy/mapping rows. Rerun before operational use.
-2. Configure/deploy the foundation and Auth, apply the two existing migrations,
-   then build Data & settings over the existing Python adapters.
+2. Configure/deploy the foundation and Auth, verify the two manually applied
+   migrations from FastAPI, then build Data & settings over the existing Python
+   adapters.
 3. Build the per-location readiness/run/result slice, then the Overview cockpit
    over persisted current runs; keep demo/unapproved values visibly labelled.
 4. Add versioned master/menu maintenance, then move each input/result repository

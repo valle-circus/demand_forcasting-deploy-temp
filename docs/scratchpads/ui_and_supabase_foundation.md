@@ -21,10 +21,10 @@
   & settings, page states, KPI semantics, component map, and UX acceptance.
 - [x] Map the four upload groups to current Python adapters and identify the
   source-import, PO-history, and netting-result schema gaps.
-- [x] Add the deliberately minimal source-import/input/netting migration and a
-  synthetic seed for UI development.
-- [ ] Configure cloud projects/Auth, apply the migrations, and implement API
-  repositories over them.
+- [x] Add the deliberately minimal source-import/input/netting/daily-projection
+  migration and a synthetic seed for UI development.
+- [ ] Configure Auth, verify the two reported-applied migrations through
+  FastAPI, and implement API repositories over the schemas.
 - [ ] Build Data & settings first, then Location planning, Overview, and
   versioned master/menu editing in that dependency order.
 
@@ -60,9 +60,11 @@
   as actual waste.
 - 2026-08-28: Keep the workflow schema minimal: one `source_imports` record
   holds compact file/validation metadata; five normalized input tables and one
-  netting-summary table support the first pages. Separate source-file, issue,
-  PO-header, daily-projection, and KPI tables remain deferred until real usage
-  proves they are needed.
+  netting-summary table support the first pages. Persist the engine's daily
+  projection rows because they directly support risk explanation and the
+  location stock timeline. Separate source-file, issue, PO-header, and KPI/
+  materialized-summary tables remain deferred until real usage proves they are
+  needed.
 - 2026-08-28: Keep a small `supabase/seed.sql` with synthetic, proposal-labelled
   imports/master/run/risk rows so UI work has reproducible shapes before real
   uploads exist. Never seed those rows into production.
@@ -96,11 +98,15 @@
   Persisting those typed outputs is preferable to recreating risk in SQL or
   TypeScript.
 - The additive `202608280002_ui_workflow_inputs.sql` migration now materializes
-  the minimum source and `NettingResult` summary shapes. Static tests verify
-  table/seed column references, RLS/revokes, and run/import traceability; the
-  local machine does not currently have Supabase CLI, PostgreSQL, or Docker for
-  a real `db reset`.
-- Final schema-slice verification passed the full 51-test Python suite plus
+  the minimum source, `NettingResult` summary, and daily-projection shapes.
+  Static tests verify table/seed column references, RLS/revokes, and run/import
+  traceability; the local machine does not currently have Supabase CLI,
+  PostgreSQL, or Docker for a real `db reset`.
+- For the connected-UI handoff, the maintainer reports both migrations applied
+  manually in the Supabase SQL Editor. Repository tooling cannot infer that
+  remote state from a missing local project link, so FastAPI must verify the
+  expected foundation and workflow relations before enabling domain actions.
+- Final schema-slice verification passed the full 52-test Python suite plus
   focused Ruff and mypy checks for `tests/test_supabase_schema.py`.
 
 ## Open questions / unknowns
@@ -126,8 +132,8 @@
   verify deployed CORS/readiness before enabling domain writes.
 - Turn `ui_maintainer_journey_and_page_plan.md` into low-fidelity designer
   wireframes and validate hierarchy/terminology with the maintainer.
-- Install/initialize the Supabase CLI or select the development project, then
-  apply both migrations and run the synthetic seed only in local/dev.
+- Verify the reported-applied schema through the server-only connection; run
+  the synthetic seed only in disposable local/dev data, never production.
 - Implement Auth/JWT authorization and portable repositories over the existing
   minimal source-input/result schema; do not alter applied migrations in place.
 - Build the three-route shell and Data & settings import slice, then assemble

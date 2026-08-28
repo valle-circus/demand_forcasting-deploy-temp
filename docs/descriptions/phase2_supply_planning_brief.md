@@ -788,10 +788,11 @@ Snowflake result schema.
 
 The additive workflow migration now provides a deliberately small
 `source_imports` record, normalized forecast/menu/BOM/stock/PO rows, explicit
-run/input traceability, and item-level netting summaries. It keeps compact file
-and validation metadata in the import row and defers separate file/issue/PO-
-header/daily-projection/KPI tables. This is sufficient for initial page/API
-testing without storing XLSX/PDF bytes in Postgres.
+run/input traceability, item-level netting summaries, and daily inventory-
+projection rows. It keeps compact file and validation metadata in the import row
+and defers separate file/issue/PO-header and KPI/materialized-summary tables.
+This is sufficient for initial page/API testing without storing XLSX/PDF bytes
+in Postgres.
 
 Each run records the active config version/hash regardless of persistence
 adapter. CSV/YAML remain fixtures, controlled import/export, and recovery

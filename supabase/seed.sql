@@ -600,6 +600,65 @@ values (
 )
 on conflict (run_id, location_id, item_id) do nothing;
 
+with daily_flows as (
+    select
+        projection_date::date as projection_date,
+        case
+            when projection_date::date = date '2026-08-30' then 5000
+            when projection_date::date = date '2026-08-31' then 2000
+            when projection_date::date = date '2026-09-02' then 10000
+            when projection_date::date = date '2026-09-03' then 18000
+            else 0
+        end::numeric as demand_g,
+        case
+            when projection_date::date = date '2026-08-29' then 5000
+            else 0
+        end::numeric as open_po_receipts_g,
+        case
+            when projection_date::date = date '2026-09-02' then 30000
+            else 0
+        end::numeric as candidate_receipts_g
+    from generate_series(
+        date '2026-08-28',
+        date '2026-10-04',
+        interval '1 day'
+    ) as dates(projection_date)
+), projected as (
+    select
+        projection_date,
+        demand_g,
+        open_po_receipts_g,
+        candidate_receipts_g,
+        sum(open_po_receipts_g + candidate_receipts_g - demand_g)
+            over (order by projection_date rows unbounded preceding) as closing_balance_g
+    from daily_flows
+)
+insert into public.planning_projection_days (
+    run_id,
+    location_id,
+    item_id,
+    projection_date,
+    opening_balance_g,
+    demand_g,
+    open_po_receipts_g,
+    candidate_receipts_g,
+    closing_balance_g,
+    stockout_g
+)
+select
+    'demo-run-20260828',
+    'LOC_DEMO_001',
+    'ITEM_DEMO_PASTA',
+    projection_date,
+    lag(closing_balance_g, 1, 0::numeric) over (order by projection_date),
+    demand_g,
+    open_po_receipts_g,
+    candidate_receipts_g,
+    closing_balance_g,
+    greatest(0::numeric, -closing_balance_g)
+from projected
+on conflict (run_id, location_id, item_id, projection_date) do nothing;
+
 insert into public.planning_exceptions (
     exception_id,
     run_id,

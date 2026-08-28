@@ -16,6 +16,7 @@ WORKFLOW_TABLES = {
     "inventory_snapshots",
     "purchase_order_lines",
     "planning_netting_results",
+    "planning_projection_days",
 }
 
 
@@ -150,6 +151,24 @@ class SupabaseSchemaTests(unittest.TestCase):
         )
         self.assertIn("source_import_id", columns["planning_run_inputs"])
         self.assertIn("source_import_id", columns["master_data_versions"])
+
+    def test_daily_projection_matches_engine_output_contract(self) -> None:
+        columns = _table_columns(_schema_sql())
+        self.assertEqual(
+            {
+                "run_id",
+                "location_id",
+                "item_id",
+                "projection_date",
+                "opening_balance_g",
+                "demand_g",
+                "open_po_receipts_g",
+                "candidate_receipts_g",
+                "closing_balance_g",
+                "stockout_g",
+            },
+            columns["planning_projection_days"],
+        )
 
 
 if __name__ == "__main__":

@@ -127,18 +127,21 @@ authorization are implemented.
 The additive `202608280002_ui_workflow_inputs.sql` migration supplies the
 minimum data needed to exercise the three-page workflows: compact import
 metadata/issues, normalized forecast/menu/BOM/stock/PO rows, explicit run/input
-references, and persisted item-level netting summaries. It deliberately avoids
-separate file, issue, PO-header, daily-projection, and KPI tables until evidence
-requires them. `supabase/seed.sql` provides a small synthetic UI-only example.
+references, persisted item-level netting summaries, and the engine's daily
+inventory-projection rows. It deliberately avoids separate file, issue,
+PO-header, and KPI/materialized-summary tables until evidence requires them.
+`supabase/seed.sql` provides a small synthetic UI-only example.
 
 Active-version immutability, activation transactions, change-history events,
 database-to-domain repositories, and result persistence are deliberately next
 steps; the schema alone is not presented as a working master-data workflow.
 
-Together the two migrations are sufficient for the first prototype workflows,
-but neither has been applied to a Supabase project and no repository/domain API
-uses them yet. Add future changes through new migrations; do not rewrite an
-already-applied migration.
+Together the two migrations define the persistence needed for the first
+prototype workflows. For the connected-UI handoff, the maintainer reports both
+migrations applied manually through the Supabase SQL Editor; this remote state
+is not independently visible from the unlinked local repository. No repository/
+domain API uses the schema yet. Add future changes through new forward
+migrations rather than rewriting either applied file.
 
 ## Upload and retention boundary
 
@@ -160,8 +163,8 @@ ephemeral local filesystem.
 
 - Turn the defined three-page plan into detailed wireframes and test the
   information hierarchy/terminology with the maintainer before visual polish.
-- Apply and validate the two migrations in the selected development project;
-  use the synthetic seed only in local/dev environments.
+- Verify the two reported-applied migrations through the server readiness/schema
+  probe. Use the synthetic seed only in local/dev environments.
 - Add multipart limits, file allowlists, archive/PDF count limits, temporary
   cleanup tests, and one synchronous planning-run endpoint.
 - Verify Supabase Auth JWTs in FastAPI and define the maintainer role model.

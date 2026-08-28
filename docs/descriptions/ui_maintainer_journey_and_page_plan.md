@@ -439,9 +439,10 @@ engine remains unaware of HTTP and Supabase.
 
 ### 10.1 What the two migrations now provide
 
-The two additive migrations are now sufficient for the first prototype data
-flows, although no Supabase project is linked and no repository/API writes
-exist yet:
+The two additive migrations define the persistence needed for the first
+prototype data flows. For the connected-UI handoff, the maintainer reports both
+as applied manually through the Supabase SQL Editor; repository/API integration
+and independent server-side schema verification remain open:
 
 | Tables | UI capability supported after repositories/auth exist |
 |---|---|
@@ -451,6 +452,7 @@ exist yet:
 | `source_imports` | Data & settings cards, freshness, compact validation issues, file metadata, and immutable import history. |
 | `forecast_daily`, `menu_calendar`, `bom_lines`, `inventory_snapshots`, `purchase_order_lines` | Normalized accepted inputs for readiness, location views, and run assembly. |
 | `planning_netting_results` | Item risk, first stockout, projected balance, and Overview/location summaries. |
+| `planning_projection_days` | Daily stock, demand, PO receipt, candidate receipt, and stockout timeline for location-level explanation and charts. |
 
 RLS is enabled and browser roles currently have no table access. Keep domain
 reads/writes behind FastAPI. The browser Supabase client is for Auth, not a
@@ -461,7 +463,8 @@ The schema files are:
 - `supabase/migrations/202608280001_ui_foundation.sql` — master data plus
   portable run/derivation/recommendation/exception contracts; and
 - `supabase/migrations/202608280002_ui_workflow_inputs.sql` — minimal source
-  import, normalized input, run traceability, and netting-summary extension.
+  import, normalized input, run traceability, netting-summary, and daily-
+  projection extension.
 
 `supabase/seed.sql` contains one clearly synthetic location/item/import/run/risk
 example for UI development. It is not operational evidence and must never be
@@ -469,21 +472,21 @@ seeded into production.
 
 ### 10.2 Deliberately simplified for the prototype
 
-The first plan proposed separate source-file, import-issue, PO-document, and
-daily-projection tables. They are not needed to test the first workflows:
+The schema stays deliberately small while preserving the daily engine output
+needed for an actionable location view:
 
 - `source_imports` holds the small file-name/hash/count list, compact JSON
   validation issues, metadata, timestamps, and supersession link in one row;
 - `purchase_order_lines` retains `po_id`, so recent PO/document counts can use
   distinct IDs without a separate header table;
-- `planning_netting_results` stores one typed item summary, while daily events
-  and chart points remain in the calculation response/local audit; and
+- `planning_netting_results` stores one typed item summary and
+  `planning_projection_days` stores its daily balance points; and
 - no KPI/materialized-summary tables exist. Overview metrics are queries over
   accepted imports and the latest current run.
 
-Split these into dedicated tables only when per-file status, issue volume,
-raw-file retention, document-level attributes, daily history, or query
-performance proves the need. Master change-event history is also deferred until
+Split source files, validation issues, or PO headers into dedicated tables only
+when per-file status, issue volume, raw-file retention, or document-level
+attributes prove the need. Master change-event history is also deferred until
 the edit/activation workflow is implemented; active-version immutability is
 still required before enabling writes.
 
@@ -580,15 +583,15 @@ them before polishing screens:
 1. Configure cloud projects and implement Supabase Auth/JWT authorization.
 2. Add the three-route application shell and shared status/empty/error
    components while retaining the existing readiness checks.
-3. Apply the two existing migrations in a development project and implement
-   repository interfaces for the minimal workflow schema.
+3. Verify the reported-applied schema from FastAPI and implement repository
+   interfaces for the workflow tables.
 4. Build **Data & settings** upload cards and import APIs for stock, PO PDFs,
    planning workbook, and master workbook.
 5. Persist normalized sources and implement the location readiness API.
 6. Split the application orchestration, implement one persisted synchronous
    run, and build **Location planning** with result details and downloads.
-7. Persist netting summaries and build the **Overview** cockpit over latest
-   current runs.
+7. Persist netting summaries and daily projections, then build the **Overview**
+   cockpit over latest current runs.
 8. Add draft/edit/validate/activate master data and the weekly menu editor.
 9. Run representative maintainer usability sessions, component/E2E tests,
    accessibility checks, and the existing operational-approval gate.

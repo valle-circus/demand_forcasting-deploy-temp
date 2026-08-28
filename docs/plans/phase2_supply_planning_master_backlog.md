@@ -118,8 +118,9 @@ implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
       tables in `ui_maintainer_journey_and_page_plan.md`.
 - [x] Add a minimal additive migration for compact `source_imports` metadata/
       issues, normalized forecast/menu/BOM/stock/PO rows, run traceability, and
-      item-level netting summaries; defer separate file/issue/PO-header/daily-
-      projection/KPI tables and do not store file bytes in Postgres.
+      typed item-level netting summaries plus daily projections; defer separate
+      file/issue/PO-header and KPI/materialized-summary tables and do not store
+      file bytes in Postgres.
 - [x] Add a clearly synthetic seed covering imports, active master data, one
       location/item/run/recommendation/risk, plus static schema/seed/RLS tests.
 - [ ] Add repository interfaces and Supabase implementations that keep the
@@ -192,10 +193,10 @@ implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
 - [x] Define the exception-first cockpit hierarchy, actionable KPI definitions,
       latest-current-run rule, and unsupported/unsafe aggregations.
 - [x] Add the `planning_netting_results` table contract for first stockout,
-      projected balances, overdue POs, and unavoidable shortage; daily
-      projection rows remain deferred.
-- [ ] Persist each Python `NettingResult` summary atomically with its run through
-      the repository adapter.
+      projected balances, overdue POs, and unavoidable shortage, plus the
+      `planning_projection_days` contract matching Python's daily output.
+- [ ] Persist each Python `NettingResult` summary and its daily projection rows
+      atomically with its run through the repository adapter.
 - [ ] Add latest-current-run selection per location so a result becomes
       **stale calculation** when a newer accepted source version exists.
 - [ ] Extend normalized Transgourmet persistence to observed document/line
@@ -329,9 +330,9 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
 | Live Snowflake input dependency for local V1 | None |
 | Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
-| Supabase prototype store | Foundation plus minimal workflow migrations and synthetic seed created; no project linked/applied or repositories/endpoints yet |
+| Supabase prototype store | Both migrations reported manually applied for handoff; live schema verification plus repositories/endpoints remain open |
 | Maintainer UI | Monorepo/API/React/Tailwind foundation implemented and three-page journey/component plan defined; domain pages not implemented |
-| Current repository check | 51 Python tests pass; frontend lint/type/build remains prior foundation evidence; deterministic 7-file replay remains prior acceptance evidence |
+| Current repository check | 52 Python tests pass; frontend lint/type/build remains prior foundation evidence; deterministic 7-file replay remains prior acceptance evidence |
 
 ## Source of truth for local V1
 
@@ -409,9 +410,8 @@ and the four fresh service windows.
 2. Select the cloud projects and configure/apply the completed API/web/
    Supabase foundation; verify deployed health/readiness/CORS without enabling
    unauthenticated domain writes.
-3. Implement Auth/JWT authorization, apply/validate the two existing migrations
-   in the development project, and add portable repository interfaces for the
-   minimal workflow schema.
+3. Implement Auth/JWT authorization, verify the reported-applied schema from the
+   API, and add portable repository interfaces for the workflow tables.
 4. Build the side-navigation shell and Data & settings upload/import slice; use
    accepted persisted source versions rather than passing hidden files through
    the run button.
@@ -458,7 +458,8 @@ and the four fresh service windows.
   the subsequent minimal schema implementation is recorded below.
 - 2026-08-28: added the intentionally minimal `002` workflow migration and a
   synthetic seed. One import table carries compact file/validation metadata;
-  five canonical input tables plus one netting-summary table support the first
-  pages. Separate file, issue, PO-header, daily-projection, and KPI tables were
-  deferred. No Supabase project is linked/applied and no API repository writes
-  exist yet.
+  five canonical input tables plus netting-summary and daily-projection tables
+  support the first pages. Separate file, issue, PO-header, and KPI/materialized-
+  summary tables are deferred. For the connected-UI handoff, the maintainer
+  reports both migrations applied through the Supabase SQL Editor; live schema
+  verification and API repository writes remain open.

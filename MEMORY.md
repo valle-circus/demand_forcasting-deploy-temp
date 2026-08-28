@@ -25,10 +25,12 @@ not a task log or a replacement for the detailed engineering brief.
   Two migrations now define the prototype tables: the initial master/run/output
   foundation and an intentionally minimal workflow extension with one compact
   `source_imports` table, normalized forecast/menu/BOM/stock/PO rows, run/input
-  references, and item-level netting summaries. Separate file, issue,
-  PO-header, daily-projection, and KPI tables are deferred; a synthetic seed
-  supports UI development. Neither migration is applied to a project and no API
-  repository uses it yet. Raw XLSX/PDF bytes stay out of Postgres and dashboard
+  references, item-level netting summaries, and daily projection rows. Separate
+  file, issue, PO-header, and KPI/materialized-summary tables are deferred; a
+  synthetic seed supports UI development. For the connected-UI handoff, the
+  maintainer reports both migrations manually applied through the Supabase SQL
+  Editor; the remote state still requires server-side verification and no API
+  repository uses either schema yet. Raw XLSX/PDF bytes stay out of Postgres and dashboard
   risk comes from typed Python results, not duplicated browser/SQL calculations.
   Mixed item units are not combined into a misleading quantity KPI, and cap
   evidence is not labelled actual waste. Evidence:
@@ -36,7 +38,7 @@ not a task log or a replacement for the detailed engineering brief.
   `supabase/migrations/202608280002_ui_workflow_inputs.sql`,
   `supabase/seed.sql`,
   `docs/plans/phase2_supply_planning_master_backlog.md`, and
-  `docs/scratchpads/ui_and_supabase_foundation.md`. Verification: 51 Python
+  `docs/scratchpads/ui_and_supabase_foundation.md`. Verification: 52 Python
   tests plus focused Ruff/mypy pass; a real Supabase `db reset` remains pending
   because no CLI/Postgres/Docker or linked project is available. Status:
   `active`.
@@ -53,7 +55,8 @@ not a task log or a replacement for the detailed engineering brief.
   repository root. During the prototype, Supabase may temporarily persist the
   canonical result contracts, but Snowflake remains the long-term result-store
   direction and the calculation contract must not fork. No Supabase project is
-  linked, no migration is applied, no elevated key is in browser code, and no
+  linked; for the connected-UI handoff both migrations are reported manually
+  applied through the Supabase SQL Editor. No elevated key is in browser code, and no
   upload/auth/master-edit/result-write endpoint exists yet. Verification: 48
   Python tests, focused Ruff/mypy, `pip check`, frontend lint/type/build and
   peer checks passed; live API/Vite/proxy HTTP checks passed. Evidence:
