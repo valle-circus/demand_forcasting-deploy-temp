@@ -9,6 +9,9 @@
 **Active implementation checklist:**
 `docs/plans/v1_template_first_delivery_plan.md`
 
+**Repository cleanup register:**
+`docs/plans/legacy_and_deprecation_register.md`
+
 ## Goal and boundary
 
 This repository consumes a daily dish forecast and calculates auditable
@@ -111,6 +114,25 @@ local files, without changing engine contracts.
 - [ ] Approve initial rules and operating measures.
 - [ ] Schedule idempotent runs with freshness gates, retries, failure logging,
       and a runbook.
+
+## Repository hygiene and compatibility cleanup
+
+- [x] Inventory active runtime, compatibility-only code, unused definitions,
+      misleading names and archive candidates without moving files.
+- [ ] Add active `v1-run` CLI coverage, then clean stale package `__init__`
+      facades that still import or advertise legacy symbols.
+- [ ] Remove or explicitly revive unused domain records; do not hide unused
+      scaffolding in a generic legacy folder.
+- [ ] Rename the active `improved_*` profile to neutral planning terminology
+      after the UI/API boundary is fixed.
+- [ ] After maintainer feedback and a corrected real-input rerun, decide
+      whether the KW34 compatibility feature remains supported. Move or delete
+      the complete feature atomically.
+- [ ] Archive completed discovery artifacts only after their source/persistence
+      or maintainer gate closes.
+
+The exact paths, classifications and gates are maintained in
+`docs/plans/legacy_and_deprecation_register.md`.
 
 ## Historical compatibility track — not a Milestone 1 blocker
 

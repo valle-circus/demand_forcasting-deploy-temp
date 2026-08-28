@@ -421,6 +421,24 @@ Transgourmet pod route, fresh coverage windows, or legacy `×2.5` as V1 blockers
 - Do not let files and Supabase become competing production config authorities.
 - Do not add supplier/ERP writes or a planning-approval workflow.
 
+## Repository legacy classification audit — 2026-08-27
+
+- `v1-run` uses the two project-owned templates plus a raw Apicbase stock XLSX
+  and raw Transgourmet PDFs. No original KW/CW workbook adapter is in the active
+  path.
+- The isolated KW34 engine/application/CSV adapter, its CLI branch, tests and
+  fixture are true compatibility candidates. Keep or move them as one feature
+  only after the maintainer/real-input gate and an explicit parity decision.
+- Five package `__init__.py` facades still expose stale/legacy APIs. Six domain
+  records have no repository consumer outside their definition/re-export.
+  Those are cleanup-or-revive decisions, not reasons to create a broad legacy
+  dumping ground.
+- `run_improved.py`, canonical CSVs and the synthetic improved fixture are
+  active under `v1-run`; their names may be neutralized later but they are not
+  legacy.
+- The authoritative classified path list and cleanup order are in
+  `docs/plans/legacy_and_deprecation_register.md`.
+
 ## Verification
 
 - Command: `scripts/check.ps1 -PythonExecutable <python-3.12-path>`.

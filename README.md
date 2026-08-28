@@ -191,6 +191,7 @@ No further required V1-V12 Snowflake verification query remains.
 | [`docs/descriptions/phase2_supply_planning_brief.md`](docs/descriptions/phase2_supply_planning_brief.md) | Workbook evidence, target logic, and architecture |
 | [`docs/plans/phase2_supply_planning_master_backlog.md`](docs/plans/phase2_supply_planning_master_backlog.md) | Prioritized implementation backlog |
 | [`docs/plans/v1_template_first_delivery_plan.md`](docs/plans/v1_template_first_delivery_plan.md) | Active local V1 checklist and acceptance criteria |
+| [`docs/plans/legacy_and_deprecation_register.md`](docs/plans/legacy_and_deprecation_register.md) | Classified runtime, compatibility, cleanup and archive candidates |
 | [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Phase ownership and source status |
 | [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Stable engine contracts and file schemas |
 | [`docs/descriptions/v1_assumptions_and_admin_validation.md`](docs/descriptions/v1_assumptions_and_admin_validation.md) | Concise maintainer review of active values, assumptions, legacy factors, and questions |
@@ -203,6 +204,11 @@ No further required V1-V12 Snowflake verification query remains.
 
 The project targets Python 3.12. `openpyxl` is the small base dependency for
 read-only XLSX normalization; `pdfplumber` is optional for Transgourmet PDFs.
+
+The normal planner-facing local path is `v1-run` under “Complete local
+template-driven V1” below. `improved-run` is the direct canonical-file
+developer path, and `legacy-run` is only the isolated KW34 compatibility tool;
+neither means that the old workbook is a recurring V1 input.
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"

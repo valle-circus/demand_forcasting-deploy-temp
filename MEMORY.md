@@ -15,6 +15,18 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-27: **Repository history is classified before any cleanup move.**
+  The active `v1-run` contract is the two project-owned templates, one raw
+  Apicbase stock export and cumulative Transgourmet PDFs; no original KW/CW
+  workbook adapter participates in that path. The isolated KW34
+  engine/application/CSV/CLI/test feature is compatibility code. Stale package
+  facades, six unused domain records and active `improved_*` names are separate
+  cleanup/revive/rename concerns and must not be hidden in a generic legacy
+  folder. Historical Snowflake/report evidence belongs in a documentation
+  archive only after its active gate closes. Evidence:
+  `docs/plans/legacy_and_deprecation_register.md` and
+  `docs/plans/phase2_supply_planning_master_backlog.md`. Status: `active`.
+
 - 2026-08-27: **The local template-driven technical V1 is complete; maintainer
   approval is an operational gate, not a UI-start gate.** Strict readers load
   the two project-owned workbook schemas; the Apicbase adapter reads the
