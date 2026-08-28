@@ -8,10 +8,19 @@ version = "0.1.0"
 description = "Deterministic Phase 2 supply-planning engine and CLI"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["openpyxl>=3.1,<4"]
+dependencies = [
+    "openpyxl>=3.1,<4",
+    "tzdata>=2026.1; sys_platform == 'win32'",
+]
 
 [project.optional-dependencies]
 pdf-import = ["pdfplumber>=0.11,<1"]
+api = [
+    "fastapi>=0.116,<1",
+    "httpx>=0.28,<1",
+    "pydantic-settings>=2.10,<3",
+    "uvicorn[standard]>=0.35,<1",
+]
 
 [project.scripts]
 supply-plan = "supply_planning.cli:main"

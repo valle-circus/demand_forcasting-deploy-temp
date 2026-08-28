@@ -15,6 +15,28 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-28: **The UI/API/Supabase monorepo foundation is implemented, while
+  domain workflows and cloud resources remain deliberately unconfigured.** The
+  pure engine stays in `src/supply_planning`; `apps/api` provides FastAPI
+  process health plus a sanitized optional Supabase readiness probe, and
+  `apps/web` provides a React/TypeScript/Vite/Tailwind status shell that keeps
+  demo/proposal values visibly non-operational. The initial Supabase migration
+  creates versioned location/item/rule tables and portable canonical
+  run/input/line/recommendation/exception tables with RLS enabled and browser
+  roles denied. Vercel is configured for `apps/web`; Render builds from the
+  repository root. During the prototype, Supabase may temporarily persist the
+  canonical result contracts, but Snowflake remains the long-term result-store
+  direction and the calculation contract must not fork. No Supabase project is
+  linked, no migration is applied, no elevated key is in browser code, and no
+  upload/auth/master-edit/result-write endpoint exists yet. Verification: 48
+  Python tests, focused Ruff/mypy, `pip check`, frontend lint/type/build and
+  peer checks passed; live API/Vite/proxy HTTP checks passed. Evidence:
+  `docs/descriptions/ui_api_and_persistence_foundation.md`,
+  `docs/plans/phase2_supply_planning_master_backlog.md`,
+  `docs/scratchpads/ui_and_supabase_foundation.md`, `apps/api`, `apps/web`,
+  `supabase/migrations/202608280001_ui_foundation.sql`, and `render.yaml`.
+  Status: `active`.
+
 - 2026-08-27: **Repository history is classified before any cleanup move.**
   The active `v1-run` contract is the two project-owned templates, one raw
   Apicbase stock export and cumulative Transgourmet PDFs; no original KW/CW

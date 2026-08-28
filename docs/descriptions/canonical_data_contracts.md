@@ -405,9 +405,12 @@ visible until the maintainer approves them.
 
 ## 5. Canonical output contracts
 
-The V1 typed output records define the calculation-to-Snowflake boundary, and
-the template-driven improved engine now populates them. Supabase is not the
-result store.
+The V1 typed output records define a persistence-neutral calculation boundary,
+and the template-driven improved engine now populates them. Snowflake remains
+the intended long-term result store. Under the explicit 2026-08-28 prototype
+exception, the same records may be persisted temporarily in Supabase; this does
+not change their grain, identifiers, audit requirements, or proposal-only
+meaning.
 
 ### 5.1 `planning_runs`
 
@@ -464,8 +467,10 @@ open POs and from the net-requirement calculation.
 
 Configured yield/safety, protection-period selection, shelf-life/max-cover,
 MOQ/case, supplier scheduling and recommendation rounding are implemented for
-the local V1. Snowflake persistence, Supabase configuration, and the internal
-UI remain later adapter/persistence work.
+the local V1. The repository now contains the API/web foundation and an
+unapplied Supabase migration for versioned master and canonical output tables.
+Database-to-domain repositories, authenticated writes, upload/run endpoints,
+and applied cloud resources remain later adapter/persistence work.
 
 ## 6. SQL/source discovery deliverable
 

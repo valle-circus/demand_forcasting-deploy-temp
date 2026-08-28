@@ -76,11 +76,86 @@ Detailed steps and exit criteria are in
 **Outcome:** a planner selects a location, uploads the same four inputs, sees
 field/mapping errors, and views/downloads the calculated recommendation.
 
-- [ ] Add a thin upload/validation API around the existing normalizers.
-- [ ] Add location selection and the four upload inputs.
-- [ ] Show actionable field and rejected-mapping errors.
-- [ ] Show/download recommendations, derivations, and exceptions.
-- [ ] Decide and implement the minimum authentication and retention controls.
+Detailed architecture and environment boundaries are in
+`docs/descriptions/ui_api_and_persistence_foundation.md`; living implementation
+notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
+
+#### 2A — repository, API and deployment foundation
+
+- [x] Preserve `src/supply_planning` as the calculation/application package and
+      add separate `apps/api` and `apps/web` deployables without moving engine
+      code.
+- [x] Add the FastAPI process-health and optional sanitized Supabase-readiness
+      endpoints with explicit CORS configuration.
+- [x] Add a minimal React/TypeScript/Vite/Tailwind shell that consumes the API
+      status and preserves the demo/proposal warning.
+- [x] Add separate browser/server environment examples so elevated Supabase
+      credentials cannot be bundled by Vite.
+- [x] Add a Render Blueprint, Vercel app configuration, pinned Python line, and
+      local development instructions.
+- [x] Add the initial Supabase migration for versioned master rows and portable
+      canonical run/output rows, with RLS enabled and browser roles denied.
+- [x] Add API foundation tests and frontend lint/type/build checks.
+- [ ] Select/create the actual Supabase, Render, and Vercel projects; enter
+      environment values; apply migrations; and verify deployed CORS/readiness.
+
+#### 2B — authenticated maintainer boundary
+
+- [ ] Choose the internal Supabase Auth method and define maintainer roles.
+- [ ] Verify Supabase user JWTs in FastAPI for every domain endpoint.
+- [ ] Add least-privilege authorization tests; reserve the server secret for
+      controlled API operations after authorization.
+- [ ] Define session-expiry, access-removal, audit-user, and non-production
+      preview behavior.
+
+#### 2C — upload and planning-run vertical slice
+
+- [ ] Define the page/API contract for location selection, the two workbooks,
+      current stock XLSX, cumulative PO PDFs, and deterministic cutoff.
+- [ ] Add multipart file type/size/count limits and human-readable request
+      errors before parsing.
+- [ ] Process every request in an isolated temporary directory, call
+      `run_template_v1`/application services directly, and prove cleanup on
+      success and failure; do not shell out to the CLI.
+- [ ] Return one structured run response containing status, summary,
+      recommendations, derivations, exceptions, and mapping reviews.
+- [ ] Add location selection and the four controlled upload inputs.
+- [ ] Show actionable field, source, and rejected-mapping errors.
+- [ ] Show/download recommendations, derivations, exceptions, and audit output.
+- [ ] Keep synchronous processing initially; add a queue only after measured
+      duration/size or platform limits require it.
+
+#### 2D — versioned master-data maintenance
+
+- [ ] Map the existing `Locations`, `Items`, item-policy, and delivery-rule
+      domain records to Supabase repositories; keep the workbook as controlled
+      import/export, not a second editable authority after cutover.
+- [ ] Implement draft creation/edit, full domain validation, transactional
+      activation, one active version per environment, and active-version
+      immutability.
+- [ ] Persist user/time/change history and the config hash used by each run.
+- [ ] Define the actual master-data pages and validation presentation before
+      building complex grid/form components.
+
+#### 2E — prototype result persistence and review
+
+- [ ] Persist `planning_runs`, inputs, lines, recommendations, and exceptions
+      atomically through a repository adapter.
+- [ ] Prove idempotent retry behavior for deterministic `run_id` values.
+- [ ] Add run history, one-run detail, and export endpoints/pages.
+- [ ] Keep every recommendation visibly proposal-only; do not add placement,
+      approval, supplier-send, comments, assignment, or ERP status.
+
+#### 2F — retention, observability and acceptance
+
+- [ ] Decide whether raw uploads are process-and-delete or retained in private
+      object storage; record owner, purpose, duration, deletion, and access.
+- [ ] Add request/run correlation IDs, structured logs without source contents
+      or keys, safe dependency errors, and basic failure monitoring.
+- [ ] Add API integration tests and frontend component/E2E coverage for the
+      approved workflows.
+- [ ] Validate representative runs with the maintainer and require the existing
+      operational gate before showing shadow/production-ready status.
 
 **Entry decision:** UI planning and implementation may start. The completed
 local scenario contracts are stable. Maintainer feedback is a gate before the
@@ -101,7 +176,10 @@ local files, without changing engine contracts.
       access.
 - [ ] Persist application-maintained item/rule data in the agreed Supabase or
       master-data store with versions/change history.
-- [ ] Write append-only run/recommendation/exception history to Snowflake.
+- [ ] Use the prototype Supabase run/output tables only until the Snowflake
+      result owner/schema/write path is accepted.
+- [ ] Implement and cut over to append-only run/recommendation/exception
+      history in Snowflake without changing engine/output contracts.
 - [ ] Replace manual forecast/menu, stock, and PO inputs individually only when
       an accepted API/table has proven grain, IDs, units, freshness, lineage,
       and ownership.
@@ -163,10 +241,10 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Transgourmet PDF normalization | Implemented; unresolved lines are quarantined for maintainer mapping |
 | Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
 | Live Snowflake input dependency for local V1 | None |
-| Snowflake result persistence | Later; ownership/schema open |
-| Supabase configuration store | Later; not created |
-| Maintainer UI | Milestone 2; ready to plan/build, not started |
-| Current repository check | 44 passing tests on 2026-08-27; deterministic 7-file replay passed |
+| Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
+| Supabase configuration store | Migration created but no project linked/applied and no repositories/endpoints yet |
+| Maintainer UI | Monorepo/API/React/Tailwind foundation implemented; product workflows not started |
+| Current repository check | 48 Python tests pass; frontend lint/type/build pass; deterministic 7-file replay remains prior acceptance evidence |
 
 ## Source of truth for local V1
 
@@ -239,15 +317,20 @@ and the four fresh service windows.
 
 1. Send the two templates, assumptions brief, maintainer review summary, and
    recommendation/exception outputs to the maintainer.
-2. Start Milestone 2 UI planning/building over the existing schemas, while
-   displaying proposal/unapproved statuses explicitly.
-3. Receive corrected/approved templates and answers; resolve the four stock
+2. Select the cloud projects and configure/apply the completed API/web/
+   Supabase foundation; verify deployed health/readiness/CORS without enabling
+   unauthenticated domain writes.
+3. Define the upload/run page and API contract, then implement the authenticated
+   temporary-file vertical slice over the existing application service.
+4. Define the draft/activation and result-review experiences before building
+   their forms/tables; keep proposal/unapproved status explicit.
+5. Receive corrected/approved templates and answers; resolve the four stock
    mappings, seven currently unmatched open-PO lines, item policy fields, and
    fresh timing/pack-cap decisions.
-4. Rerun the same one-command workflow and pass the operational-approval gate
+6. Rerun the same one-command workflow and pass the operational-approval gate
    before shadow/production use.
-5. Plan Supabase only for editable master/rule/mapping data and change history;
-   leave operational result persistence to the agreed Snowflake path.
+7. Treat Supabase result persistence as the documented prototype adapter and
+   preserve the future Snowflake cutover boundary.
 
 ## Dated progress
 
@@ -265,3 +348,10 @@ and the four fresh service windows.
   zero blockers; seven result files replayed byte-identically and 44 tests
   passed. UI work is unblocked; maintainer approval remains the gate before
   operational/shadow use.
+- 2026-08-28: completed Milestone 2A repository foundation: thin FastAPI
+  health/readiness boundary, React/TypeScript/Vite/Tailwind status shell,
+  server/browser environment separation, initial RLS-denied Supabase
+  master/run migration, Render/Vercel configuration, dedicated UI
+  specification/scratchpad, 48 passing Python tests, and passing frontend
+  lint/type/build checks. No cloud project is linked and no domain workflow or
+  authenticated database write is implied by this scaffold.

@@ -216,6 +216,15 @@ After the technical Milestone 1 exit, build only a thin UI over the same contrac
 No supplier dispatch, ERP write, approval workflow, statistical optimization,
 or complex calendar integration belongs in this milestone.
 
+**Foundation progress (2026-08-28):** the monorepo now contains the thin
+FastAPI system boundary, React/TypeScript/Vite/Tailwind status shell, initial
+Supabase master/run migration, and Render/Vercel configuration. This proves the
+deployment seams but does not yet implement upload/run, authentication,
+master-data editing, or result-review workflows. The granular checklist is in
+`docs/plans/phase2_supply_planning_master_backlog.md`; architecture and
+environment rules are in
+`docs/descriptions/ui_api_and_persistence_foundation.md`.
+
 ### Maintainer-feedback gate inside Milestone 2
 
 - UI planning, upload validation, schema-backed forms, local execution, and

@@ -3,7 +3,7 @@
 This repository automates the ingredient and purchasing-demand calculation
 currently maintained in `Supply_Planning_Rewe.xlsx`.
 
-> **Current status (2026-08-27):** the displayed KW33/KW34 stocked-item arithmetic is
+> **Current status (2026-08-28):** the displayed KW33/KW34 stocked-item arithmetic is
 > independently reconciled and implemented as `legacy_kw34/v1`. The real
 > workbook rows are not yet an automated golden fixture; current tests use safe
 > synthetic data. The first improved file path can validate daily forecast,
@@ -18,7 +18,11 @@ currently maintained in `Supply_Planning_Rewe.xlsx`.
 > `LOC_DEMO_001` is byte-stable, has zero blockers, and produces 23 dated
 > recommendation lines across 11 items. The local technical V1 is complete;
 > maintainer approval of highlighted policy/mapping fields is the gate before
-> operational/shadow use, not before starting the thin upload UI.
+> operational/shadow use. The monorepo UI foundation is now implemented: a
+> thin FastAPI health/readiness boundary, React/TypeScript/Vite/Tailwind status
+> shell, initial RLS-denied Supabase master/run migration, and Render/Vercel
+> configuration. Actual upload, authenticated master editing, result
+> persistence/review, and linked cloud projects remain the next slices.
 
 ## Phase boundary
 
@@ -95,6 +99,12 @@ internal React UI + Python API
 CSV files remain useful for fixtures, deterministic tests, local development,
 and controlled recovery. They are not the long-term editing workflow.
 
+For prototype simplicity, the same canonical master/run/output records may be
+stored temporarily in Supabase before the Snowflake result path is ready. This
+is an explicit persistence-adapter exception, not a new calculation model or a
+claim that raw uploads are operational source tables. See
+`docs/descriptions/ui_api_and_persistence_foundation.md`.
+
 ## Phase 2 calculation scope
 
 The intended calculation is:
@@ -141,18 +151,27 @@ write in this project.
   windows, shelf/max-cover, MOQ/case and final order-unit rounding;
 - table-ready recommendations, derivations, exceptions, mapping-review files,
   a concise maintainer summary, and byte-stable replay; and
-- synthetic legacy/multi-location scenarios plus the complete local demo run.
+- synthetic legacy/multi-location scenarios plus the complete local demo run;
+- a thin FastAPI process-health and sanitized optional Supabase-readiness
+  boundary with CORS configuration and tests;
+- a basic React/TypeScript/Vite/Tailwind status shell with browser/server
+  environment separation; and
+- an initial Supabase master/run/output migration plus Render and Vercel
+  deployment configuration.
 
-Snowflake/Supabase persistence and the maintainer UI are intentionally not part
-of the completed local V1 calculation.
+The foundation does not yet implement upload/run endpoints, authentication,
+master-data repositories/forms, result persistence/history, or final UI/UX.
+None of those concerns is part of the pure local V1 calculation.
 
 ## Delivery order
 
 1. Send the completed local V1 packet to the maintainer and collect approved or
    corrected template/policy/mapping rows. Rerun before operational use.
-2. Start the thin maintainer upload UI over exactly the same contracts; keep
-   demo/unapproved values visibly labelled until the maintainer gate passes.
-3. Add Snowflake result persistence and the agreed editable master/rule store;
+2. Configure and deploy the completed API/web/Supabase foundation, then build
+   the authenticated upload/run vertical slice over exactly the same contracts;
+   keep demo/unapproved values visibly labelled until the maintainer gate passes.
+3. Add versioned master maintenance and prototype result persistence, then add
+   Snowflake result persistence and the agreed long-term master/rule store;
    replace manual inputs individually when accepted APIs/tables exist.
 4. Shadow-validate representative runs and then schedule/monitor the job.
 5. Keep KW33/KW34 parity as a separate compatibility track and add advanced
@@ -178,8 +197,10 @@ only operational approval or the named later outcome.
 - Transgourmet pending-order history is the current PO process, but an approved
   normalized export/API and Snowflake ingestion are still needed for complete
   production netting.
-- Supabase ownership/access is needed only when the configuration UI tranche
-  begins.
+- A selected Supabase project, owner, region, credentials, applied migration,
+  Auth method, and retention decision are needed before authenticated
+  configuration/result workflows can begin; the unconfigured foundation still
+  runs locally and reports that state explicitly.
 
 No further required V1-V12 Snowflake verification query remains.
 
@@ -194,10 +215,12 @@ No further required V1-V12 Snowflake verification query remains.
 | [`docs/plans/legacy_and_deprecation_register.md`](docs/plans/legacy_and_deprecation_register.md) | Classified runtime, compatibility, cleanup and archive candidates |
 | [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Phase ownership and source status |
 | [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Stable engine contracts and file schemas |
+| [`docs/descriptions/ui_api_and_persistence_foundation.md`](docs/descriptions/ui_api_and_persistence_foundation.md) | Monorepo, API, frontend, Supabase, environment, and deployment boundaries |
 | [`docs/descriptions/v1_assumptions_and_admin_validation.md`](docs/descriptions/v1_assumptions_and_admin_validation.md) | Concise maintainer review of active values, assumptions, legacy factors, and questions |
 | [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Exact human/access actions and their impact |
 | [`docs/reports/planner-questionnaire-review/report.html`](docs/reports/planner-questionnaire-review/report.html) | Sanitized Q1-Q13 clarification and follow-up report |
 | [`docs/scratchpads/snowflake_verification_evidence.md`](docs/scratchpads/snowflake_verification_evidence.md) | Durable V1-V12 evidence without private CSVs |
+| [`docs/scratchpads/ui_and_supabase_foundation.md`](docs/scratchpads/ui_and_supabase_foundation.md) | Living notes for the UI/API/Supabase implementation |
 | [`MEMORY.md`](MEMORY.md) | Durable decisions that survive handovers |
 
 ## Quick start
@@ -209,6 +232,35 @@ The normal planner-facing local path is `v1-run` under “Complete local
 template-driven V1” below. `improved-run` is the direct canonical-file
 developer path, and `legacy-run` is only the isolated KW34 compatibility tool;
 neither means that the old workbook is a recurring V1 input.
+
+### API and UI foundation
+
+Create the local Python environment and install the API/PDF extras:
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[api,pdf-import]"
+Copy-Item .env.example .env
+.venv\Scripts\python.exe -m uvicorn apps.api.supply_planning_api.main:app --reload
+```
+
+In another terminal, start the web app:
+
+```powershell
+Set-Location apps\web
+Copy-Item .env.example .env.local
+pnpm install
+pnpm dev
+```
+
+Open `http://localhost:5173`. The API health endpoint is
+`http://localhost:8000/api/v1/health`; readiness is
+`http://localhost:8000/api/v1/readiness`. Without Supabase values, readiness
+correctly reports `degraded/not_configured` while process health remains `ok`.
+
+Before cloud setup, read `apps/api/README.md`, `apps/web/README.md`, and
+`supabase/README.md`. Vercel should use `apps/web` as project root. Render uses
+the repository-root `render.yaml` because the API imports `src/supply_planning`.
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"

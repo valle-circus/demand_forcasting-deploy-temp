@@ -572,9 +572,13 @@ recommendation run. KW33/KW34 remains a separate compatibility evidence track.
 
 1. **The engine is pure.** Core calculation functions take validated typed/tabular inputs and return typed/tabular outputs, with no database or filesystem access. Concrete adapters may use dataframes, CSV, SQL, or API payloads. This makes the whole thing testable against the KW34 numbers as a golden fixture.
 2. **All policy is explicit data, not code.** Start with versioned config files as a technical bootstrap and test interface; when operational persistence begins, store the same validated schemas in the database and manage them through the UI/API. Anything a non-technical admin might change is never a scattered constant or dependent on hand-editing repository files.
-3. **Storage responsibilities are explicit.** Snowflake owns operational inputs
-   and Phase 2 results. Supabase owns application-managed editable rules and
-   their change history. A result run records the active config version/hash.
+3. **Storage responsibilities are explicit.** The target state keeps
+   operational inputs and Phase 2 results in Snowflake and application-managed
+   editable rules/change history in Supabase. During the explicitly labelled
+   prototype, Supabase may also hold the same canonical run/output contracts;
+   this temporary persistence exception must not change engine types or imply
+   that raw uploads are authoritative operational data. A result run records
+   the active config version/hash.
 4. **Every run is reproducible.** Snapshot the input references and config
    version; the same values must reproduce the same output.
 5. **The internal UI edits configuration only.** The CLI proves the engine; a
@@ -619,13 +623,28 @@ Supabase is the source of truth only for application-owned editable planning
 rules. The UI validates and edits those rules; it does not approve proposals or
 send orders. The CLI remains useful for tests, troubleshooting, and recovery.
 
+**Prototype UI path (current Milestone 2 foundation):**
+
+```text
+React/Vite/Tailwind on Vercel → FastAPI on Render → existing application service
+                                      │
+                                      └→ Supabase version/run tables (temporary)
+```
+
+This path provides a cheap, replaceable persistence layer while the source and
+Snowflake ownership contracts are still being finalized. The dedicated
+foundation specification is
+`docs/descriptions/ui_api_and_persistence_foundation.md`.
+
 ### 9.3 Repository layout
 
-The layout below remains the target. The implemented subset includes
+The layout below is now implemented for the UI foundation. It includes
 `pyproject.toml`, `src/supply_planning/{domain,validation,engine,application,adapters}`,
 the CLI, strict template/stock/PO adapters, the improved recommendation engine,
-table-ready outputs, synthetic fixtures, and unit/integration-style tests. The
-web app, Snowflake persistence and Supabase migrations are not yet present.
+table-ready outputs, synthetic fixtures, unit/integration-style tests, a thin
+FastAPI application, a React/TypeScript/Vite/Tailwind shell, the first Supabase
+migration, and Render/Vercel configuration. Domain upload/master/result API
+workflows and applied cloud resources are not yet present.
 
 ```
 supply-planning/
@@ -653,8 +672,11 @@ supply-planning/
 │   ├── fixtures/kw34/        # approved/anonymized inputs + expected outputs
 │   ├── unit/
 │   └── integration/
-├── apps/web/                 # internal config UI, added after config schemas stabilize
-├── supabase/                 # editable planning-rule migrations only
+├── apps/
+│   ├── api/                  # thin FastAPI HTTP/deployment boundary
+│   └── web/                  # React/TypeScript/Vite/Tailwind internal UI
+├── supabase/                 # prototype master + portable run/output migrations
+├── render.yaml               # Render API Blueprint
 └── README.md
 ```
 
@@ -724,16 +746,18 @@ Two properties must survive when these schemas move behind the UI:
 
 ### 9.5 UI and persistence boundary
 
-The first deliverable is the Python calculation path. A later thin Python API
-and React UI should let authorized internal users view/edit only the supported
+The Python calculation path is complete. The thin Python API and React UI
+foundation now exists; later domain endpoints/pages should let authorized internal users view/edit only the supported
 Phase 2 rules: storage-category defaults, item/supplier overrides, lead time,
 shelf life/max cover, MOQ/case, simple delivery rules, and safety/yield values.
 It validates changes and shows the active version and basic change history.
 
 The first UI does not include proposal approval, comments/assignment, supplier
 send, ERP export, or manual replacement of Snowflake operational inputs.
-Snowflake remains authoritative for forecasts, menu/BOM, stock, POs, and result
-tables. Supabase contains only application-owned configuration, for example:
+Snowflake remains the target authority for forecasts, menu/BOM, stock, POs,
+and result tables. The 2026-08-28 prototype exception permits Supabase to hold
+portable run/output rows temporarily as well as application-owned configuration,
+for example:
 
 - `policy_versions` and one active version per environment;
 - `storage_class_defaults`;
@@ -742,9 +766,15 @@ tables. Supabase contains only application-owned configuration, for example:
 - `delivery_schedule_rules`;
 - configuration change history.
 
-Each Snowflake run records the active Supabase config version/hash. CSV/YAML
-remain fixtures, controlled import/export, and recovery artifacts, not a second
-production authority.
+The foundation migration also includes the canonical `planning_runs`,
+`planning_run_inputs`, `planning_lines`, `planning_recommendations`, and
+`planning_exceptions` tables. Those tables are a temporary prototype store,
+not placed-order state, and must remain adapter-compatible with the future
+Snowflake result schema.
+
+Each run records the active config version/hash regardless of persistence
+adapter. CSV/YAML remain fixtures, controlled import/export, and recovery
+artifacts, not a second production authority.
 
 ### 9.6 Run cadence
 
@@ -757,11 +787,19 @@ production authority.
 
 ### 9.7 Hosting
 
-Start locally as a deterministic CLI with CSV/JSON outputs for engineering
-validation. Then run the same application service as an internal scheduled job:
-read accepted Snowflake sources plus the active Supabase config and write only
-to the agreed Snowflake result schema. The React UI reads/writes Supabase config
-through the API. Keep the CLI and files as controlled test/recovery tools.
+The deterministic CLI with CSV/JSON outputs remains the engineering validation
+and recovery path. The prototype now has two deployables in this repository:
+Vercel builds `apps/web`, while Render builds from the repository root and runs
+`apps.api.supply_planning_api.main:app` so it can import the existing Python
+package. The UI reaches configuration/results only through the API; it uses a
+browser-safe Supabase publishable key only for future Auth. Elevated Supabase
+access remains server-side.
+
+Until domain endpoints are implemented, `/api/v1/health` proves the Render
+process and `/api/v1/readiness` performs the optional sanitized Supabase probe.
+The later scheduled target still reads accepted Snowflake inputs plus active
+configuration and writes the agreed Snowflake result schema. Keep the CLI and
+files as controlled test/recovery tools.
 
 ---
 
@@ -890,10 +928,12 @@ zero blockers and byte-stable result files. Maintainer approval of highlighted
 policies/mappings remains the gate before operational/shadow use, but it does
 not block UI planning.
 
-**Milestone 2 — Maintainer upload UI.** Reuse the same contracts in a thin UI:
-select location, upload the four inputs, show actionable validation/mapping
-errors, run the calculation, and display/download the recommendation. The UI
-does not introduce a new business schema.
+**Milestone 2 — Maintainer upload UI.** The monorepo/API/web/Supabase/deployment
+foundation is implemented. Continue over the same contracts: select location,
+upload the four inputs, show actionable validation/mapping errors, run the
+calculation, and display/download the recommendation. The UI does not introduce
+a new business schema. Detailed work packages are in the master backlog and
+`docs/descriptions/ui_api_and_persistence_foundation.md`.
 
 **Milestone 3 — Persistence and source automation.** Move application-managed
 master/rule data to the agreed editable store and run/recommendation history to

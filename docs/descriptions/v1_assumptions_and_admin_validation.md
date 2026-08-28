@@ -174,6 +174,9 @@ maintainer upload UI using the same schemas, and UI planning/building may start
 now. The maintainer must still return approved/corrected templates and policy/
 mapping answers before any scenario result is called operational or used for
 shadow/production decisions. After feedback, rerun and require zero blockers.
+The 2026-08-28 repository foundation now supplies the API/web/deployment seams
+and a temporary Supabase master/run schema, but deliberately adds no second
+calculation path and does not change this approval gate.
 Still later/pending are:
 
 - Phase 1 forecast logic and its accepted daily forecast source;

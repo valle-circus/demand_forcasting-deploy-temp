@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: supply-planning-api
+    runtime: python
+    buildCommand: python -m pip install -e ".[api,pdf-import]"
+    startCommand: python -m uvicorn apps.api.supply_planning_api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false

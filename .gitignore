@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!apps/web/.env.example
 .venv/
 venv/
 
@@ -16,6 +17,13 @@ __pycache__/
 htmlcov/
 build/
 dist/
+
+# Node / frontend
+node_modules/
+apps/web/node_modules/
+apps/web/dist/
+.pnpm-store/
+*.tsbuildinfo
 
 # Editors and operating systems
 .idea/
