@@ -223,7 +223,10 @@ deployment seams but does not yet implement upload/run, authentication,
 master-data editing, or result-review workflows. The granular checklist is in
 `docs/plans/phase2_supply_planning_master_backlog.md`; architecture and
 environment rules are in
-`docs/descriptions/ui_api_and_persistence_foundation.md`.
+`docs/descriptions/ui_api_and_persistence_foundation.md`. The defined
+three-page maintainer journey, page/component plan, current-code integration
+map, and implemented minimal additive Supabase schema are in
+`docs/descriptions/ui_maintainer_journey_and_page_plan.md`.
 
 ### Maintainer-feedback gate inside Milestone 2
 

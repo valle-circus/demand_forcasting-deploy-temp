@@ -15,6 +15,32 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-28: **The maintainer UI has three top-level pages and an exception-
+  first journey, but the pages are not implemented yet.** A persistent side
+  navigation links Overview (cross-location readiness/risk), Location planning
+  (stock/PO risk, visible input versions, compute, explanation, CSV/JSON), and
+  Data & settings (four controlled upload groups plus versioned master/menu
+  edits). Imports are separate from execution: FastAPI/Python normalizes files
+  into immutable visible source versions, and a run references those versions.
+  Two migrations now define the prototype tables: the initial master/run/output
+  foundation and an intentionally minimal workflow extension with one compact
+  `source_imports` table, normalized forecast/menu/BOM/stock/PO rows, run/input
+  references, and item-level netting summaries. Separate file, issue,
+  PO-header, daily-projection, and KPI tables are deferred; a synthetic seed
+  supports UI development. Neither migration is applied to a project and no API
+  repository uses it yet. Raw XLSX/PDF bytes stay out of Postgres and dashboard
+  risk comes from typed Python results, not duplicated browser/SQL calculations.
+  Mixed item units are not combined into a misleading quantity KPI, and cap
+  evidence is not labelled actual waste. Evidence:
+  `docs/descriptions/ui_maintainer_journey_and_page_plan.md`,
+  `supabase/migrations/202608280002_ui_workflow_inputs.sql`,
+  `supabase/seed.sql`,
+  `docs/plans/phase2_supply_planning_master_backlog.md`, and
+  `docs/scratchpads/ui_and_supabase_foundation.md`. Verification: 51 Python
+  tests plus focused Ruff/mypy pass; a real Supabase `db reset` remains pending
+  because no CLI/Postgres/Docker or linked project is available. Status:
+  `active`.
+
 - 2026-08-28: **The UI/API/Supabase monorepo foundation is implemented, while
   domain workflows and cloud resources remain deliberately unconfigured.** The
   pure engine stays in `src/supply_planning`; `apps/api` provides FastAPI

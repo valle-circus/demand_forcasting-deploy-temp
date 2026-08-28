@@ -5,9 +5,11 @@
 
 **Code:** `src/supply_planning/domain/models.py`
 
-**Purpose:** define stable engine shapes while keeping physical storage separate:
-Snowflake supplies operational inputs and receives results; Supabase supplies
-application-owned editable planning rules; CSV remains a fixture/test adapter.
+**Purpose:** define stable engine shapes while keeping physical storage
+separate. Snowflake is the target operational input/result store; Supabase owns
+application-managed rules and may temporarily persist normalized input
+versions plus portable results during the manual-file prototype; CSV remains a
+fixture/test/recovery adapter.
 
 ## 1. Boundary and mapping rule
 
@@ -467,8 +469,10 @@ open POs and from the net-requirement calculation.
 
 Configured yield/safety, protection-period selection, shelf-life/max-cover,
 MOQ/case, supplier scheduling and recommendation rounding are implemented for
-the local V1. The repository now contains the API/web foundation and an
-unapplied Supabase migration for versioned master and canonical output tables.
+the local V1. The repository now contains the API/web foundation and two
+unapplied Supabase migrations: the versioned master/canonical-output
+foundation and the minimal import/input/netting-result extension needed by the
+three-page UI. `supabase/seed.sql` contains synthetic UI-only development rows.
 Database-to-domain repositories, authenticated writes, upload/run endpoints,
 and applied cloud resources remain later adapter/persistence work.
 

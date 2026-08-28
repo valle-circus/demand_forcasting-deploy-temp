@@ -73,12 +73,15 @@ Detailed steps and exit criteria are in
 
 ### Milestone 2 — maintainer upload UI
 
-**Outcome:** a planner selects a location, uploads the same four inputs, sees
-field/mapping errors, and views/downloads the calculated recommendation.
+**Outcome:** an authenticated maintainer uses a three-page workspace to see
+cross-location readiness/risk, inspect and calculate one location's proposal,
+and upload or maintain the controlled source data without running local code.
 
 Detailed architecture and environment boundaries are in
-`docs/descriptions/ui_api_and_persistence_foundation.md`; living implementation
-notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
+`docs/descriptions/ui_api_and_persistence_foundation.md`; the customer journey,
+page contracts, KPI definitions, component map, API handover, and schema gaps
+are in `docs/descriptions/ui_maintainer_journey_and_page_plan.md`; living
+implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
 
 #### 2A — repository, API and deployment foundation
 
@@ -108,45 +111,125 @@ notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
 - [ ] Define session-expiry, access-removal, audit-user, and non-production
       preview behavior.
 
-#### 2C — upload and planning-run vertical slice
+#### 2C — source-import and canonical-input persistence
 
-- [ ] Define the page/API contract for location selection, the two workbooks,
-      current stock XLSX, cumulative PO PDFs, and deterministic cutoff.
-- [ ] Add multipart file type/size/count limits and human-readable request
-      errors before parsing.
-- [ ] Process every request in an isolated temporary directory, call
-      `run_template_v1`/application services directly, and prove cleanup on
-      success and failure; do not shell out to the CLI.
-- [ ] Return one structured run response containing status, summary,
-      recommendations, derivations, exceptions, and mapping reviews.
-- [ ] Add location selection and the four controlled upload inputs.
-- [ ] Show actionable field, source, and rejected-mapping errors.
-- [ ] Show/download recommendations, derivations, exceptions, and audit output.
-- [ ] Keep synchronous processing initially; add a queue only after measured
-      duration/size or platform limits require it.
+- [x] Define the four upload groups, normalized dataset/version behavior, raw
+      file boundary, current Python integration points, and missing prototype
+      tables in `ui_maintainer_journey_and_page_plan.md`.
+- [x] Add a minimal additive migration for compact `source_imports` metadata/
+      issues, normalized forecast/menu/BOM/stock/PO rows, run traceability, and
+      item-level netting summaries; defer separate file/issue/PO-header/daily-
+      projection/KPI tables and do not store file bytes in Postgres.
+- [x] Add a clearly synthetic seed covering imports, active master data, one
+      location/item/run/recommendation/risk, plus static schema/seed/RLS tests.
+- [ ] Add repository interfaces and Supabase implementations that keep the
+      application/API contracts portable to future Snowflake repositories.
+- [ ] Add authenticated import endpoints for master workbook, planning
+      workbook, selected-location stock XLSX, and selected-location cumulative
+      PO PDFs.
+- [ ] Add multipart file type/size/count limits, isolated temporary processing,
+      cleanup on success/failure, content-hash deduplication, and safe parser
+      errors before enabling uploads.
+- [ ] Reuse `load_master_template`, `load_planning_template`,
+      `normalize_apicbase_stock`, and Transgourmet parsers directly; never parse
+      operational files in React or shell out to the CLI.
+- [ ] Persist immutable accepted source versions through the API repositories
+      with source/import timestamps,
+      location scope, uploader, parser version, hashes, record/mapping counts,
+      provenance, warnings, and supersession links.
+- [ ] Define and implement one server-side readiness calculation for active
+      master, input horizon, stock freshness, and known PO-source state.
 
-#### 2D — versioned master-data maintenance
+#### 2D — Data & settings page
 
-- [ ] Map the existing `Locations`, `Items`, item-policy, and delivery-rule
-      domain records to Supabase repositories; keep the workbook as controlled
-      import/export, not a second editable authority after cutover.
-- [ ] Implement draft creation/edit, full domain validation, transactional
-      activation, one active version per environment, and active-version
-      immutability.
-- [ ] Persist user/time/change history and the config hash used by each run.
-- [ ] Define the actual master-data pages and validation presentation before
-      building complex grid/form components.
+- [x] Define the two page groups, dataset cards, drop-zone states, update
+      semantics, validation presentation, and upload-to-adapter mapping.
+- [ ] Build the three-route application shell, side navigation, authenticated
+      user/environment status, persistent demo/proposal banner, and responsive
+      navigation drawer.
+- [ ] Build upload cards for master data, forecast/menu/BOM, current stock, and
+      cumulative PO PDFs, with explicit global/location scope.
+- [ ] Show source timestamp separately from imported timestamp, plus version,
+      horizon/document range, record count, mapping/validation status, and
+      current/superseded state.
+- [ ] Show actionable file/sheet/record/field/remedy errors and link mapping
+      issues to the relevant maintained data.
+- [ ] Keep stock and observed PO lines summary-only: correction means re-export,
+      re-upload, or correct the maintained mapping, never inline editing.
+- [ ] Add import/version history and clear accepted-with-warnings/rejected/known-
+      empty states without automatically activating a master draft or running
+      planning.
 
-#### 2E — prototype result persistence and review
+#### 2E — Location planning page and persisted run
 
-- [ ] Persist `planning_runs`, inputs, lines, recommendations, and exceptions
-      atomically through a repository adapter.
-- [ ] Prove idempotent retry behavior for deterministic `run_id` values.
-- [ ] Add run history, one-run detail, and export endpoints/pages.
+- [x] Define the location header, readiness/preflight, Risk & stock, Open POs,
+      Recommendation subviews, run state machine, derivation drawer, and export
+      behavior.
+- [ ] Add location, planning-status, latest inventory, open-PO, and import-
+      version endpoints over normalized persisted inputs.
+- [ ] Extract import/assemble/run/persist application services from the current
+      combined `run_template_v1` orchestration while preserving that local
+      acceptance/recovery path.
+- [ ] Add one authenticated synchronous planning-run endpoint that references
+      the visible location, active master version, accepted source versions,
+      and deterministic cutoff.
+- [ ] Persist `planning_runs`, selected source imports, lines,
+      recommendations, and exceptions atomically; add explicit run location and
+      completion metadata.
+- [ ] Prove idempotent retry behavior for deterministic `run_id` values and
+      prevent duplicate browser submissions.
+- [ ] Build the location selector, freshness/preflight strip, run action, and
+      validating/running/completed/blocked/failed states.
+- [ ] Build risk/stock, open-PO, and recommendation tables with plain-language
+      units, provenance, filters, and empty/error states.
+- [ ] Build the recommendation derivation drawer and server-generated canonical
+      CSV/JSON downloads; never reconstruct calculations in TypeScript.
 - [ ] Keep every recommendation visibly proposal-only; do not add placement,
       approval, supplier-send, comments, assignment, or ERP status.
 
-#### 2F — retention, observability and acceptance
+#### 2F — Overview cockpit and risk persistence
+
+- [x] Define the exception-first cockpit hierarchy, actionable KPI definitions,
+      latest-current-run rule, and unsupported/unsafe aggregations.
+- [x] Add the `planning_netting_results` table contract for first stockout,
+      projected balances, overdue POs, and unavoidable shortage; daily
+      projection rows remain deferred.
+- [ ] Persist each Python `NettingResult` summary atomically with its run through
+      the repository adapter.
+- [ ] Add latest-current-run selection per location so a result becomes
+      **stale calculation** when a newer accepted source version exists.
+- [ ] Extend normalized Transgourmet persistence to observed document/line
+      history for recent-PO counts while preserving the current open/missing-
+      date caveats.
+- [ ] Add the overview endpoint with data readiness, risk locations/items,
+      recommendations due, blocker/warning counts, latest runs, freshness, and
+      secondary observed PO activity.
+- [ ] Build KPI cards, location-risk table, data-freshness panel, latest-run
+      activity, and direct corrective/drill-down actions.
+- [ ] Keep actual waste, supplier service level, actual OOS, and mixed-unit
+      total quantity out until authoritative definitions/data exist; label
+      shelf/max-cover evidence only as attention or potential risk.
+
+#### 2G — versioned maintained-data and menu editing
+
+- [ ] Map existing Locations, Items/item policy, and delivery-rule records to
+      draft/active repositories; keep workbook import/export as a controlled
+      interchange path, not a second editable authority after cutover.
+- [ ] Implement draft creation/copy, field and cross-record validation,
+      before/after change summary, transactional activation, one active version
+      per environment, and active-version immutability.
+- [ ] Persist user/time/change history and the exact config hash used by each
+      run.
+- [ ] Build searchable item/policy and location/delivery-rule grids with detail
+      drawers/forms; do not start with an unbounded spreadsheet clone.
+- [ ] Define separate planning-input version/activation semantics and then add
+      the weekly menu calendar editor; preserve daily rows and the longest
+      active lead+review horizon.
+- [ ] Add controlled BOM editing only after referential/effective-date
+      validation and ownership are agreed. Keep forecast upload/review-only in
+      the first slice.
+
+#### 2H — retention, observability, usability and acceptance
 
 - [ ] Decide whether raw uploads are process-and-delete or retained in private
       object storage; record owner, purpose, duration, deletion, and access.
@@ -154,6 +237,10 @@ notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
       or keys, safe dependency errors, and basic failure monitoring.
 - [ ] Add API integration tests and frontend component/E2E coverage for the
       approved workflows.
+- [ ] Test keyboard navigation, focus/error handling, timezone/unit labels,
+      responsive side navigation, and status communication without colour.
+- [ ] Run representative cockpit/location/data tasks with the maintainer and
+      correct information hierarchy and terminology before visual polish.
 - [ ] Validate representative runs with the maintainer and require the existing
       operational gate before showing shadow/production-ready status.
 
@@ -242,9 +329,9 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
 | Live Snowflake input dependency for local V1 | None |
 | Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
-| Supabase configuration store | Migration created but no project linked/applied and no repositories/endpoints yet |
-| Maintainer UI | Monorepo/API/React/Tailwind foundation implemented; product workflows not started |
-| Current repository check | 48 Python tests pass; frontend lint/type/build pass; deterministic 7-file replay remains prior acceptance evidence |
+| Supabase prototype store | Foundation plus minimal workflow migrations and synthetic seed created; no project linked/applied or repositories/endpoints yet |
+| Maintainer UI | Monorepo/API/React/Tailwind foundation implemented and three-page journey/component plan defined; domain pages not implemented |
+| Current repository check | 51 Python tests pass; frontend lint/type/build remains prior foundation evidence; deterministic 7-file replay remains prior acceptance evidence |
 
 ## Source of truth for local V1
 
@@ -272,9 +359,11 @@ abandoned and must not be wired into the run.
 
 Snowflake remains the intended home for an accepted future Phase 1 forecast,
 normalized operational inputs when ingestion exists, and append-only Phase 2
-run/recommendation history. Supabase (or the agreed editable master store) is a
-future home for application-maintained item/rule data. Neither is a reason to
-delay the local template-driven milestone.
+run/recommendation history. During the manual-file prototype, Supabase is the
+replaceable store for application-maintained item/rule data, normalized
+immutable input versions, and portable run outputs. Raw uploads are not stored
+as Postgres binaries. This exception is an adapter choice and neither platform
+is a reason to delay the local template-driven milestone.
 
 ## Remaining human gates
 
@@ -320,16 +409,22 @@ and the four fresh service windows.
 2. Select the cloud projects and configure/apply the completed API/web/
    Supabase foundation; verify deployed health/readiness/CORS without enabling
    unauthenticated domain writes.
-3. Define the upload/run page and API contract, then implement the authenticated
-   temporary-file vertical slice over the existing application service.
-4. Define the draft/activation and result-review experiences before building
-   their forms/tables; keep proposal/unapproved status explicit.
-5. Receive corrected/approved templates and answers; resolve the four stock
+3. Implement Auth/JWT authorization, apply/validate the two existing migrations
+   in the development project, and add portable repository interfaces for the
+   minimal workflow schema.
+4. Build the side-navigation shell and Data & settings upload/import slice; use
+   accepted persisted source versions rather than passing hidden files through
+   the run button.
+5. Build the per-location readiness/run/result slice, followed by the Overview
+   cockpit over persisted latest-current run and netting summaries.
+6. Add master-data drafts/activation and weekly menu editing only after the
+   import and version semantics are proven; keep proposal status explicit.
+7. Receive corrected/approved templates and answers; resolve the four stock
    mappings, seven currently unmatched open-PO lines, item policy fields, and
    fresh timing/pack-cap decisions.
-6. Rerun the same one-command workflow and pass the operational-approval gate
+8. Rerun the same one-command workflow and pass the operational-approval gate
    before shadow/production use.
-7. Treat Supabase result persistence as the documented prototype adapter and
+9. Treat Supabase input/result persistence as the documented prototype adapter and
    preserve the future Snowflake cutover boundary.
 
 ## Dated progress
@@ -355,3 +450,15 @@ and the four fresh service windows.
   specification/scratchpad, 48 passing Python tests, and passing frontend
   lint/type/build checks. No cloud project is linked and no domain workflow or
   authenticated database write is implied by this scaffold.
+- 2026-08-28: defined the Milestone 2 maintainer experience as three top-level
+  pages (Overview, Location planning, Data & settings), including the primary
+  journey, actionable KPI semantics, page states/components, current adapter
+  mapping, planned API surface, source-import/netting persistence gaps, and an
+  ordered 2C-2H implementation backlog. The domain pages remain unimplemented;
+  the subsequent minimal schema implementation is recorded below.
+- 2026-08-28: added the intentionally minimal `002` workflow migration and a
+  synthetic seed. One import table carries compact file/validation metadata;
+  five canonical input tables plus one netting-summary table support the first
+  pages. Separate file, issue, PO-header, daily-projection, and KPI tables were
+  deferred. No Supabase project is linked/applied and no API repository writes
+  exist yet.

@@ -1,7 +1,9 @@
 # UI, API and prototype persistence foundation
 
-**Status:** repository foundation implemented 2026-08-28; credentials, applied
-Supabase project, domain endpoints, authentication, and final UI/UX remain open
+**Status:** repository foundation implemented 2026-08-28; the three-page
+maintainer journey and component plan are now defined, while credentials,
+applied Supabase project, domain endpoints, authentication, detailed visual
+design, and domain workflows remain open
 
 ## Purpose and decision
 
@@ -25,6 +27,10 @@ services and engine      master/run tables
 The engine under `src/supply_planning` remains independent from HTTP, browser,
 database, and deployment libraries. React never parses the operational files
 or calculates recommendations. The API is the adapter/orchestration boundary.
+
+The user journey, Overview cockpit, Location planning page, Data & settings
+page, component map, planned endpoints, and source-persistence gaps are defined
+in `docs/descriptions/ui_maintainer_journey_and_page_plan.md`.
 
 ## Implemented repository layout
 
@@ -62,14 +68,19 @@ variables are configured. Render health remains healthy during that setup.
 
 ### Browser application
 
-The initial page is intentionally only a foundation/status shell. It:
+The current page is intentionally only a foundation/status shell. It:
 
 - confirms the browser can reach the Python API;
 - shows the API's sanitized Supabase state;
 - shows whether browser-safe Supabase Auth configuration is present;
 - retains the demo/proposal warning; and
 - names upload, master maintenance, and recommendation review as later product
-  slices without fixing their page or component design prematurely.
+  slices.
+
+The next UI retains a persistent side navigation with exactly three top-level
+destinations: Overview, Location planning, and Data & settings. That decision
+was made after the foundation was built; it does not mean those routes or
+workflows are already implemented.
 
 The frontend contains a lazy Supabase client initializer for future Auth. It
 does not query domain tables directly and receives no elevated credential.
@@ -102,10 +113,10 @@ simplicity. The exception changes only persistence ownership:
 | Editable locations/items/rules | Supabase version tables | Supabase or Snowflake after ownership decision |
 | Run/input metadata | Supabase | Snowflake |
 | Derivations/recommendations/exceptions | Supabase | Snowflake |
-| Forecast/menu/BOM/stock/PO source files | Temporary API processing only | Accepted operational source tables |
+| Normalized forecast/menu/BOM/stock/PO versions | Supabase during the file-based prototype; raw files temporary by default | Accepted operational source tables |
 | Calculation logic | Python engine | Python engine |
 
-The initial migration creates typed tables for `master_data_versions`,
+The foundation migration creates typed tables for `master_data_versions`,
 `locations`, `items`, `item_policy_overrides`, `delivery_rules`,
 `planning_runs`, `planning_run_inputs`, `planning_lines`,
 `planning_recommendations`, and `planning_exceptions`. It enables Row Level
@@ -113,17 +124,32 @@ Security and grants no `anon` or `authenticated` table access. Domain API
 writes must not be enabled until Supabase user JWT verification and maintainer
 authorization are implemented.
 
+The additive `202608280002_ui_workflow_inputs.sql` migration supplies the
+minimum data needed to exercise the three-page workflows: compact import
+metadata/issues, normalized forecast/menu/BOM/stock/PO rows, explicit run/input
+references, and persisted item-level netting summaries. It deliberately avoids
+separate file, issue, PO-header, daily-projection, and KPI tables until evidence
+requires them. `supabase/seed.sql` provides a small synthetic UI-only example.
+
 Active-version immutability, activation transactions, change-history events,
 database-to-domain repositories, and result persistence are deliberately next
 steps; the schema alone is not presented as a working master-data workflow.
 
+Together the two migrations are sufficient for the first prototype workflows,
+but neither has been applied to a Supabase project and no repository/domain API
+uses them yet. Add future changes through new migrations; do not rewrite an
+already-applied migration.
+
 ## Upload and retention boundary
 
-The future upload endpoint will accept the two fixed workbook inputs, the
-current Apicbase stock workbook, cumulative Transgourmet PDFs, selected
-`location_id`, and deterministic cutoff. It will write files only to a
-per-request temporary directory, call the existing Python services directly,
-and delete temporary files afterward.
+The future import endpoints will accept the two fixed workbook inputs, the
+current Apicbase stock workbook, cumulative Transgourmet PDFs, and selected
+`location_id` where required. They will write raw files only to a per-request
+temporary directory, call the existing Python loaders/normalizers directly,
+persist accepted normalized source versions, and delete temporary files
+afterward. A later planning-run request references those visible accepted
+versions plus its deterministic cutoff; it does not carry a second hidden set
+of files.
 
 Raw upload retention is off by default. If audit/replay requirements later
 justify retention, add an approved retention period and private object-storage
@@ -132,8 +158,10 @@ ephemeral local filesystem.
 
 ## Deferred product and security work
 
-- Define the actual upload, validation/mapping review, master-data, run-history,
-  and recommendation pages before building their UI components.
+- Turn the defined three-page plan into detailed wireframes and test the
+  information hierarchy/terminology with the maintainer before visual polish.
+- Apply and validate the two migrations in the selected development project;
+  use the synthetic seed only in local/dev environments.
 - Add multipart limits, file allowlists, archive/PDF count limits, temporary
   cleanup tests, and one synchronous planning-run endpoint.
 - Verify Supabase Auth JWTs in FastAPI and define the maintainer role model.

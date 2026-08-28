@@ -20,7 +20,7 @@ currently maintained in `Supply_Planning_Rewe.xlsx`.
 > maintainer approval of highlighted policy/mapping fields is the gate before
 > operational/shadow use. The monorepo UI foundation is now implemented: a
 > thin FastAPI health/readiness boundary, React/TypeScript/Vite/Tailwind status
-> shell, initial RLS-denied Supabase master/run migration, and Render/Vercel
+> shell, RLS-denied Supabase master/run and minimal workflow migrations, and Render/Vercel
 > configuration. Actual upload, authenticated master editing, result
 > persistence/review, and linked cloud projects remain the next slices.
 
@@ -99,11 +99,11 @@ internal React UI + Python API
 CSV files remain useful for fixtures, deterministic tests, local development,
 and controlled recovery. They are not the long-term editing workflow.
 
-For prototype simplicity, the same canonical master/run/output records may be
-stored temporarily in Supabase before the Snowflake result path is ready. This
-is an explicit persistence-adapter exception, not a new calculation model or a
-claim that raw uploads are operational source tables. See
-`docs/descriptions/ui_api_and_persistence_foundation.md`.
+For prototype simplicity, normalized immutable input versions plus the same
+canonical master/run/output records may be stored temporarily in Supabase
+before the Snowflake paths are ready. This is an explicit persistence-adapter
+exception, not a new calculation model or a reason to store raw file bytes in
+Postgres. See `docs/descriptions/ui_api_and_persistence_foundation.md`.
 
 ## Phase 2 calculation scope
 
@@ -156,25 +156,29 @@ write in this project.
   boundary with CORS configuration and tests;
 - a basic React/TypeScript/Vite/Tailwind status shell with browser/server
   environment separation; and
-- an initial Supabase master/run/output migration plus Render and Vercel
-  deployment configuration.
+- additive Supabase master/run/output and minimal import/input/netting-summary
+  migrations, a synthetic UI seed, and Render/Vercel deployment configuration.
 
 The foundation does not yet implement upload/run endpoints, authentication,
-master-data repositories/forms, result persistence/history, or final UI/UX.
-None of those concerns is part of the pure local V1 calculation.
+master-data repositories/forms, source/result repository writes, or the three
+domain pages. The database shapes and synthetic UI seed now exist. The
+high-level Overview, Location planning, and Data & settings journey is defined in
+`docs/descriptions/ui_maintainer_journey_and_page_plan.md`; detailed visual
+design and implementation remain open. None of those concerns is part of the
+pure local V1 calculation.
 
 ## Delivery order
 
 1. Send the completed local V1 packet to the maintainer and collect approved or
    corrected template/policy/mapping rows. Rerun before operational use.
-2. Configure and deploy the completed API/web/Supabase foundation, then build
-   the authenticated upload/run vertical slice over exactly the same contracts;
-   keep demo/unapproved values visibly labelled until the maintainer gate passes.
-3. Add versioned master maintenance and prototype result persistence, then add
-   Snowflake result persistence and the agreed long-term master/rule store;
-   replace manual inputs individually when accepted APIs/tables exist.
-4. Shadow-validate representative runs and then schedule/monitor the job.
-5. Keep KW33/KW34 parity as a separate compatibility track and add advanced
+2. Configure/deploy the foundation and Auth, apply the two existing migrations,
+   then build Data & settings over the existing Python adapters.
+3. Build the per-location readiness/run/result slice, then the Overview cockpit
+   over persisted current runs; keep demo/unapproved values visibly labelled.
+4. Add versioned master/menu maintenance, then move each input/result repository
+   to Snowflake when its accepted operational contract exists.
+5. Shadow-validate representative runs and then schedule/monitor the job.
+6. Keep KW33/KW34 parity as a separate compatibility track and add advanced
    calibration only when it proves useful.
 
 ## What is blocked and what can continue
@@ -197,7 +201,7 @@ only operational approval or the named later outcome.
 - Transgourmet pending-order history is the current PO process, but an approved
   normalized export/API and Snowflake ingestion are still needed for complete
   production netting.
-- A selected Supabase project, owner, region, credentials, applied migration,
+- A selected Supabase project, owner, region, credentials, applied migrations,
   Auth method, and retention decision are needed before authenticated
   configuration/result workflows can begin; the unconfigured foundation still
   runs locally and reports that state explicitly.
@@ -216,6 +220,8 @@ No further required V1-V12 Snowflake verification query remains.
 | [`docs/descriptions/data_requirements.md`](docs/descriptions/data_requirements.md) | Phase ownership and source status |
 | [`docs/descriptions/canonical_data_contracts.md`](docs/descriptions/canonical_data_contracts.md) | Stable engine contracts and file schemas |
 | [`docs/descriptions/ui_api_and_persistence_foundation.md`](docs/descriptions/ui_api_and_persistence_foundation.md) | Monorepo, API, frontend, Supabase, environment, and deployment boundaries |
+| [`docs/descriptions/ui_maintainer_journey_and_page_plan.md`](docs/descriptions/ui_maintainer_journey_and_page_plan.md) | Three-page customer journey, KPI/page/component plan, code/API mapping, and source-persistence handover |
+| [`docs/claude_code_first_ui_pages_brief.md`](docs/claude_code_first_ui_pages_brief.md) | Copy-paste Claude Code instruction for the first honest, navigable UI page slice |
 | [`docs/descriptions/v1_assumptions_and_admin_validation.md`](docs/descriptions/v1_assumptions_and_admin_validation.md) | Concise maintainer review of active values, assumptions, legacy factors, and questions |
 | [`docs/plans/human_action_register.md`](docs/plans/human_action_register.md) | Exact human/access actions and their impact |
 | [`docs/reports/planner-questionnaire-review/report.html`](docs/reports/planner-questionnaire-review/report.html) | Sanitized Q1-Q13 clarification and follow-up report |
