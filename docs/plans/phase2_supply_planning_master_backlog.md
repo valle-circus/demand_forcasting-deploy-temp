@@ -82,6 +82,12 @@ Detailed architecture and environment boundaries are in
 page contracts, KPI definitions, component map, API handover, and schema gaps
 are in `docs/descriptions/ui_maintainer_journey_and_page_plan.md`; living
 implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
+The granular frontend execution plan for the remaining 2D/2E/2F checkboxes —
+screen blueprints, component inventory, ordered work packages WP0–WP6, and the
+decisions awaiting maintainer confirmation — is in
+`docs/plans/ui_implementation_backlog.md`, with its working notes in
+`docs/scratchpads/ui_implementation.md`. Those files execute this milestone;
+the checkboxes below remain the milestone authority.
 
 #### 2A — repository, API and deployment foundation
 

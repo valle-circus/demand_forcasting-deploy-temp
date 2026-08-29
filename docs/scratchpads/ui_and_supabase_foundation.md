@@ -158,6 +158,11 @@
   it now excludes backend work and points to the implemented OpenAPI contract.
 - Build the three-route shell and Data & settings UI first, then Location
   planning and Overview against persisted backend responses.
+- 2026-08-29: the frontend implementer picked this up. Frontend planning,
+  findings, decisions and work packages now live in
+  `docs/plans/ui_implementation_backlog.md` and
+  `docs/scratchpads/ui_implementation.md`. Keep this scratchpad for the
+  backend/Supabase/deployment foundation; do not duplicate frontend notes here.
 
 ## Risks / gotchas (things not to forget)
 
