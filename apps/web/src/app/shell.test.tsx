@@ -1,0 +1,177 @@
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import {
+  TEST_SESSION,
+  createFakeSupabase,
+  readinessResponse,
+} from '../test/supabaseMock'
+import type { FakeSupabase } from '../test/supabaseMock'
+
+let fake: FakeSupabase
+
+vi.mock('../lib/supabase', () => ({
+  browserSupabaseConfigured: true,
+  getSupabaseClient: () => fake.client,
+}))
+
+const { AppRoutes } = await import('./AppRoutes')
+const { AuthProvider } = await import('./auth/AuthProvider')
+const { SelectedLocationProvider } = await import(
+  './location/SelectedLocationProvider'
+)
+
+const fetchMock = vi.fn<typeof fetch>()
+
+function renderApp(initialPath = '/overview') {
+  return render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <AuthProvider>
+        <SelectedLocationProvider>
+          <AppRoutes />
+        </SelectedLocationProvider>
+      </AuthProvider>
+    </MemoryRouter>,
+  )
+}
+
+beforeEach(() => {
+  fake = createFakeSupabase(TEST_SESSION)
+  fetchMock.mockReset()
+  // A Response body can only be read once, so every call needs a fresh one.
+  fetchMock.mockImplementation(() => Promise.resolve(readinessResponse()))
+  vi.stubGlobal('fetch', fetchMock)
+  window.sessionStorage.clear()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('the proposal boundary', () => {
+  it('states on every screen that nothing places an order', async () => {
+    renderApp()
+
+    // This is the one claim that must never be missing from any page.
+    expect(
+      await screen.findByText(/nothing here places, approves, or sends/i),
+    ).toBeInTheDocument()
+  })
+
+  it('offers no way to dismiss that statement', async () => {
+    renderApp()
+    await screen.findByText(/nothing here places, approves, or sends/i)
+
+    expect(
+      screen.queryByRole('button', { name: /dismiss|close banner/i }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('navigation', () => {
+  it('exposes exactly the three primary destinations', async () => {
+    renderApp()
+
+    const nav = await screen.findByRole('navigation', { name: 'Primary' })
+    const links = within(nav).getAllByRole('link')
+
+    // Exactly three, and no more: subsections never become nav items.
+    expect(links).toHaveLength(3)
+    expect(
+      links.map((link) => link.textContent?.replace('(current page)', '').trim()),
+    ).toEqual(['Overview', 'Location planning', 'Data & settings'])
+  })
+
+  it('announces the active destination in text, not only in colour', async () => {
+    renderApp('/data')
+
+    const nav = await screen.findByRole('navigation', { name: 'Primary' })
+    const active = within(nav).getByRole('link', { name: /Data & settings/ })
+
+    expect(active).toHaveTextContent('(current page)')
+    expect(
+      within(nav).getByRole('link', { name: /^Overview$/ }),
+    ).not.toHaveTextContent('(current page)')
+  })
+
+  it('points Location planning at the chooser until a location is chosen', async () => {
+    renderApp()
+
+    const nav = await screen.findByRole('navigation', { name: 'Primary' })
+    expect(
+      within(nav).getByRole('link', { name: /Location planning/ }),
+    ).toHaveAttribute('href', '/locations')
+  })
+
+  it('remembers the location the maintainer last opened', async () => {
+    fetchMock.mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/planning-status')) {
+        return new Response('{}', {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      return readinessResponse()
+    })
+
+    renderApp('/locations/LOC_KOELN')
+
+    const nav = await screen.findByRole('navigation', { name: 'Primary' })
+    await waitFor(() => {
+      expect(
+        within(nav).getByRole('link', { name: /Location planning/ }),
+      ).toHaveAttribute('href', '/locations/LOC_KOELN')
+    })
+  })
+})
+
+describe('the small-screen drawer', () => {
+  it('opens, traps focus, and closes on Escape without losing the trigger', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    const trigger = await screen.findByRole('button', {
+      name: /open navigation/i,
+    })
+    await user.click(trigger)
+
+    const drawer = await screen.findByRole('dialog', {
+      name: /primary navigation/i,
+    })
+    expect(drawer).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: /primary navigation/i }),
+      ).not.toBeInTheDocument()
+    })
+    // Focus must come back to the control that opened it.
+    expect(trigger).toHaveFocus()
+  })
+})
+
+describe('the dependency indicator', () => {
+  it('distinguishes an unconfigured database from a healthy one', async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(readinessResponse('not_configured')),
+    )
+    renderApp()
+
+    // Text, not only a coloured dot, carries the status.
+    expect(
+      await screen.findAllByText(/database not configured/i),
+    ).not.toHaveLength(0)
+  })
+
+  it('reports an unreachable API rather than showing nothing', async () => {
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    renderApp()
+
+    expect(await screen.findAllByText(/api unreachable/i)).not.toHaveLength(0)
+  })
+})

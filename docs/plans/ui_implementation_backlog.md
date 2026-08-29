@@ -415,16 +415,17 @@ verified.
 
 ### WP0 — Foundation (no visible UI)  → 2D:shell prerequisites
 
-> **Blocked on Node.js.** The toolchain steps below cannot run: `node`, `npm`,
-> `pnpm` and `corepack` are absent from this machine (see the scratchpad's
-> BLOCKER section for the evidence and the proposed `winget` fix). The
-> dependency-free library files were written anyway; **none of them have been
-> type-checked, linted, or executed.**
+> **Complete and verified 2026-08-29.** `pnpm check` — lint, typecheck, tests,
+> build — passes.
 
-- [ ] **BLOCKED** Add `react-router-dom` (D1) and the Vitest/Testing Library
-      devDependencies (D3); update `check` to include `test`.
-- [ ] **BLOCKED** Add `vitest.config.ts` (jsdom, setup file with `jest-dom`)
-      and an ESLint override for test globals.
+- [x] Add `react-router-dom` 7.18.2 (D1) and the Vitest 4 / Testing Library
+      devDependencies (D3).
+- [x] Add `vitest.config.ts` (jsdom, `jest-dom` setup, `threads` pool — the
+      default fork pool intermittently timed out spawning workers on Windows)
+      and cover it from `tsconfig.node.json`.
+- [x] `check` now chains `eslint . && tsc -b && vitest run && vite build`
+      directly instead of re-invoking `pnpm`, so it runs under any package
+      manager and does not require a `pnpm` shim on PATH.
 - [x] Create the `lib/` portion of the folder structure in §4.
 - [x] `lib/types.ts` — hand-written TypeScript types for every response shape
       listed in the scratchpad's API section. Numeric fields are typed
@@ -446,30 +447,53 @@ verified.
       shown, relative age, `toNumber` normalization, and quantity formatters
       that **require** an explicit unit argument so a mixed-unit total cannot be
       produced by accident.
-- [ ] **BLOCKED** Tests: error parsing for each status code, bearer header
-      attachment, unit-formatter guards.
-- [ ] **BLOCKED** `pnpm check` green.
+- [x] Tests: error parsing for each status code and both envelope shapes,
+      bearer-header attachment, no-session fail-closed, unit-formatter guards.
+- [x] `pnpm check` green.
+
+**Found while testing:** a 200 response with an unparseable body was resolving
+as success with `null` data, which a page would have rendered as "no data".
+Success and error bodies now use separate parsers — the error path still never
+throws, but the success path raises `malformed_response` instead of silently
+handing back nothing.
 
 ### WP1 — Shell, auth and navigation  → 2D bullet 2, 2B session behavior
 
-- [ ] `AuthProvider`: `signInWithPassword`, `onAuthStateChange`, token access,
-      sign-out, and the "Auth not configured" state.
-- [ ] `RequireAuth` route guard with post-login redirect to the attempted URL.
-- [ ] `SignInPage` with the three states in §3.2.
-- [ ] `AppShell`: three-route router, side navigation with accessible active
-      state, responsive drawer with focus trap and `Esc`, persistent proposal
-      banner, environment/API-readiness/user/sign-out footer strip.
-- [ ] `LocationProvider` remembering the selected location in `sessionStorage`.
-- [ ] Global 401 handling: clear session, route to the gate, show the reason.
-- [ ] 503 / readiness `degraded` presented as "dependency unavailable", visibly
-      distinct from "no data".
-- [ ] **First-run state**: a 404 from `GET /locations` means "no active master
-      version in this environment yet". Render a dedicated onboarding state
-      pointing at the master-workbook upload — never a generic error, never an
-      empty location list. Distinct from empty and from unavailable.
-- [ ] Tests: renders sign-in when signed out; renders the three nav items when
-      signed in; 401 mid-session returns to the gate; proposal banner is always
-      present; drawer opens/closes by keyboard.
+> **Complete and verified 2026-08-29.** `pnpm check` passes; the sign-in page
+> was confirmed in a real browser against the live API and Supabase.
+
+- [x] `AuthProvider`: `signInWithPassword`, `onAuthStateChange`, token access,
+      sign-out, and the "Auth not configured" state. The token provider is
+      registered at module scope, not in an effect, so a request issued during
+      the first render still finds one.
+- [x] `RequireAuth` route guard with post-login redirect to the attempted URL,
+      and a neutral "restoring your session" state so the sign-in form does not
+      flash on every load for an already-signed-in maintainer.
+- [x] `SignInPage` with the three states in §3.2 and Supabase's terse error
+      messages translated into plain language.
+- [x] `AppShell`: three-route router, side navigation with an active state
+      announced in text as well as colour, responsive drawer with focus trap,
+      `Esc`, and focus returned to the trigger, persistent proposal banner,
+      skip link, focus moved to `<main>` on navigation, and an
+      environment/API-readiness footer plus user and sign-out in the header.
+- [x] `SelectedLocationProvider` remembering the selected location in
+      `sessionStorage`, with every storage access guarded.
+- [x] Global 401 handling: clear session, route to the gate, show the reason,
+      never retry.
+- [x] 503 / readiness `degraded` presented as "dependency unavailable", visibly
+      distinct from "no data", with the reason spelled out in `ErrorState`.
+- [x] **First-run state**: a 404 from `GET /locations` renders "No active
+      master data yet" with a link to Data & settings, not an error.
+- [x] Tests (24 across shell, sign-in and chooser): sign-in blocks domain
+      routes; exactly three nav items; active state carried in text; 401
+      mid-session returns to the gate after exactly one request; proposal
+      banner present and undismissable; drawer opens and closes by keyboard
+      with focus restored; readiness distinguishes unconfigured from
+      unreachable; the 404 first-run state is not an error.
+- [x] Removed the superseded status shell (`App.tsx`, `StatusCard.tsx`,
+      `lib/api.ts`) rather than leaving dead code behind the new one.
+- [x] Added a SPA rewrite to `vercel.json`; without it a deep link such as
+      `/locations/LOC_X` would 404 on Vercel.
 
 ### WP2 — Shared primitives  → 2D bullet 3, 2H accessibility
 
@@ -645,6 +669,16 @@ backend logic:
   compiled or executed.** WP1 onward needs `react-router-dom`, so it is blocked
   until Node is available. Maintainer decision needed on installing Node
   (`winget install OpenJS.NodeJS.LTS`), since the machine is MDM-managed.
+- 2026-08-29 — **Node blocker resolved** (maintainer installed Node 24.19.0).
+  `corepack enable` needs administrator rights and failed, so `pnpm` has no
+  shim on PATH; `corepack pnpm <script>` works, and `check` no longer depends on
+  a `pnpm` shim. **WP0 and WP1 complete and verified**: `pnpm check` green with
+  55 tests. Live browser check against the running API confirmed the sign-in
+  page renders, the gate blocks `/data` when signed out, mobile layout holds at
+  375 px, no console errors, and the status line reports the real chain
+  (`API ready · development`, all migrations reachable). Sign-in with a real
+  credential is left to the maintainer — entering a password is outside what
+  this agent does. Next: WP3 (Data & settings).
 - 2026-08-29 — Decided against building a self-signup page. The brief forbids
   public self-sign-up, and FastAPI treats every valid project user as a
   maintainer, so a signup form on a deployed internal tool would let anyone who

@@ -18,10 +18,18 @@ without duplicating any Python parsing, planning, or KPI logic in TypeScript.
 
 ## Status
 
-- 2026-08-29: **Planning/review stage only.** Brief and all referenced files
-  read; no frontend code written yet. Awaiting maintainer review of the design
-  and technical decisions below before implementation starts.
 - Branch: `ui_implementation`.
+- 2026-08-29: **WP0 and WP1 complete and verified.** `pnpm check` green — lint,
+  typecheck, 55 tests, production build. The application shell, sign-in gate,
+  navigation, and the typed API/error/formatting library are in place. Verified
+  in a real browser against the live API: sign-in renders, the gate blocks
+  `/data` when signed out, mobile holds at 375 px, no console errors, and the
+  status line reports `API ready · development` with all migrations reachable.
+- **Not yet done:** signing in with a real credential. Entering a password is
+  outside what this agent does, so the maintainer performs that step.
+- Next: WP3 — Data & settings. It must come first, because on this environment
+  nothing else can load until a master workbook is imported and activated (see
+  the environment-scoping gotcha below).
 
 ## What we learned (facts verified in this repo, not guesses)
 
@@ -248,7 +256,25 @@ for the full rationale and alternatives. Summary:
 - Do not claim live/connected success without evidence that migration 003,
   Auth, and credentials are present.
 
-## BLOCKER — Node.js is not installed on this machine (found 2026-08-29)
+## RESOLVED BLOCKER — Node.js was missing (2026-08-29)
+
+Resolved the same day: the maintainer installed Node 24.19.0 (npm 11.17.0,
+corepack 0.35.0) via `winget`. Two follow-on facts worth keeping:
+
+- **`corepack enable` needs administrator rights** and fails with
+  `EPERM ... C:\Program Files\nodejs\yarn.ps1`, so there is no `pnpm` shim on
+  PATH. `corepack pnpm <command>` works and is what this agent uses. The
+  maintainer can get a plain `pnpm` by running `corepack enable` once in an
+  elevated terminal.
+- **A shell started before the install has a stale PATH.** Prefix commands with
+  `export PATH="/c/Program Files/nodejs:$PATH"` until the session restarts.
+- Because `check` previously re-invoked `pnpm lint` etc., it broke without the
+  shim. It now chains `eslint . && tsc -b && vitest run && vite build` directly,
+  which works under any package manager.
+
+The original finding, kept for context:
+
+## Original blocker — Node.js was not installed (found 2026-08-29)
 
 Verified, not inferred:
 

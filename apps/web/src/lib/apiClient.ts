@@ -79,13 +79,39 @@ interface RequestOptions {
   authenticated?: boolean
 }
 
-async function parseBody(response: Response): Promise<unknown> {
+/**
+ * Read an error response. Never throws: failing while handling a failure would
+ * replace a useful server message with a parser error.
+ */
+async function parseErrorBody(response: Response): Promise<unknown> {
   const contentType = response.headers.get('content-type') ?? ''
   if (!contentType.includes('application/json')) {
     const text = await response.text().catch(() => '')
     return text ? { detail: text } : null
   }
   return response.json().catch(() => null)
+}
+
+/**
+ * Read a successful response. Unlike the error path this *does* throw on a
+ * malformed body, because resolving with `null` would hand a page an empty
+ * result that is indistinguishable from "there is genuinely no data".
+ */
+async function parseSuccessBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    const text = await response.text().catch(() => '')
+    return text ? { detail: text } : null
+  }
+  try {
+    return (await response.json()) as unknown
+  } catch {
+    throw new ApiError(
+      response.status,
+      'malformed_response',
+      'The planning API returned a response this browser could not read.',
+    )
+  }
 }
 
 function reportUnauthorized(error: ApiError): void {
@@ -138,7 +164,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (!response.ok) {
-    const error = parseApiError(response.status, await parseBody(response))
+    const error = parseApiError(response.status, await parseErrorBody(response))
     reportUnauthorized(error)
     throw error
   }
@@ -146,7 +172,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (response.status === 204) {
     return undefined as T
   }
-  return (await parseBody(response)) as T
+  return (await parseSuccessBody(response)) as T
 }
 
 // ---------------------------------------------------------------------------
@@ -195,7 +221,7 @@ async function upload<T>(
 
     xhr.onload = () => {
       settle()
-      let body: unknown = null
+      let body: unknown
       try {
         body = xhr.responseText ? JSON.parse(xhr.responseText) : null
       } catch {
@@ -267,7 +293,7 @@ async function download(
   }
 
   if (!response.ok) {
-    const error = parseApiError(response.status, await parseBody(response))
+    const error = parseApiError(response.status, await parseErrorBody(response))
     reportUnauthorized(error)
     throw error
   }
