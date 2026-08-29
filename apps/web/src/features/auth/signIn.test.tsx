@@ -40,11 +40,37 @@ function renderApp(initialPath = '/overview') {
   )
 }
 
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+/**
+ * Answers each endpoint the pages behind the gate actually call. A single
+ * catch-all body would hand a page the wrong shape and make an unrelated test
+ * fail for the wrong reason.
+ */
+function routedFetch(input: RequestInfo | URL): Promise<Response> {
+  const url = String(input)
+  if (url.includes('/readiness')) {
+    return Promise.resolve(readinessResponse())
+  }
+  if (url.includes('/imports') || url.includes('/master-data/versions')) {
+    return Promise.resolve(jsonResponse([]))
+  }
+  // No active master version yet, which is the first-run state.
+  return Promise.resolve(
+    jsonResponse({ error: { code: 'not_found', message: 'No master data.' } }, 404),
+  )
+}
+
 beforeEach(() => {
   configured = true
   fake = createFakeSupabase(null)
   fetchMock.mockReset()
-  fetchMock.mockImplementation(() => Promise.resolve(readinessResponse()))
+  fetchMock.mockImplementation(routedFetch)
   vi.stubGlobal('fetch', fetchMock)
   window.sessionStorage.clear()
 })

@@ -249,6 +249,36 @@ export function nowWithOffset(now: Date = new Date()): IsoDateTime {
   return `${local.toISOString().slice(0, 19)}${offset}`
 }
 
+/** The viewer's own zone, used for values that belong to no single location. */
+export function browserTimeZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || FALLBACK_TIME_ZONE
+  } catch {
+    return FALLBACK_TIME_ZONE
+  }
+}
+
+/** Format an instant for a `datetime-local` input, which has no offset. */
+export function toLocalInputValue(now: Date = new Date()): string {
+  return nowWithOffset(now).slice(0, 16)
+}
+
+/**
+ * Turn a `datetime-local` value into the timezone-aware string the API needs.
+ * The browser's current offset is applied, which is what the maintainer meant
+ * when they typed a wall-clock time.
+ */
+export function fromLocalInputValue(value: string): IsoDateTime | null {
+  if (!value) {
+    return null
+  }
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return null
+  }
+  return nowWithOffset(parsed)
+}
+
 // ---------------------------------------------------------------------------
 // Files and identifiers
 // ---------------------------------------------------------------------------

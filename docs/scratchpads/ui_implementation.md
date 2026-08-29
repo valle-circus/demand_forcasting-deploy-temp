@@ -129,6 +129,43 @@ without duplicating any Python parsing, planning, or KPI logic in TypeScript.
   moq_order_units, case_multiple_order_units, proposed_order_units,
   rounding_delta_g, protection_days, coverage_start/end_date, data_status`.
 
+### The four uploads are a strict sequence, not four independent cards
+
+Read from `services.py` while starting WP3. The journey doc presents four
+upload cards side by side, which describes the steady state; a fresh
+environment has a hard order:
+
+1. **Master workbook** (global) — no prerequisites. Creates a **draft**, never
+   an active version.
+2. **Activate the master version** — a separate, explicit action. Everything
+   below fails until it happens.
+3. **Planning workbook** (global) — calls `_load_master()`, then
+   `_validate_planning_references` rejects any location or item not present and
+   active in the master version (`services.py:738`).
+4. **Stock** (per location) — needs the active master, the location within it,
+   **and** an accepted planning workbook already covering that location, else
+   `409 planning_input_missing` (`services.py:776`).
+5. **Purchase orders** (per location) — needs the active master and the
+   location within it; `as_of_at` must carry a timezone offset.
+
+Design consequence: the cards are numbered and each computes its own
+prerequisite state from what actually exists, showing the blocking reason and
+pointing at the card that unblocks it. Four cards presented as equals would
+strand a maintainer in a sequence of 409s on a fresh environment.
+
+### How imports report their outcome
+
+- **Rejected → `422 ValidationError`**, not a 201 with `status: "rejected"`.
+  The rejected row *is* persisted and its id comes back in
+  `details.import_id`, so the failure still appears in history.
+- **Accepted with warnings → 201** with `status: "accepted_with_warnings"`
+  (`_accepted_status` returns it whenever `warning_count > 0`).
+- **Duplicate content hash → 201 returning the *existing* accepted row**
+  (`_find_duplicate`, matched on dataset + hash + location). Re-uploading the
+  same file is idempotent, so the UI must not report a fresh import when the
+  response is actually an older record — compare the returned id against what
+  was already known.
+
 ### Contract gaps and sharp edges found while reading
 
 1. **`/overview` cannot render the data-freshness panel or location names.**
@@ -324,3 +361,26 @@ Then from `apps/web`: `pnpm install`, and the WP0 tooling steps can proceed.
 1. Maintainer reviews the plan in `docs/plans/ui_implementation_backlog.md`.
 2. On approval, execute WP0 to WP6 in order, updating this scratchpad and the
    backlog checkboxes after each work package.
+
+## WP3 progress note (2026-08-29)
+
+Data & settings is built and verified against the live API. Design decisions
+worth keeping:
+
+- The four upload cards are **numbered steps**, because the API enforces an
+  order (see "The four uploads are a strict sequence" above). Each card
+  computes its own prerequisite and names the step that unblocks it, so the
+  maintainer never discovers the order by collecting 409s.
+- `UploadCard` owns its file state. An earlier split between page and card
+  meant the upload button could never enable — worth remembering if the card is
+  ever refactored to be controlled.
+- Duplicate uploads are real: the API de-duplicates on content hash and returns
+  the **existing** row with 201. The card compares the returned id against the
+  ids it already knew and says "already imported" instead of claiming a new
+  version.
+- A rejection is a 422, and the rejected import is still persisted. The card
+  shows its id so the attempt stays traceable in history.
+- The page must render when `GET /locations` 404s, because this page is where
+  that gets fixed. Only a non-404 failure renders an error.
+
+Still to build: WP4 (Location planning) and WP5 (Overview).

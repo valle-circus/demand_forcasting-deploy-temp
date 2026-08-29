@@ -511,26 +511,54 @@ handing back nothing.
 
 ### WP3 — Data & settings  → master backlog 2D (all remaining bullets)
 
-- [ ] Page scaffold with the two groups and the location-scope selector.
-- [ ] Four `UploadCard`s wired to the four import endpoints with the correct
-      multipart field names, plus the PO `as_of_at` input defaulted to now in
-      the location timezone.
-- [ ] `FileDropzone` with drag/drop, browse, keyboard operation, and labelled
-      client-side extension/size pre-checks.
-- [ ] Full upload state machine and per-card result rendering, including
-      accepted-with-warnings and rejected.
-- [ ] `ImportIssueList` rendering file/sheet/record/field/message/**remedy**
-      with links into the relevant maintained data.
-- [ ] Import/version history per dataset from `GET /imports`.
-- [ ] `MasterVersionList` + `ActivateVersionDialog` against
-      `GET /master-data/versions` and the activate endpoint, handling
-      `master_source_missing` and `master_source_not_accepted` conflicts.
-- [ ] `PlannedFeatureCard` placeholders for field-level editing, visibly
-      disabled and labelled as a later scope.
-- [ ] Copy stating uploading never runs planning and never activates a draft.
-- [ ] Tests: each upload state; rejected import shows remedies and does not
-      claim acceptance; activation confirmation names the outgoing version;
-      no inline editing exists for stock or PO rows.
+> **Complete and verified 2026-08-29.** `pnpm check` passes with 82 tests, and
+> the page was confirmed in a real browser against the live API.
+
+- [x] Page scaffold with the two groups and the location-scope selector, which
+      renders even when `GET /locations` 404s — this page is where that gets
+      fixed, so it must not be blocked by it.
+- [x] Four `UploadCard`s wired to the four import endpoints, **numbered as a
+      sequence** rather than presented as peers, each computing its own
+      prerequisite state and naming the step that unblocks it.
+- [x] PO `as_of_at` input, converted to a timezone-aware value because the API
+      rejects a naive one, with copy explaining it decides which lines are open.
+- [x] `FileDropzone` with drag/drop, a real keyboard-operable file input, and
+      an extension pre-check explicitly labelled as a filename check rather
+      than validation.
+- [x] Upload state machine: idle → uploading (real percentage via
+      `XMLHttpRequest`) → validating on the server → accepted /
+      accepted-with-warnings / rejected, announced through `aria-live`.
+- [x] Accepted-with-warnings is never presented as a plain success, and a
+      **duplicate** upload says the content matched an existing import rather
+      than claiming a new one — the API de-duplicates on content hash and
+      returns the older row.
+- [x] A rejection says "nothing was changed" and shows the rejected import id,
+      since the failed attempt is still persisted and auditable.
+- [x] `ImportIssueList` renders code/severity/dataset/record and the
+      **remedy**, blockers first.
+- [x] Import history per dataset and scope, including rejected attempts.
+- [x] `MasterVersionList` with a confirmation dialog that names the version
+      being replaced and states that past runs stay reproducible; activation
+      errors surface the server's conflict message.
+- [x] `PlannedFeatureCard` placeholders for item/policy, menu and BOM editing,
+      visibly disabled with the reason each is deferred.
+- [x] Copy stating uploading never runs planning and never activates a draft
+      (stated once, at the top — repeating it on four cards was noise).
+- [x] Tests (27): the four-step prerequisite chain including the stock-needs-
+      planning-workbook rule; current-import selection across statuses and
+      location scopes; every upload outcome; remedies shown; activation
+      requires confirmation and activates only the confirmed version; no
+      inline editing of observed rows.
+
+**Found while building:** the four uploads are a strict sequence, not four
+independent cards. The planning workbook validates against the *active* master
+version, and stock is refused with `409 planning_input_missing` until a planning
+workbook covers that location. Four equal cards would have walked a maintainer
+on a fresh environment into a chain of conflicts, so the cards are numbered and
+each explains its own blocker before the API has to.
+
+**Also found:** file state was initially split between the page and the card,
+so the upload button could never enable. The card now owns it.
 
 ### WP4 — Location planning  → master backlog 2E (remaining bullets)
 
