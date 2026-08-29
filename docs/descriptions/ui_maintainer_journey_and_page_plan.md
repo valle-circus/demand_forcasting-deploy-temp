@@ -1,8 +1,9 @@
 # Maintainer UI journey and three-page plan
 
 **Status:** high-level product and UX direction defined 2026-08-28; the
-monorepo foundation exists, but the domain pages, APIs, source persistence,
-authentication, and detailed visual design are not implemented
+authenticated FastAPI/Supabase backend contract was implemented 2026-08-29.
+The three domain pages and detailed visual design are not implemented; live
+verification awaits migration 003 plus safe Supabase/Auth configuration.
 
 ## 1. Product outcome and primary user
 
@@ -192,14 +193,14 @@ new business facts.
 
 | Metric | Definition and action | Availability |
 |---|---|---|
-| **Locations ready to plan** | Locations with an active master version, sufficient forecast/menu/BOM horizon, an accepted stock snapshot, and a known PO source state. Opens data freshness. | Minimal tables exist; repository writes and readiness API are missing. |
-| **Locations at risk** | Distinct locations whose latest completed run has a projected stockout or unavoidable pre-arrival shortage inside its active risk horizon. Opens the filtered location view. | Engine and summary table exist; persistence writer/latest-run API are missing. |
-| **Items at risk** | Distinct location/item pairs with a structured stockout risk in the latest current run. Display earliest risk date. | `NettingResult.first_stockout_date` and its table column exist; repository/API are missing. |
-| **Recommendations due** | Positive proposals whose `order_date` is today/past, grouped by location. Label “recommendations”, never “orders”. | Recommendation/run tables exist; repository/API are missing. |
-| **Blocking issues** | Blockers in current imports or latest runs; warnings are shown separately. Links to the relevant dataset or location. | Run exceptions and compact import issue JSON exist; repository/API are missing. |
-| **Latest planning run** | Status, planning-as-of time, completion time, location, and whether its inputs are still current. | Required columns/import references exist; current-input comparison/API are missing. |
-| **Open PO lines due soon** | Mapped observed open lines with expected receipt date in a visible window. Missing-date lines stay quarantined. | PO-line table exists; import writer/API are missing. |
-| **POs placed in last 7 days** | Count distinct observed supplier documents and lines by order date. Quantities are broken down by valid order unit or item; no mixed-unit grand total. | `po_id`/ordered fields exist; the importer must persist full observed history rather than only run-ready open lines. |
+| **Locations ready to plan** | Locations with an active master version, an accepted planning input, stock snapshot, and known PO source. Opens data freshness. | Implemented in the Overview/planning-status API; approved freshness thresholds remain future policy. |
+| **Locations at risk** | Distinct locations whose latest current run has a projected stockout inside its horizon. Opens the filtered location view. | Implemented from persisted netting summaries. |
+| **Items at risk** | Distinct location/item pairs with `first_stockout_date`; display the earliest risk date. | Implemented in the run/Overview read models. |
+| **Recommendations due** | Positive proposals whose `order_date` is today/past, grouped by location. Label “recommendations”, never “orders”. | Implemented from persisted recommendations. |
+| **Blocking issues** | Blockers in current imports or latest current runs; warnings remain separate. | Implemented for current run blockers and import readiness. |
+| **Latest planning run** | Status, planning-as-of time, completion time, location, and whether its inputs are still current. | Implemented; a newer accepted import makes the prior run stale. |
+| **Open PO lines due soon** | Mapped observed open lines with expected receipt date in a visible window. Missing-date lines stay quarantined. | PO history and open state are persisted; date-window presentation belongs in React. |
+| **POs placed in last 7 days** | Count distinct observed supplier documents and lines by order date. Quantities are broken down by valid order unit or item; no mixed-unit grand total. | Full observed PDF history is persisted; the first Overview response exposes open-line activity, while a seven-day refinement may follow. |
 | **Shelf-life / max-cover attention** | Count items where a cap binds or ordering constraints create excess cover. Do not call this actual waste. | Existing planning exceptions support a first proxy. |
 | **Potential waste** | Requires expiry/lot, actual disposal, or an agreed risk definition. Keep out of the first KPI row until that evidence exists. | Not currently supported. |
 
@@ -389,7 +390,10 @@ never the status carrier.
 | Capability | Current code |
 |---|---|
 | FastAPI factory/system endpoints | `apps/api/supply_planning_api/main.py` |
-| Supabase server readiness | `apps/api/supply_planning_api/supabase.py` |
+| Auth/session verification | `apps/api/supply_planning_api/auth.py` |
+| Domain route contract | `apps/api/supply_planning_api/routes.py`, generated `/docs` |
+| Import/run/read services | `apps/api/supply_planning_api/services.py` |
+| Portable/Supabase repository and schema probe | `apps/api/supply_planning_api/repository.py`, `supabase.py` |
 | Complete local orchestration reference | `src/supply_planning/application/run_template_v1.py` |
 | Master/planning workbook schemas | `src/supply_planning/adapters/template_xlsx.py` |
 | Apicbase stock normalization | `src/supply_planning/adapters/apicbase_stock_xlsx.py` |
@@ -397,11 +401,12 @@ never the status carrier.
 | Pure calculation result | `ImprovedRunResult` in `src/supply_planning/application/run_improved.py` |
 | CSV/JSON/review outputs | `src/supply_planning/adapters/v1_outputs.py` |
 | Domain/result records | `src/supply_planning/domain/models.py`, `engine/netting.py` |
-| Current prototype schema and demo data | `supabase/migrations/202608280001_ui_foundation.sql`, `202608280002_ui_workflow_inputs.sql`, `supabase/seed.sql` |
+| Current prototype schema and demo data | migrations `202608280001`, `202608280002`, `202608290003`; `supabase/seed.sql` |
 
-### 9.2 Planned API surface
+### 9.2 Implemented API surface
 
-These are handover contracts, not implemented endpoints:
+These are implemented, authenticated contracts. The generated OpenAPI document
+at `/docs` is authoritative for request fields and multipart names:
 
 | Area | Planned endpoint group |
 |---|---|
@@ -409,7 +414,7 @@ These are handover contracts, not implemented endpoints:
 | Cockpit | `GET /api/v1/overview` |
 | Location readiness/data | `GET /api/v1/locations/{location_id}/planning-status`, `/inventory`, `/purchase-orders` |
 | Source imports | `POST /api/v1/imports/master-data`, `/planning-input`, `/stock`, `/purchase-orders`; `GET /api/v1/imports` and `/{import_id}` |
-| Master versions | `GET/POST /api/v1/master-data/versions`, `PATCH .../{version_id}`, `POST .../{version_id}/validate`, `POST .../{version_id}/activate` |
+| Master versions | `GET /api/v1/master-data/versions`, `POST .../{version_id}/activate`; workbook upload creates a validated draft |
 | Runs | `POST /api/v1/planning-runs`, `GET /api/v1/planning-runs/{run_id}` |
 | Results/exports | `GET .../{run_id}/recommendations`, `/risks`, `/export.csv`, `/export.json` |
 
@@ -422,7 +427,7 @@ silently accept a second hidden file set.
 
 `run_template_v1(...)` currently combines file loading, normalization, writing
 temporary canonical CSVs, reloading them, calculation, and local result files.
-For the UI, preserve it as the local acceptance/recovery path while extracting
+The API preserves it as the local acceptance/recovery path and implements
 small application services for:
 
 - importing/validating each source type into canonical records;
@@ -437,14 +442,14 @@ engine remains unaware of HTTP and Supabase.
 
 ## 10. Supabase schema assessment and minimal workflow model
 
-### 10.1 What the two migrations now provide
+### 10.1 What the three migrations now provide
 
-The two additive migrations define the persistence needed for the first
-prototype data flows. For the connected-UI handoff, the maintainer reports both
-as applied manually through the Supabase SQL Editor; repository/API integration
-and independent server-side schema verification remain open:
+Migrations 001 and 002 define the tables. Migration 003 adds immutable-version
+guards and narrow transaction RPCs used by the FastAPI repository. The
+maintainer reports 001 and 002 applied through the SQL Editor; 003 still needs
+to be run there before the connected UI can exercise writes:
 
-| Tables | UI capability supported after repositories/auth exist |
+| Tables | Implemented backend capability |
 |---|---|
 | `master_data_versions`, `locations`, `items`, `item_policy_overrides`, `delivery_rules` | Versioned master/rule drafts and active version. |
 | `planning_runs`, `planning_run_inputs` | Run identity, status, reproducibility metadata. |
@@ -464,7 +469,10 @@ The schema files are:
   portable run/derivation/recommendation/exception contracts; and
 - `supabase/migrations/202608280002_ui_workflow_inputs.sql` — minimal source
   import, normalized input, run traceability, netting-summary, and daily-
-  projection extension.
+  projection extension; and
+- `supabase/migrations/202608290003_ui_backend_transactions.sql` — immutable
+  finalized inputs/active master rows, atomic import/activation/run functions,
+  and service-role-only execution grants.
 
 `supabase/seed.sql` contains one clearly synthetic location/item/import/run/risk
 example for UI development. It is not operational evidence and must never be
@@ -486,9 +494,9 @@ needed for an actionable location view:
 
 Split source files, validation issues, or PO headers into dedicated tables only
 when per-file status, issue volume, raw-file retention, or document-level
-attributes prove the need. Master change-event history is also deferred until
-the edit/activation workflow is implemented; active-version immutability is
-still required before enabling writes.
+attributes prove the need. Master change-event history is deferred until
+field-level editing is implemented; active-version immutability and
+transactional activation are already enforced by migration 003.
 
 The dashboard does not require stored KPI tables in the prototype. Query or
 compute summaries from the latest current run and accepted imports. Add
@@ -566,7 +574,9 @@ These do not block the high-level plan, but a designer/engineer should resolve
 them before polishing screens:
 
 - actual location count and naming, which affects selector/search behavior;
-- internal Auth method and whether all maintainers have the same edit rights;
+- whether production should replace prototype admin-created email/password
+  accounts and the all-authenticated-users-are-maintainers policy with SSO/
+  role tiers;
 - approved stock/forecast/PO freshness thresholds and who may override a
   warning;
 - whether raw uploads require private retention for replay/audit;
@@ -580,20 +590,16 @@ them before polishing screens:
 
 ## 13. Suggested implementation order
 
-1. Configure cloud projects and implement Supabase Auth/JWT authorization.
-2. Add the three-route application shell and shared status/empty/error
-   components while retaining the existing readiness checks.
-3. Verify the reported-applied schema from FastAPI and implement repository
-   interfaces for the workflow tables.
-4. Build **Data & settings** upload cards and import APIs for stock, PO PDFs,
-   planning workbook, and master workbook.
-5. Persist normalized sources and implement the location readiness API.
-6. Split the application orchestration, implement one persisted synchronous
-   run, and build **Location planning** with result details and downloads.
-7. Persist netting summaries and daily projections, then build the **Overview**
-   cockpit over latest current runs.
-8. Add draft/edit/validate/activate master data and the weekly menu editor.
-9. Run representative maintainer usability sessions, component/E2E tests,
+1. Apply migration 003 and configure Supabase/Auth environment values.
+2. Build the three-route React shell, sign-in/session handling, and shared
+   status/empty/error components.
+3. Build **Data & settings** against the four implemented import endpoints.
+4. Build **Location planning** against readiness, inventory, PO, run, risk,
+   recommendation, and download endpoints.
+5. Build **Overview** against the implemented current-run summary.
+6. Add field-level master/menu editing only as a separately scoped follow-up;
+   workbook draft import and activation are sufficient for the first UI slice.
+7. Run representative maintainer usability sessions, component/E2E tests,
    accessibility checks, and the existing operational-approval gate.
 
 This order builds the information needed by the location and overview pages
@@ -608,7 +614,8 @@ The first useful prototype is complete when a maintainer can:
 - see why a location is ready, warned, or blocked;
 - upload each of the four current file groups and receive actionable validation;
 - see source and import timestamps without confusing the two;
-- update a master draft without modifying the active version in place;
+- upload and activate a validated master draft without modifying the prior
+  active version in place;
 - compute exactly one recommendation from visible input versions;
 - identify the earliest stockout/arrival risk and its remedy;
 - explain a recommended quantity from its stored derivation;

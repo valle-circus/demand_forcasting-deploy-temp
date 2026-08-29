@@ -814,12 +814,13 @@ and recovery path. The prototype now has two deployables in this repository:
 Vercel builds `apps/web`, while Render builds from the repository root and runs
 `apps.api.supply_planning_api.main:app` so it can import the existing Python
 package. The UI reaches configuration/results only through the API; it uses a
-browser-safe Supabase publishable key only for future Auth. Elevated Supabase
+browser-safe Supabase publishable key only for Auth. Elevated Supabase
 access remains server-side.
 
-Until domain endpoints are implemented, `/api/v1/health` proves the Render
-process and `/api/v1/readiness` performs the optional sanitized Supabase probe.
-The later scheduled target still reads accepted Snowflake inputs plus active
+`/api/v1/health` proves the Render process and `/api/v1/readiness` verifies the
+required Supabase tables/functions without exposing secrets. Authenticated
+domain endpoints now handle controlled imports, planning execution, persisted
+results and UI read models. The later scheduled target still reads accepted Snowflake inputs plus active
 configuration and writes the agreed Snowflake result schema. Keep the CLI and
 files as controlled test/recovery tools.
 

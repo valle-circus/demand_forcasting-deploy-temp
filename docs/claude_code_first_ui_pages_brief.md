@@ -1,259 +1,227 @@
-# Claude Code brief — first connected maintainer UI
+# Claude Code brief — build the connected maintainer UI
 
 Copy the instruction below into Claude Code from the repository root.
 
 ---
 
 You are working in the `demand_forcasting` repository. Build the first
-**connected, testable vertical slice** of the internal Phase 2 supply-planning
-application. This is no longer a presentation-only UI task.
-
-The local template-driven planning-engine V1 is complete and tested. The
-React/FastAPI monorepo foundation and Supabase table definitions also exist.
-Assume the maintainer has manually applied both SQL files through the Supabase
-SQL Editor:
-
-- `supabase/migrations/202608280001_ui_foundation.sql`
-- `supabase/migrations/202608280002_ui_workflow_inputs.sql`
-
-Do not rerun, rewrite, drop, or replace those applied migrations. If an
-additional database function or schema correction is genuinely required, add a
-new forward-only `003` migration that is safe to paste into the Supabase SQL
-Editor. Never delete live tables or data merely to make development easier.
+connected React/Tailwind maintainer interface for Phase 2 supply planning.
+This handover is deliberately **frontend-only**: the FastAPI/Auth/Supabase
+backend vertical slice is already owned and implemented by Codex. Do not
+rebuild Python repositories, parsers, authentication verification, migrations,
+planning orchestration, or KPI calculations in React.
 
 ## Read before editing
 
-Read these files in order and treat them as one coherent handover:
+Read these files in order:
 
-1. `AGENTS.md` — mandatory boundaries, safety rules, documentation, and checks.
-2. `MEMORY.md` — durable decisions and the difference between the completed
-   calculation V1 and the unfinished application integration.
-3. `docs/descriptions/ui_maintainer_journey_and_page_plan.md` — primary product
-   and UX specification: maintainer journey, three pages, KPIs, states,
-   component map, API surface, schema mapping, and acceptance criteria.
-4. `docs/descriptions/ui_api_and_persistence_foundation.md` — monorepo,
-   FastAPI/React boundary, Supabase security, environments, and deployment.
-5. `docs/plans/phase2_supply_planning_master_backlog.md` — implementation order;
-   work through the smallest coherent parts of Milestone 2B-2F.
-6. `docs/scratchpads/ui_and_supabase_foundation.md` — current facts, decisions,
-   risks, and known gaps. It is supporting context, not an authoritative spec.
-7. `apps/api/supply_planning_api/` and `tests/test_api_foundation.py` — current
-   API only has health/readiness; there are no domain repositories or routes.
-8. `apps/web/src/`, `apps/web/package.json`, and `apps/web/.env.example` — current
-   React/Tailwind status shell and browser-safe Supabase Auth configuration.
-9. The two migrations above and `supabase/seed.sql` — exact persistence shapes.
-   The seed is synthetic and must not be applied to a real/production project.
-10. Existing Python integration points; reuse them rather than duplicating them:
-    - `src/supply_planning/application/run_template_v1.py`
-    - `src/supply_planning/application/run_improved.py`
-    - `src/supply_planning/adapters/template_xlsx.py`
-    - `src/supply_planning/adapters/apicbase_stock_xlsx.py`
-    - `src/supply_planning/adapters/transgourmet_pdf.py`
-    - `src/supply_planning/adapters/transgourmet_v1.py`
-    - `src/supply_planning/engine/netting.py`
+1. `AGENTS.md` — mandatory repository boundaries and checks.
+2. `MEMORY.md` — durable status and proposal/operational distinctions.
+3. `docs/descriptions/ui_maintainer_journey_and_page_plan.md` — authoritative
+   three-page journey, information hierarchy, KPI meanings, page states, and
+   component map.
+4. `docs/descriptions/ui_api_and_persistence_foundation.md` — runtime,
+   security, environment, persistence, and deployment boundaries.
+5. `apps/api/supply_planning_api/routes.py` and the generated `/docs` OpenAPI
+   page — implemented HTTP contract.
+6. `apps/api/supply_planning_api/schemas.py` — planning-run request and common
+   response/error shapes.
+7. `apps/web/src/`, `apps/web/package.json`, and `apps/web/.env.example` — the
+   current React/TypeScript/Vite/Tailwind status shell and lazy Supabase client.
+8. `docs/plans/phase2_supply_planning_master_backlog.md` — Milestone 2D UI
+   scope and frontend follow-ups.
+9. `docs/scratchpads/ui_and_supabase_foundation.md` — recent facts and known
+   external setup gaps; it is supporting context, not a product spec.
 
-Inspect the current repository and working tree before assuming this brief is
-perfectly current. Preserve unrelated user changes.
+Inspect the working tree before editing and preserve unrelated changes.
 
-## Current state you must not misrepresent
+## Backend state to rely on
 
-- The planning calculation works locally from the four maintained input groups.
-- The engine already returns recommendations, exceptions, netting summaries,
-  and daily inventory projections.
-- Supabase tables are assumed applied, with RLS enabled and browser roles denied.
-- FastAPI currently only exposes `/`, `/api/v1/health`, and
-  `/api/v1/readiness`. It does not yet persist or read domain data.
-- React currently does not provide the three domain pages or working imports,
-  planning runs, or result views.
-- Therefore the schema is **not yet connected to the application**. Implement
-  that connection before claiming that the real workflow is testable.
+The backend now provides:
 
-## Goal and user journey
+- Supabase access-token verification on every domain route; public health and
+  readiness routes remain unauthenticated.
+- Server-only PostgREST repositories; the browser must not read or write the
+  domain tables directly.
+- Controlled master/planning XLSX, stock XLSX, and cumulative PO PDF imports
+  using the existing Python adapters, with request-scoped cleanup.
+- Immutable accepted source versions and master-version activation.
+- One synchronous scenario planning run using the existing pure engine.
+- Atomic persistence of selected inputs, lines, recommendations, exceptions,
+  netting summaries, and daily projections.
+- Overview, location/readiness, inventory, PO, import, run, risk,
+  recommendation, and CSV/JSON download endpoints.
 
-Deliver this honest end-to-end maintainer journey:
+The maintainer reports migrations 001 and 002 were applied in Supabase. Before
+connected write testing, they must also apply:
 
-1. An authenticated maintainer opens **Overview** and sees readiness, freshness,
-   current risks, and the latest persisted run—not hard-coded operational data.
-2. In **Data & settings**, the maintainer uploads and validates the four current
-   source groups:
-   - master-data workbook;
-   - forecast/menu/BOM planning workbook;
-   - selected-location Apicbase stock XLSX; and
-   - selected-location cumulative Transgourmet PDFs.
-3. Accepted imports become immutable visible versions in Supabase. Uploading a
-   file must not silently execute planning.
-4. In **Location planning**, the maintainer sees the exact selected source
-   versions and readiness, then starts one synchronous planning run.
-5. Python assembles the accepted versions, calls the existing pure engine, and
-   persists the run, inputs, derivations, recommendations, exceptions, netting
-   summaries, and daily projections.
-6. The location results survive a page refresh, can be explained, and can be
-   downloaded as canonical CSV/JSON.
-7. **Overview** reflects the latest current persisted run. If a newer accepted
-   input exists, the older run is labelled stale rather than silently treated
-   as current.
+- `supabase/migrations/202608290003_ui_backend_transactions.sql`
 
-The first implementation may remain proposal/shadow-oriented. It must never
-imply that a supplier order was placed.
+Assume that migration is applied for UI implementation. If readiness says it
+is missing, show the non-secret blocker and tell the maintainer; do not change
+the backend or create replacement tables. Real Supabase/Render/Vercel values
+may still be absent locally, so connected mode must fail honestly rather than
+silently falling back to demo data.
 
-## Implementation order
+## Goal
 
-### 1. Verify configuration and applied schema safely
+Implement a cohesive, responsive internal workspace with persistent desktop
+side navigation and a small-screen drawer:
 
-- Never print or return secret values.
-- Use `SUPABASE_URL` and `SUPABASE_SECRET_KEY` only in FastAPI/Render.
-- Use `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` only for browser
-  authentication. Never put the server secret in Vite.
-- Strengthen the server readiness/schema probe so it verifies at least one
-  foundation table and the expected `source_imports` and
-  `planning_projection_days` relations.
-- If configured credentials or expected tables are unavailable, keep domain
-  actions disabled and report the exact non-secret blocker. Do not fall back to
-  pretending an upload or run succeeded.
+- `/overview` — **Overview**
+- `/locations/:locationId` — **Location planning**
+- `/data` — **Data & settings**
 
-### 2. Add the authenticated API boundary
+The normal journey is:
 
-- Require a valid Supabase user access token for every domain endpoint; keep
-  health/readiness public.
-- Keep authorization isolated behind a small dependency/protocol so roles can
-  be refined later. For this private prototype, do not invent a complex role
-  hierarchy: a valid authenticated project user may be treated as a maintainer,
-  but document that temporary policy and test rejection of missing/invalid
-  tokens.
-- React should use the existing Supabase browser client for Auth only and send
-  the access token to FastAPI. React must not query or mutate domain tables
-  directly.
+1. Sign in and open Overview.
+2. See whether locations and source data are ready/current and where risk or a
+   blocker exists.
+3. Go to Data & settings to upload or correct the relevant source.
+4. Open a location, review the exact selected inputs, and compute one latest
+   scenario recommendation.
+5. Review risks, observed POs, recommendations, derivations, and exceptions;
+   download CSV/JSON.
+6. Return to Overview and see the latest current persisted result. A run using
+   older inputs must be shown as stale.
 
-### 3. Implement portable repositories and application services
+Every recommendation remains visibly **proposal-only**. Nothing in this UI
+places, approves, sends, or tracks a supplier order.
 
-- Define small repository protocols at the application boundary and a Supabase
-  implementation behind them. Keep `src/supply_planning` independent from
-  HTTP, Supabase, React, and deployment concerns.
-- Reuse the existing `httpx` boundary unless another dependency is materially
-  justified. Do not add the Supabase Python SDK merely as a thin wrapper.
-- Map typed Python records to the existing tables without changing calculation
-  semantics or recomputing risk in SQL/TypeScript.
-- Separate import, assemble, calculate, and persist concerns from the current
-  combined `run_template_v1` orchestration while preserving that local CLI path
-  as a tested recovery/fixture workflow.
-- Persist one run and all of its inputs/results atomically. If REST calls cannot
-  provide a real transaction, add one narrow SQL RPC in a new `003` migration;
-  do not call several writes “atomic” when they are not. Preserve deterministic
-  `run_id` retry behavior.
+## Auth and API client
 
-### 4. Implement the smallest API surface that supports the journey
+- Use `getSupabaseClient()` in `apps/web/src/lib/supabase.ts` for Auth only.
+- Implement email/password sign-in with `signInWithPassword`, persisted session,
+  and sign-out. Accounts are admin-created in Supabase for this prototype; do
+  not add public self-sign-up or role management. Every valid project user is
+  temporarily treated as a maintainer by FastAPI.
+- Obtain the current session access token and send
+  `Authorization: Bearer <access_token>` on every domain API request.
+- On `401`, clear/refresh the session and present a sign-in action. Treat
+  `503` as unavailable configuration/dependency, not empty business data.
+- Build one typed API client. Handle planner-facing errors shaped as
+  `{ error: { code, message, details } }` and ordinary FastAPI request
+  validation details without exposing stack traces.
+- Keep `/api/v1/health`, `/api/v1/readiness`, and the existing environment/
+  proposal status visible in a compact, non-distracting form.
+- Never send `SUPABASE_SECRET_KEY` to the browser. Only the
+  `VITE_SUPABASE_*` values are browser-safe.
 
-Follow the response concepts in section 9 of the UI journey document. At
-minimum implement and test:
+The full route and multipart contract is in `routes.py` and `/docs`. Important
+groups are:
 
-- `GET /api/v1/me`
-- `GET /api/v1/locations`
-- `GET /api/v1/overview`
-- `GET /api/v1/locations/{location_id}/planning-status`
-- `GET /api/v1/locations/{location_id}/inventory`
-- `GET /api/v1/locations/{location_id}/purchase-orders`
-- `GET /api/v1/imports` and `GET /api/v1/imports/{import_id}`
-- `POST /api/v1/imports/master-data`
-- `POST /api/v1/imports/planning-input`
-- `POST /api/v1/imports/stock`
-- `POST /api/v1/imports/purchase-orders`
-- the minimal validate/activate action needed for a master-data draft;
-- `POST /api/v1/planning-runs`
-- `GET /api/v1/planning-runs/{run_id}`
-- server-generated recommendation CSV and JSON downloads.
+- `GET /api/v1/me`, `/locations`, `/overview`
+- `GET /api/v1/locations/{location_id}/planning-status`, `/inventory`,
+  `/purchase-orders`
+- `GET /api/v1/imports`, `/imports/{import_id}`
+- `POST /api/v1/imports/master-data` with multipart `file`
+- `POST /api/v1/imports/planning-input` with multipart `file`
+- `POST /api/v1/imports/stock` with multipart `file` and `location_id`
+- `POST /api/v1/imports/purchase-orders` with multipart `files`, `location_id`,
+  and timezone-aware `as_of_at`
+- `GET /api/v1/master-data/versions` and
+  `POST /api/v1/master-data/versions/{version_id}/activate`
+- `POST /api/v1/planning-runs` with `location_id`, timezone-aware
+  `planning_as_of_at`, `run_mode: "scenario"`, and optional visible source IDs
+- `GET /api/v1/planning-runs/{run_id}`, `/recommendations`, `/risks`,
+  `/export.csv`, and `/export.json`
 
-Upload endpoints must use the existing Python parsers. Add explicit file
-type/size/count limits, selected-location validation where required, isolated
-request-scoped temporary directories, cleanup on success and failure,
-content-hash deduplication, and planner-friendly errors without stack traces.
-Do not store raw XLSX/PDF bytes in Postgres. Do not make Render's temporary
-filesystem a durable store.
+Use server-returned KPIs, risks, derivations, statuses, provenance, versions,
+and projections. Formatting dates/units in React is expected; recomputing
+planning or KPI semantics is not.
 
-Keep imports separate from execution. A run must reference the visible accepted
-import IDs and active master version it actually used.
+## Pages and component priorities
 
-### 5. Build and connect the React pages
+### Application shell
 
-- Add a responsive application shell with persistent desktop side navigation
-  and a small-screen drawer.
-- Add routes:
-  - `/overview` — **Overview**
-  - `/locations/:locationId` — **Location planning**
-  - `/data` — **Data & settings**
-- Preserve compact API/Supabase readiness and visible proposal/demo warnings.
-- Add a typed API client and small page-focused hooks. Avoid a large state
-  framework or generic design-system project.
-- Use the information hierarchy and components in sections 5-7 and 11 of
-  `ui_maintainer_journey_and_page_plan.md`:
-  - Overview: readiness alert, five KPI cards, location-risk table, freshness,
-    latest-run activity, and secondary observed PO activity.
-  - Location planning: selector/header, selected inputs, readiness/preflight,
-    Risk & stock, Open POs, Recommendation views, run states, daily projection
-    detail/chart where useful, explanation drawer, and CSV/JSON actions.
-  - Data & settings: Planning inputs and Maintained data & rules, four upload
-    cards, versions/freshness, validation issues, and explicit re-upload versus
-    edit/activate behavior.
-- Implement loading, empty, warning, blocked, unauthorized, stale, and error
-  states. Unsupported actions stay disabled with a visible reason.
-- If a typed demo adapter remains for visual development, connected mode must
-  never silently fall back to it. Demo data must be visibly labelled and kept
-  separate from API responses.
+- Persistent proposal/unapproved banner.
+- Side navigation with exactly the three destinations above.
+- Environment/API/data status, current user, and sign-out.
+- Preserve the selected location across navigation where practical.
+- Accessible active states, keyboard/focus behavior, text plus icon/status
+  cues, and responsive navigation.
+
+### Overview
+
+Build the exception-first hierarchy from section 5 of the journey document:
+
+- highest-severity readiness/blocker alert and corrective action;
+- compact KPI cards using the `/overview` response;
+- location readiness/risk table with drill-down;
+- source freshness/current-run information;
+- latest planning activity and secondary observed open-PO activity.
+
+Do not display actual waste, actual OOS, or mixed-unit total quantities. Cap or
+shelf-life evidence is only potential attention/risk.
+
+### Location planning
+
+- Location selector/header and source-version/freshness strip.
+- Clear readiness/preflight state and disabled run button with the returned
+  blocker reason.
+- One synchronous **Compute latest recommendation** action with submitting,
+  completed, blocked, and failed states; prevent duplicate submissions.
+- Tabs or sections for Risk & stock, Open POs, and Recommendations.
+- Recommendation table plus explanation/detail drawer using persisted
+  planning lines, exceptions, netting results, and daily projections.
+- Server-generated CSV/JSON download actions.
+- Distinguish observed PO lines from calculated recommendations everywhere.
+
+### Data & settings
+
+- Two groups: **Planning inputs** and **Maintained data & rules**.
+- Four focused upload cards: master workbook, planning workbook, stock XLSX,
+  and cumulative Transgourmet PDFs.
+- Show global versus selected-location scope, accepted/warning/rejected state,
+  source time versus import time, versions, hashes/record counts where useful,
+  coverage range, and actionable validation issues.
+- Uploading never runs planning. Stock and PO corrections mean re-uploading or
+  fixing maintained mappings, not editing observed rows inline.
+- A master workbook upload creates a draft; list versions and provide an
+  explicit activate action. Field-level master/menu grid editing is a later
+  separately scoped feature, so show a clear disabled/future state rather than
+  inventing an API.
+
+Use the component structure proposed in section 11 of the journey document as
+a starting boundary, not as a requirement to build a generic design system.
+Prefer small page-focused hooks and components; avoid a large state framework.
+
+## Required states
+
+Implement and test loading, empty, unauthenticated, unavailable, validation
+error, blocked, accepted-with-warnings, stale calculation, and completed
+proposal states. Never silently replace an API error with synthetic data. If a
+separate visual-demo mode is useful, label it prominently and keep it explicit
+in configuration and code.
 
 ## Non-negotiable boundaries
 
-- Do not redesign the planning algorithm or create a second calculation path.
-- Do not parse XLSX/PDF or calculate recommendations in TypeScript.
-- Do not allow the browser to query Supabase domain tables directly.
-- Do not expose the Supabase server secret or log file contents/tokens.
-- Keep observed POs separate from calculated recommendations.
-- Keep stable IDs, grams, pack/carton units, timestamps, provenance, source
-  versions, proposal status, and exception codes explicit.
-- Do not label potential overstock/cap evidence as actual waste.
-- Do not add approval, comments, assignment, supplier-send, ERP write, or order-
-  placement workflows.
-- Do not store raw customer files, extracted PDFs, credentials, or production
-  rows in git, fixtures, documentation, or screenshots.
-- Preserve the future Snowflake cutover through repository interfaces; do not
-  fork the engine or browser contract for Supabase.
+- Do not edit `src/supply_planning`, backend services/routes/repositories,
+  Supabase migrations, or planning tests as part of this frontend handover.
+- Do not parse XLSX/PDF or calculate recommendations/KPIs in TypeScript.
+- Do not query Supabase domain tables from React.
+- Do not add approval, supplier-send, ERP write, comments, assignment, or
+  order-placement workflows.
+- Do not commit credentials, real uploads, extracted PDFs, or production data.
+- If an API contract defect blocks the UI, document the exact request,
+  response, and expected behavior for Codex instead of creating a parallel
+  backend path.
 
-## Verification
+## Verification and handoff
 
-- Add unit tests for auth dependencies, repository mapping, import services,
-  run persistence, latest-current/stale selection, and API response/error
-  contracts.
-- Use dependency-injected fake repositories for fast tests and add a live
-  Supabase smoke test only when a development project and safe test account/data
-  are explicitly configured. Do not seed or delete production data.
-- Run:
-  - `scripts/check.ps1 -PythonExecutable <python>` from the repository root;
-  - focused Ruff and mypy checks for all new Python/API files; and
-  - `pnpm check` from `apps/web`.
-- Exercise the complete browser journey locally or in the configured preview:
-  authenticate, upload safe test inputs, inspect validation/version metadata,
-  run one location, refresh, reopen the persisted result, verify Overview, and
-  download CSV/JSON.
-- Verify responsive navigation, keyboard/focus/error handling, and all honest
-  unavailable states.
-- Update the relevant Milestone 2 backlog checkboxes, UI scratchpad, repository
-  memory, README/environment examples, and API documentation with exactly what
-  is implemented and what remains unavailable.
+- Add frontend unit/component tests for Auth/session handling, navigation,
+  typed API errors, upload states, readiness/run states, and proposal labels.
+- Run `pnpm check` from `apps/web` plus the relevant frontend test command.
+- Exercise the three routes at desktop and small-screen widths.
+- When safe environment values are present, test sign-in and one representative
+  connected journey. Do not claim live success if migration 003, Auth, or
+  credentials are absent.
+- Update the UI sections of the backlog and scratchpad, but do not mark backend
+  or live-cloud work complete without evidence.
 
-## Definition of done
-
-Do not stop after creating attractive static pages. The slice is done only when:
-
-- an authenticated UI action reaches FastAPI;
-- FastAPI uses the existing Python adapters/engine;
-- accepted imports and a completed/blocked run are persisted in Supabase;
-- recommendations, exceptions, netting summaries, and daily projections can be
-  read back after a refresh;
-- the location and Overview pages render those persisted records;
-- unavailable or unapproved behavior remains explicitly labelled; and
-- all applicable checks pass.
-
-If live credentials, Auth configuration, or the expected applied tables are
-missing, implement and test the portable code with fakes, leave unsafe actions
-disabled, and report the exact external configuration blocker. Never claim the
-live workflow passed unless it was actually exercised end to end.
+The UI slice is complete when a maintainer can understand the system state,
+upload each source group, activate a master draft, run one location, reopen the
+persisted result after refresh, inspect its risks/recommendations, and download
+the server-generated output—without the frontend duplicating backend logic.
 
 ---

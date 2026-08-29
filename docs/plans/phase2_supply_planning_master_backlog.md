@@ -105,8 +105,8 @@ implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
 #### 2B — authenticated maintainer boundary
 
 - [ ] Choose the internal Supabase Auth method and define maintainer roles.
-- [ ] Verify Supabase user JWTs in FastAPI for every domain endpoint.
-- [ ] Add least-privilege authorization tests; reserve the server secret for
+- [x] Verify Supabase user access tokens in FastAPI for every domain endpoint.
+- [x] Add least-privilege authorization tests; reserve the server secret for
       controlled API operations after authorization.
 - [ ] Define session-expiry, access-removal, audit-user, and non-production
       preview behavior.
@@ -123,18 +123,18 @@ implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
       file bytes in Postgres.
 - [x] Add a clearly synthetic seed covering imports, active master data, one
       location/item/run/recommendation/risk, plus static schema/seed/RLS tests.
-- [ ] Add repository interfaces and Supabase implementations that keep the
+- [x] Add repository interfaces and Supabase implementations that keep the
       application/API contracts portable to future Snowflake repositories.
-- [ ] Add authenticated import endpoints for master workbook, planning
+- [x] Add authenticated import endpoints for master workbook, planning
       workbook, selected-location stock XLSX, and selected-location cumulative
       PO PDFs.
-- [ ] Add multipart file type/size/count limits, isolated temporary processing,
+- [x] Add multipart file type/size/count limits, isolated temporary processing,
       cleanup on success/failure, content-hash deduplication, and safe parser
       errors before enabling uploads.
-- [ ] Reuse `load_master_template`, `load_planning_template`,
+- [x] Reuse `load_master_template`, `load_planning_template`,
       `normalize_apicbase_stock`, and Transgourmet parsers directly; never parse
       operational files in React or shell out to the CLI.
-- [ ] Persist immutable accepted source versions through the API repositories
+- [x] Persist immutable accepted source versions through the API repositories
       with source/import timestamps,
       location scope, uploader, parser version, hashes, record/mapping counts,
       provenance, warnings, and supersession links.
@@ -166,15 +166,15 @@ implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
 - [x] Define the location header, readiness/preflight, Risk & stock, Open POs,
       Recommendation subviews, run state machine, derivation drawer, and export
       behavior.
-- [ ] Add location, planning-status, latest inventory, open-PO, and import-
+- [x] Add location, planning-status, latest inventory, open-PO, and import-
       version endpoints over normalized persisted inputs.
-- [ ] Extract import/assemble/run/persist application services from the current
+- [x] Extract import/assemble/run/persist application services from the current
       combined `run_template_v1` orchestration while preserving that local
       acceptance/recovery path.
-- [ ] Add one authenticated synchronous planning-run endpoint that references
+- [x] Add one authenticated synchronous planning-run endpoint that references
       the visible location, active master version, accepted source versions,
       and deterministic cutoff.
-- [ ] Persist `planning_runs`, selected source imports, lines,
+- [x] Persist `planning_runs`, selected source imports, lines,
       recommendations, and exceptions atomically; add explicit run location and
       completion metadata.
 - [ ] Prove idempotent retry behavior for deterministic `run_id` values and
@@ -195,14 +195,14 @@ implementation notes are in `docs/scratchpads/ui_and_supabase_foundation.md`.
 - [x] Add the `planning_netting_results` table contract for first stockout,
       projected balances, overdue POs, and unavoidable shortage, plus the
       `planning_projection_days` contract matching Python's daily output.
-- [ ] Persist each Python `NettingResult` summary and its daily projection rows
+- [x] Persist each Python `NettingResult` summary and its daily projection rows
       atomically with its run through the repository adapter.
-- [ ] Add latest-current-run selection per location so a result becomes
+- [x] Add latest-current-run selection per location so a result becomes
       **stale calculation** when a newer accepted source version exists.
-- [ ] Extend normalized Transgourmet persistence to observed document/line
+- [x] Extend normalized Transgourmet persistence to observed document/line
       history for recent-PO counts while preserving the current open/missing-
       date caveats.
-- [ ] Add the overview endpoint with data readiness, risk locations/items,
+- [x] Add the overview endpoint with data readiness, risk locations/items,
       recommendations due, blocker/warning counts, latest runs, freshness, and
       secondary observed PO activity.
 - [ ] Build KPI cards, location-risk table, data-freshness panel, latest-run
@@ -330,9 +330,9 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
 | Live Snowflake input dependency for local V1 | None |
 | Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
-| Supabase prototype store | Both migrations reported manually applied for handoff; live schema verification plus repositories/endpoints remain open |
-| Maintainer UI | Monorepo/API/React/Tailwind foundation implemented and three-page journey/component plan defined; domain pages not implemented |
-| Current repository check | 52 Python tests pass; frontend lint/type/build remains prior foundation evidence; deterministic 7-file replay remains prior acceptance evidence |
+| Supabase prototype store | Tables plus transaction/immutability migration and server repository implemented; migrations 001/002 reported applied, while 003 and live credential-based verification remain external steps |
+| Maintainer UI | Authenticated backend contract complete; React/Tailwind status shell and three-page journey/component plan exist, but domain pages are not implemented |
+| Current repository check | 65 Python tests pass; focused new-backend Ruff/strict-mypy checks pass; frontend lint/type/build passes |
 
 ## Source of truth for local V1
 
@@ -407,24 +407,22 @@ and the four fresh service windows.
 
 1. Send the two templates, assumptions brief, maintainer review summary, and
    recommendation/exception outputs to the maintainer.
-2. Select the cloud projects and configure/apply the completed API/web/
-   Supabase foundation; verify deployed health/readiness/CORS without enabling
-   unauthenticated domain writes.
-3. Implement Auth/JWT authorization, verify the reported-applied schema from the
-   API, and add portable repository interfaces for the workflow tables.
-4. Build the side-navigation shell and Data & settings upload/import slice; use
+2. Apply `202608290003_ui_backend_transactions.sql` in the Supabase SQL Editor,
+   configure the API/browser values and an Auth user, then verify deployed
+   health/readiness/CORS and one safe workflow.
+3. Build the side-navigation shell and Data & settings upload/import slice; use
    accepted persisted source versions rather than passing hidden files through
    the run button.
-5. Build the per-location readiness/run/result slice, followed by the Overview
+4. Build the per-location readiness/run/result slice, followed by the Overview
    cockpit over persisted latest-current run and netting summaries.
-6. Add master-data drafts/activation and weekly menu editing only after the
+5. Add field-level master/menu editing only after the workbook draft/activation
    import and version semantics are proven; keep proposal status explicit.
-7. Receive corrected/approved templates and answers; resolve the four stock
+6. Receive corrected/approved templates and answers; resolve the four stock
    mappings, seven currently unmatched open-PO lines, item policy fields, and
    fresh timing/pack-cap decisions.
-8. Rerun the same one-command workflow and pass the operational-approval gate
+7. Rerun the same one-command workflow and pass the operational-approval gate
    before shadow/production use.
-9. Treat Supabase input/result persistence as the documented prototype adapter and
+8. Treat Supabase input/result persistence as the documented prototype adapter and
    preserve the future Snowflake cutover boundary.
 
 ## Dated progress
@@ -463,3 +461,12 @@ and the four fresh service windows.
   summary tables are deferred. For the connected-UI handoff, the maintainer
   reports both migrations applied through the Supabase SQL Editor; live schema
   verification and API repository writes remain open.
+- 2026-08-29: completed the backend vertical slice. Added authenticated domain
+  routes, server-only portable/Supabase repositories, controlled imports using
+  the existing Python adapters, immutable normalized versions, master
+  activation, synchronous scenario runs, atomic result persistence including
+  netting/daily projections, Overview/location/read/download contracts, and a
+  forward SQL-Editor migration `003` for transactions/immutability. All 65
+  Python tests plus focused backend Ruff and strict mypy checks pass. Live
+  Supabase verification still requires migration 003 and environment/Auth
+  configuration; the Claude handover is now frontend-only.

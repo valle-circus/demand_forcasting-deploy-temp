@@ -15,8 +15,8 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
-- 2026-08-28: **The maintainer UI has three top-level pages and an exception-
-  first journey, but the pages are not implemented yet.** A persistent side
+- 2026-08-29: **The authenticated maintainer backend contract is implemented;
+  the three React domain pages are not.** A persistent side
   navigation links Overview (cross-location readiness/risk), Location planning
   (stock/PO risk, visible input versions, compute, explanation, CSV/JSON), and
   Data & settings (four controlled upload groups plus versioned master/menu
@@ -25,25 +25,34 @@ not a task log or a replacement for the detailed engineering brief.
   Two migrations now define the prototype tables: the initial master/run/output
   foundation and an intentionally minimal workflow extension with one compact
   `source_imports` table, normalized forecast/menu/BOM/stock/PO rows, run/input
-  references, item-level netting summaries, and daily projection rows. Separate
+  references, item-level netting summaries, and daily projection rows. A third
+  forward migration adds finalized-input and active-master immutability plus
+  atomic import, activation, and full-run persistence RPCs. FastAPI now verifies
+  Supabase sessions, treats any valid project user as a prototype maintainer
+  (the first UI uses admin-created email/password accounts),
+  reuses the existing XLSX/PDF adapters and pure engine, and exposes all
+  Overview/location/import/run/read/download endpoints behind a portable
+  repository. Separate
   file, issue, PO-header, and KPI/materialized-summary tables are deferred; a
-  synthetic seed supports UI development. For the connected-UI handoff, the
-  maintainer reports both migrations manually applied through the Supabase SQL
-  Editor; the remote state still requires server-side verification and no API
-  repository uses either schema yet. Raw XLSX/PDF bytes stay out of Postgres and dashboard
+  synthetic seed supports UI development. The maintainer reports migrations
+  001 and 002 manually applied through the Supabase SQL Editor; migration 003,
+  environment/Auth configuration, and live server verification remain. Raw
+  XLSX/PDF bytes stay out of Postgres and dashboard
   risk comes from typed Python results, not duplicated browser/SQL calculations.
   Mixed item units are not combined into a misleading quantity KPI, and cap
   evidence is not labelled actual waste. Evidence:
   `docs/descriptions/ui_maintainer_journey_and_page_plan.md`,
   `supabase/migrations/202608280002_ui_workflow_inputs.sql`,
+  `supabase/migrations/202608290003_ui_backend_transactions.sql`,
+  `apps/api/supply_planning_api/services.py`,
   `supabase/seed.sql`,
   `docs/plans/phase2_supply_planning_master_backlog.md`, and
-  `docs/scratchpads/ui_and_supabase_foundation.md`. Verification: 52 Python
-  tests plus focused Ruff/mypy pass; a real Supabase `db reset` remains pending
+  `docs/scratchpads/ui_and_supabase_foundation.md`. Verification: 65 Python
+  tests plus focused Ruff/strict-mypy pass; a real Supabase workflow remains pending
   because no CLI/Postgres/Docker or linked project is available. Status:
   `active`.
 
-- 2026-08-28: **The UI/API/Supabase monorepo foundation is implemented, while
+- 2026-08-28: **The UI/API/Supabase monorepo foundation was implemented, while
   domain workflows and cloud resources remain deliberately unconfigured.** The
   pure engine stays in `src/supply_planning`; `apps/api` provides FastAPI
   process health plus a sanitized optional Supabase readiness probe, and
@@ -64,7 +73,7 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/plans/phase2_supply_planning_master_backlog.md`,
   `docs/scratchpads/ui_and_supabase_foundation.md`, `apps/api`, `apps/web`,
   `supabase/migrations/202608280001_ui_foundation.sql`, and `render.yaml`.
-  Status: `active`.
+  Status: `superseded` by the 2026-08-29 backend-contract entry above.
 
 - 2026-08-27: **Repository history is classified before any cleanup move.**
   The active `v1-run` contract is the two project-owned templates, one raw

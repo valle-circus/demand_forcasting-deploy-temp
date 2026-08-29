@@ -170,6 +170,21 @@ class SupabaseSchemaTests(unittest.TestCase):
             columns["planning_projection_days"],
         )
 
+    def test_backend_transaction_and_immutability_functions_exist(self) -> None:
+        schema = _schema_sql().lower()
+        for function in (
+            "activate_master_data_version_v1",
+            "persist_master_import_v1",
+            "persist_source_import_v1",
+            "persist_planning_run_v1",
+        ):
+            self.assertIn(f"create function public.{function}", schema)
+            self.assertIn(f"grant execute on function public.{function}", schema)
+        self.assertIn("source_imports_reject_finalized_mutation", schema)
+        self.assertIn("forecast_daily_reject_finalized_mutation", schema)
+        self.assertIn("purchase_order_lines_reject_finalized_mutation", schema)
+        self.assertIn("active master-data versions are immutable", schema)
+
 
 if __name__ == "__main__":
     unittest.main()

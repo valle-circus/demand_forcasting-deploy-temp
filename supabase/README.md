@@ -1,6 +1,6 @@
 # Supabase prototype persistence
 
-The two migrations establish the temporary prototype store for:
+The three migrations establish the temporary prototype store for:
 
 - versioned application-maintained master data and planning rules; and
 - canonical source imports/inputs, planning runs, netting summaries,
@@ -19,12 +19,15 @@ authority.
   portable run/line/recommendation/exception outputs.
 - `202608280002_ui_workflow_inputs.sql`: one compact `source_imports` table,
   normalized forecast/menu/BOM/stock/PO tables, run-to-import references, and
-  one item-level `planning_netting_results` summary table.
+  item-level netting summaries plus daily projection rows.
+- `202608290003_ui_backend_transactions.sql`: finalized-source and active-
+  master immutability guards plus service-role-only transaction functions for
+  imports, master activation, and full planning result persistence.
 
 This is intentionally smaller than the original schema plan. File metadata and
 small validation issue lists live on `source_imports`; `po_id` stays on each PO
-line; daily projection events and KPI tables are deferred. Split them only when
-real volume, retention, or query needs justify it.
+line; KPI/materialized-summary tables are deferred. Split them only when real
+volume, retention, or query needs justify it.
 
 Raw XLSX/PDF bytes do not belong in Postgres. If approved retention is needed,
 use a private object bucket and keep only its reference in import metadata.
@@ -34,7 +37,8 @@ for local or disposable development environments. It is not operational data
 and must not be included in production.
 
 `tests/test_supabase_schema.py` statically checks required workflow tables,
-RLS/revokes, run/import traceability, and seed column references. A real
+RLS/revokes, transaction/immutability functions, run/import traceability, and
+seed column references. A real
 `supabase db reset` remains the authoritative syntax/application check.
 
 ## Validate locally
@@ -65,7 +69,6 @@ For a disposable remote development project only, seed deliberately with
 production and never use a remote reset against a non-disposable project.
 
 No project reference or credentials belong in this repository. The migrations
-enable Row Level Security and grant no browser roles access. Future domain
-endpoints must verify maintainer identity in the API before using the server
-secret; direct browser policies can be added only when the page design and
-role model are approved.
+enable Row Level Security and grant no browser roles access. Implemented domain
+endpoints verify the Supabase user through Auth before using the server secret.
+The browser uses Supabase directly only for Auth.

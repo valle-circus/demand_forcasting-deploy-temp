@@ -26,6 +26,24 @@ class Settings(BaseSettings):
         default=None,
         alias="SUPABASE_SECRET_KEY",
     )
+    supabase_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=60,
+        alias="SUPABASE_TIMEOUT_SECONDS",
+    )
+    max_upload_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        gt=0,
+        le=250 * 1024 * 1024,
+        alias="MAX_UPLOAD_BYTES",
+    )
+    max_po_files: int = Field(
+        default=100,
+        gt=0,
+        le=500,
+        alias="MAX_PO_FILES",
+    )
 
     @field_validator("cors_origins_csv")
     @classmethod

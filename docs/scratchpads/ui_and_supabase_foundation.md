@@ -23,8 +23,11 @@
   source-import, PO-history, and netting-result schema gaps.
 - [x] Add the deliberately minimal source-import/input/netting/daily-projection
   migration and a synthetic seed for UI development.
-- [ ] Configure Auth, verify the two reported-applied migrations through
-  FastAPI, and implement API repositories over the schemas.
+- [x] Implement the Auth boundary, schema-aware readiness, portable/Supabase
+  repository, four import services, immutable persistence, synchronous run,
+  atomic outputs, and UI read/download endpoints.
+- [ ] Apply migration 003 and configure Auth/API values to verify the backend
+  against the real Supabase project.
 - [ ] Build Data & settings first, then Location planning, Overview, and
   versioned master/menu editing in that dependency order.
 
@@ -68,6 +71,15 @@
 - 2026-08-28: Keep a small `supabase/seed.sql` with synthetic, proposal-labelled
   imports/master/run/risk rows so UI work has reproducible shapes before real
   uploads exist. Never seed those rows into production.
+- 2026-08-29: Treat any valid Supabase project user as a maintainer for the
+  private prototype. The browser uses Supabase only for Auth and sends the
+  access token to FastAPI; domain tables remain denied to browser roles.
+- 2026-08-29: Use server-only PostgREST behind `CanonicalStore`. Migration 003
+  provides narrow atomic functions for imports, activation, and full planning
+  result persistence plus immutable finalized-source/active-master guards.
+- 2026-08-29: Raw uploads remain request-temporary and are deleted after
+  parsing. Accepted normalized rows and audit metadata persist; no file bytes
+  are stored in Postgres.
 
 ## What we learned (facts, not guesses)
 
@@ -102,17 +114,26 @@
   Static tests verify table/seed column references, RLS/revokes, and run/import
   traceability; the local machine does not currently have Supabase CLI,
   PostgreSQL, or Docker for a real `db reset`.
-- For the connected-UI handoff, the maintainer reports both migrations applied
-  manually in the Supabase SQL Editor. Repository tooling cannot infer that
-  remote state from a missing local project link, so FastAPI must verify the
-  expected foundation and workflow relations before enabling domain actions.
+- For the connected-UI handoff, the maintainer reports migrations 001 and 002
+  applied manually in the Supabase SQL Editor. Repository tooling cannot infer
+  that remote state from a missing local project link. Migration 003 is the
+  remaining SQL-Editor step, and FastAPI readiness verifies all required
+  relations/functions once server credentials exist.
 - Final schema-slice verification passed the full 52-test Python suite plus
   focused Ruff and mypy checks for `tests/test_supabase_schema.py`.
+- The backend vertical slice now exposes authenticated identity, imports,
+  locations/readiness, inventory, observed PO history, master activation,
+  planning run/result/risk, Overview, and CSV/JSON endpoints. The complete
+  calculation output, including daily projections, is persisted by one RPC.
+- Backend verification now passes all 65 Python tests plus focused Ruff and
+  strict mypy. OpenAPI generation confirms every expected `/api/v1` route.
+- Migration 003 has not been applied or verified remotely from this repository;
+  no Supabase URL/secret or safe test user is configured locally.
 
 ## Open questions / unknowns
 
-- Which Supabase project, region, organization, and internal authentication
-  method will be used?
+- Whether production should replace prototype admin-created email/password
+  accounts and the any-authenticated-user maintainer policy with SSO/role tiers.
 - What retention period, if any, is approved for uploaded source files?
 - Will production master data ultimately remain in Supabase or move to
   Snowflake with the results?
@@ -128,16 +149,15 @@
 
 ## Next steps
 
-- Select the cloud projects, apply the migration, add environment values, and
-  verify deployed CORS/readiness before enabling domain writes.
+- Apply `202608290003_ui_backend_transactions.sql` in the Supabase SQL Editor,
+  add environment values and a safe Auth user, and verify deployed CORS/
+  readiness plus one representative import/run/read workflow.
 - Turn `ui_maintainer_journey_and_page_plan.md` into low-fidelity designer
   wireframes and validate hierarchy/terminology with the maintainer.
-- Verify the reported-applied schema through the server-only connection; run
-  the synthetic seed only in disposable local/dev data, never production.
-- Implement Auth/JWT authorization and portable repositories over the existing
-  minimal source-input/result schema; do not alter applied migrations in place.
-- Build the three-route shell and Data & settings import slice, then assemble
-  accepted versions into one persisted synchronous location run.
+- Hand `docs/claude_code_first_ui_pages_brief.md` to the frontend implementer;
+  it now excludes backend work and points to the implemented OpenAPI contract.
+- Build the three-route shell and Data & settings UI first, then Location
+  planning and Overview against persisted backend responses.
 
 ## Risks / gotchas (things not to forget)
 
@@ -161,6 +181,5 @@
 - API development: `uvicorn apps.api.supply_planning_api.main:app --reload`.
 - UI development: run `pnpm dev` from `apps/web`.
 - Frontend verification: run `pnpm check` from `apps/web`.
-- Focused API quality checks:
-  `.venv/Scripts/python -m ruff check apps/api tests/test_api_foundation.py`
-  and `.venv/Scripts/python -m mypy apps/api tests/test_api_foundation.py`.
+- Focused API quality checks cover `apps/api/supply_planning_api`, the touched
+  engine adapter/orchestrator files, and the backend/schema test modules.
