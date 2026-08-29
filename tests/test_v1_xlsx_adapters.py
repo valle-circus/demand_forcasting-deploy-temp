@@ -5,10 +5,12 @@ import unittest
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from supply_planning.adapters.apicbase_stock_xlsx import normalize_apicbase_stock
+from supply_planning.adapters.apicbase_stock_xlsx import STOCK_HEADERS, normalize_apicbase_stock
 from supply_planning.adapters.errors import InputFileError
 from supply_planning.adapters.template_xlsx import (
     BOM_HEADERS,
@@ -183,6 +185,91 @@ class ApicbaseStockAdapterTests(unittest.TestCase):
             self.assertEqual(snapshots["ITEM_2"].provenance.value, "policy_default")
             self.assertEqual(len(result.reviews), 1)
             self.assertEqual(result.counted_at.isoformat(), "2026-08-26T17:10:00+02:00")
+
+    def test_accepts_valid_xlsx_without_optional_sheet_dimension_metadata(self) -> None:
+        class DimensionlessSheet:
+            @property
+            def max_row(self) -> int:
+                raise AssertionError("normalization must not depend on worksheet dimensions")
+
+            def cell(self, *, row: int, column: int) -> SimpleNamespace:
+                values: dict[tuple[int, int], object] = {
+                    (1, 1): "Stock Report for PREP-CGN",
+                    (1, 2): "Exportiert am 26.08.2026 17:10",
+                    **{
+                        (3, index): value
+                        for index, value in enumerate(STOCK_HEADERS, start=1)
+                    },
+                }
+                return SimpleNamespace(value=values.get((row, column)))
+
+            def iter_rows(
+                self,
+                *,
+                min_row: int,
+                max_col: int,
+                values_only: bool,
+            ) -> tuple[tuple[object, ...], ...]:
+                self.assert_iter_arguments(min_row, max_col, values_only)
+                return (
+                    (
+                        "Test item",
+                        "UID-1",
+                        "",
+                        "",
+                        "",
+                        "123",
+                        1.25,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    ),
+                )
+
+            @staticmethod
+            def assert_iter_arguments(
+                min_row: int,
+                max_col: int,
+                values_only: bool,
+            ) -> None:
+                if (min_row, max_col, values_only) != (4, len(STOCK_HEADERS), True):
+                    raise AssertionError("unexpected worksheet iteration contract")
+
+        class DimensionlessWorkbook:
+            sheetnames = ["Stock Report"]
+
+            def __getitem__(self, name: str) -> DimensionlessSheet:
+                if name != "Stock Report":
+                    raise KeyError(name)
+                return DimensionlessSheet()
+
+            def close(self) -> None:
+                return None
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "dimensionless.xlsx"
+            path.write_bytes(b"dimensionless-fixture")
+            with patch(
+                "supply_planning.adapters.apicbase_stock_xlsx.load_workbook",
+                return_value=DimensionlessWorkbook(),
+            ):
+                result = normalize_apicbase_stock(
+                    path,
+                    location_id="LOC_1",
+                    timezone_name="Europe/Berlin",
+                    items=(
+                        Item("ITEM_1", "Test item", StorageClass.RT, Decimal("1000")),
+                    ),
+                    item_policies=(
+                        _policy("ITEM_1", uid="UID-1", name="Test item"),
+                    ),
+                    required_item_ids=("ITEM_1",),
+                    assume_zero_for_unmapped=True,
+                )
+
+        self.assertEqual(result.snapshots[0].usable_on_hand_units, Decimal("1.25"))
 
 
 if __name__ == "__main__":

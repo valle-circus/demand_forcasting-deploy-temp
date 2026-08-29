@@ -15,8 +15,9 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
-- 2026-08-29: **The authenticated maintainer backend contract is implemented;
-  the three React domain pages are not.** A persistent side
+- 2026-08-29: **The authenticated maintainer backend contract and connected
+  Data & settings page are implemented; Location planning and Overview remain.**
+  A persistent side
   navigation links Overview (cross-location readiness/risk), Location planning
   (stock/PO risk, visible input versions, compute, explanation, CSV/JSON), and
   Data & settings (four controlled upload groups plus versioned master/menu
@@ -34,9 +35,10 @@ not a task log or a replacement for the detailed engineering brief.
   Overview/location/import/run/read/download endpoints behind a portable
   repository. Separate
   file, issue, PO-header, and KPI/materialized-summary tables are deferred; a
-  synthetic seed supports UI development. The maintainer reports migrations
-  001 and 002 manually applied through the Supabase SQL Editor; migration 003,
-  environment/Auth configuration, and live server verification remain. Raw
+  synthetic seed supports UI development. The maintainer applied all three
+  migrations manually through the Supabase SQL Editor; live readiness verifies
+  all 18 required tables and all four transaction RPCs, and an admin-created
+  Auth user has completed the browser-to-FastAPI session boundary. Raw
   XLSX/PDF bytes stay out of Postgres and dashboard
   risk comes from typed Python results, not duplicated browser/SQL calculations.
   Mixed item units are not combined into a misleading quantity KPI, and cap
@@ -47,9 +49,13 @@ not a task log or a replacement for the detailed engineering brief.
   `apps/api/supply_planning_api/services.py`,
   `supabase/seed.sql`,
   `docs/plans/phase2_supply_planning_master_backlog.md`, and
-  `docs/scratchpads/ui_and_supabase_foundation.md`. Verification: 65 Python
-  tests plus focused Ruff/strict-mypy pass; a real Supabase workflow remains pending
-  because no CLI/Postgres/Docker or linked project is available. Status:
+  `docs/scratchpads/ui_and_supabase_foundation.md`. A parser-verified synthetic
+  upload packet under
+  `outputs/01a043ce-e551-7492-b41a-bee3c09a1d99/ui_test_packet/` exercises all
+  four source groups and replays to one 6-pack scenario proposal; it is not
+  production seed data. Verification: 67 Python tests, focused Ruff/mypy, and
+  the frontend `pnpm check` with 82 tests pass. The first remote write journey
+  with that packet remains a maintainer-run development smoke test. Status:
   `active`.
 
 - 2026-08-28: **The UI/API/Supabase monorepo foundation was implemented, while

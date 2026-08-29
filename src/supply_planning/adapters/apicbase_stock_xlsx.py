@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from supply_planning.adapters.errors import InputFileError
@@ -173,11 +174,20 @@ def normalize_apicbase_stock(
             )
 
         source_rows: list[dict[str, Any]] = []
-        for row_number in range(4, sheet.max_row + 1):
-            values = [
-                sheet.cell(row=row_number, column=column).value
-                for column in range(1, len(STOCK_HEADERS) + 1)
-            ]
+        # Some valid XLSX producers omit the optional worksheet dimension
+        # metadata. In openpyxl read-only mode that leaves ``max_row`` as
+        # ``None`` even though the rows are present. Iterating the populated
+        # row stream accepts those workbooks while preserving the source row
+        # number used in maintainer-facing errors.
+        for row_number, values_tuple in enumerate(
+            sheet.iter_rows(
+                min_row=4,
+                max_col=len(STOCK_HEADERS),
+                values_only=True,
+            ),
+            start=4,
+        ):
+            values = list(values_tuple)
             if not any(value not in (None, "") for value in values):
                 continue
             row = dict(zip(STOCK_HEADERS, values, strict=True))
@@ -244,7 +254,10 @@ def normalize_apicbase_stock(
                     apicbase_uid=policy.apicbase_uid,
                     apicbase_stock_item_name=policy.apicbase_stock_item_name,
                     reason=reason,
-                    remedy="Fill or correct apicbase_uid/apicbase_stock_item_name in Items and rerun.",
+                    remedy=(
+                        "Fill or correct apicbase_uid/apicbase_stock_item_name "
+                        "in Items and rerun."
+                    ),
                 )
             )
             if assume_zero_for_unmapped:

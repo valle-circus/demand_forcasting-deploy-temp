@@ -52,16 +52,41 @@ The backend now provides:
 - Overview, location/readiness, inventory, PO, import, run, risk,
   recommendation, and CSV/JSON download endpoints.
 
-The maintainer reports migrations 001 and 002 were applied in Supabase. Before
-connected write testing, they must also apply:
+All three migrations are applied in the selected development Supabase project.
+On 2026-08-29, Codex verified through the configured server boundary that all
+18 required tables and all four transaction RPCs are visible. Claude also
+verified the authenticated browser-to-FastAPI journey with the maintainer's
+admin-created user. Continue to treat `/api/v1/readiness` as the runtime truth:
+if it later reports a missing dependency, show that non-secret blocker; do not
+change the backend or create replacement tables. Connected mode must fail
+honestly rather than silently falling back to demo data.
 
-- `supabase/migrations/202608290003_ui_backend_transactions.sql`
+## Synthetic connected-workflow packet
 
-Assume that migration is applied for UI implementation. If readiness says it
-is missing, show the non-secret blocker and tell the maintainer; do not change
-the backend or create replacement tables. Real Supabase/Render/Vercel values
-may still be absent locally, so connected mode must fail honestly rather than
-silently falling back to demo data.
+A parser-verified test packet is available for the first real Data & settings
+journey:
+
+- `outputs/01a043ce-e551-7492-b41a-bee3c09a1d99/ui_test_packet/`
+  contains the filled master workbook, filled planning workbook, Apicbase-style
+  stock workbook, and an upload/readme with exact cutoffs and expected results.
+- `output/pdf/ui_test_packet/Transgourmet_Bestelldetails_UI_DEMO.pdf` is the
+  corresponding parseable cumulative PO input.
+
+This is synthetic development data, not a frontend fallback and not production
+seed data. Follow the strict sequence already implemented on Data & settings:
+master upload -> explicit activation -> planning upload -> location stock ->
+location PO PDFs. Use `LOC_UI_DEMO_001` and the readme's exact timezone-aware
+cutoffs. The packet was replayed through the existing Python XLSX/PDF adapters
+and the pure scenario engine; it completed with one 6-pack proposal. Do not
+hard-code that output in React: it is only a connected smoke-test oracle.
+
+The test also confirmed two UX rules that must remain explicit:
+
+- activation replaces the active master for the current environment, so the
+  packet belongs only in a disposable or explicitly approved development
+  project;
+- no approved freshness thresholds exist yet, so show source/import times and
+  the server's readiness/current-run verdict without inventing age cutoffs.
 
 ## Goal
 

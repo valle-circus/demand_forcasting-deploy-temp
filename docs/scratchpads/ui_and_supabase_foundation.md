@@ -114,11 +114,9 @@
   Static tests verify table/seed column references, RLS/revokes, and run/import
   traceability; the local machine does not currently have Supabase CLI,
   PostgreSQL, or Docker for a real `db reset`.
-- For the connected-UI handoff, the maintainer reports migrations 001 and 002
-  applied manually in the Supabase SQL Editor. Repository tooling cannot infer
-  that remote state from a missing local project link. Migration 003 is the
-  remaining SQL-Editor step, and FastAPI readiness verifies all required
-  relations/functions once server credentials exist.
+- The maintainer applied all three migrations manually in the Supabase SQL
+  Editor. On 2026-08-29 the configured server boundary verified all 18 required
+  tables and all four transaction RPCs with no missing paths.
 - Final schema-slice verification passed the full 52-test Python suite plus
   focused Ruff and mypy checks for `tests/test_supabase_schema.py`.
 - The backend vertical slice now exposes authenticated identity, imports,
@@ -127,8 +125,18 @@
   calculation output, including daily projections, is persisted by one RPC.
 - Backend verification now passes all 65 Python tests plus focused Ruff and
   strict mypy. OpenAPI generation confirms every expected `/api/v1` route.
-- Migration 003 has not been applied or verified remotely from this repository;
-  no Supabase URL/secret or safe test user is configured locally.
+- Root server credentials and an admin-created Auth user are configured for the
+  development project. Claude verified the authenticated browser -> FastAPI
+  journey; Codex independently verified the full live schema contract.
+- A synthetic connected-workflow packet now exists under
+  `outputs/01a043ce-e551-7492-b41a-bee3c09a1d99/ui_test_packet/`, with the PO
+  PDF under `output/pdf/ui_test_packet/`. The existing adapters accept all four
+  sources, and a deterministic scenario replay at
+  `2026-08-29T12:00:00+02:00` completes with one 6-pack proposal.
+- The packet exposed a valid-XLSX compatibility edge: some producers omit
+  optional worksheet dimension metadata, leaving `max_row=None` in openpyxl
+  read-only mode. The Apicbase adapter now iterates populated rows instead of
+  relying on that optional metadata.
 
 ## Open questions / unknowns
 
@@ -149,9 +157,11 @@
 
 ## Next steps
 
-- Apply `202608290003_ui_backend_transactions.sql` in the Supabase SQL Editor,
-  add environment values and a safe Auth user, and verify deployed CORS/
-  readiness plus one representative import/run/read workflow.
+- Use the synthetic packet for the first manual upload/activation/import/run/
+  read journey in the approved development project. Its README records the
+  strict upload sequence, safe cutoff, and expected result.
+- Verify deployed Render/Vercel CORS and the persisted UI journey once both
+  deployments, rather than the local Vite/FastAPI pair, are in use.
 - Turn `ui_maintainer_journey_and_page_plan.md` into low-fidelity designer
   wireframes and validate hierarchy/terminology with the maintainer.
 - Hand `docs/claude_code_first_ui_pages_brief.md` to the frontend implementer;
