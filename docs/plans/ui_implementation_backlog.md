@@ -676,9 +676,13 @@ backend logic:
   55 tests. Live browser check against the running API confirmed the sign-in
   page renders, the gate blocks `/data` when signed out, mobile layout holds at
   375 px, no console errors, and the status line reports the real chain
-  (`API ready · development`, all migrations reachable). Sign-in with a real
-  credential is left to the maintainer — entering a password is outside what
-  this agent does. Next: WP3 (Data & settings).
+  (`API ready · development`, all migrations reachable). Next: WP3.
+- 2026-08-29 — **Authenticated journey verified end to end.** The maintainer
+  signed in with a real admin-created Supabase account. `GET /api/v1/locations`
+  returned 404 as predicted for a fresh `development` environment, and the UI
+  rendered the first-run state rather than an error. Supabase Auth → session →
+  bearer token → FastAPI verification → domain read → typed error → correct
+  state all confirmed against the live stack. Starting WP3.
 - 2026-08-29 — Decided against building a self-signup page. The brief forbids
   public self-sign-up, and FastAPI treats every valid project user as a
   maintainer, so a signup form on a deployed internal tool would let anyone who

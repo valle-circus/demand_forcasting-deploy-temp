@@ -25,8 +25,17 @@ without duplicating any Python parsing, planning, or KPI logic in TypeScript.
   in a real browser against the live API: sign-in renders, the gate blocks
   `/data` when signed out, mobile holds at 375 px, no console errors, and the
   status line reports `API ready · development` with all migrations reachable.
-- **Not yet done:** signing in with a real credential. Entering a password is
-  outside what this agent does, so the maintainer performs that step.
+- 2026-08-29: **The full authenticated chain is verified end to end.** The
+  maintainer signed in with a real admin-created Supabase account in a live
+  browser. Observed on the wire: CORS preflight `OPTIONS /api/v1/locations` →
+  200, then `GET /api/v1/locations` → **404**, and the UI rendered the
+  "No active master data yet" first-run state with its link to Data & settings —
+  not an error page. That exercises Supabase Auth → persisted session → bearer
+  token → FastAPI verification → domain read → typed error → first-run state.
+- React StrictMode double-mounts effects in dev, so the browser network log
+  shows paired `readiness` requests where the first is `ERR_ABORTED`. That is
+  the abort handling in `useApiResource` working, not a fault; StrictMode does
+  not double-invoke in production builds.
 - Next: WP3 — Data & settings. It must come first, because on this environment
   nothing else can load until a master workbook is imported and activated (see
   the environment-scoping gotcha below).
