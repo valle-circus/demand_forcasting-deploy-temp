@@ -55,7 +55,7 @@ describe('the first-run state', () => {
     renderChooser()
 
     expect(
-      await screen.findByRole('heading', { name: /no active master data yet/i }),
+      await screen.findByRole('heading', { name: /no master data yet/i }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(
@@ -63,7 +63,7 @@ describe('the first-run state', () => {
     ).toHaveAttribute('href', '/data')
   })
 
-  it('explains that importing creates a draft and activation is separate', async () => {
+  it('sends the maintainer to the page that fixes it', async () => {
     fetchMock.mockImplementation(() =>
       Promise.resolve(jsonResponse({ error: { code: 'not_found' } }, 404)),
     )
@@ -71,7 +71,7 @@ describe('the first-run state', () => {
     renderChooser()
 
     expect(
-      await screen.findByText(/activation is a separate, deliberate step/i),
+      await screen.findByText(/import the master workbook and activate it/i),
     ).toBeInTheDocument()
   })
 })
@@ -95,7 +95,7 @@ describe('other outcomes', () => {
     renderChooser()
 
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/required service is unavailable/i)
+    expect(alert).toHaveTextContent(/service is unavailable/i)
     expect(alert).toHaveTextContent(/not an empty result/i)
   })
 

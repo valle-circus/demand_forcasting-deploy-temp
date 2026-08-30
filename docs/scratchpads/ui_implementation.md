@@ -384,3 +384,50 @@ worth keeping:
   that gets fixed. Only a non-404 failure renders an error.
 
 Still to build: WP4 (Location planning) and WP5 (Overview).
+
+## Design system adopted (2026-08-30)
+
+The `circus-ui` skill was created after WP3 shipped, and reviewing WP3 against
+it found real defects, not just taste:
+
+- **Paragraphs above forms** — an explicit anti-pattern. Each of the four cards
+  carried a purpose paragraph plus a footer sentence, on top of a two-paragraph
+  page intro. Roughly 65% of that text is now gone or behind a disclosure.
+- **The action was far from the file it acts on.** The upload button sat below
+  the dropzone but above a tall "Currently in use" block. It is now directly
+  under the dropzone, full width.
+- **Emoji as iconography** (`⚑` in the proposal banner) — replaced with lucide.
+- **ALL CAPS labels** ("CURRENTLY IN USE", "STEP 1") — sentence case now.
+- **Wrong accent.** Lime was never the brand; the accent is emerald `#0B8459`,
+  and it is a budget of roughly one element per screen.
+- **16px base** — internal tools read at desk distance, so base is 14px with
+  the root rem left at 16px so Tailwind's 4px spacing scale is unaffected.
+- **No motion tokens and no reduced-motion block.** Both added.
+
+Stack now matches the skill: shadcn/ui (Base UI primitives, Nova preset,
+lucide icons, Geist), `motion` for transitions. Components are vendored under
+`src/components/ui/` — we own and edit them, so the 40px touch-target floor was
+applied by editing `button.tsx` rather than overriding at call sites.
+
+Notes for later:
+
+- `corepack enable` needs admin, so shims were installed to `~/.local/bin`
+  instead; that directory must be on PATH for `pnpm` and the shadcn CLI.
+- The `@` alias has to be declared in **both** `vite.config.ts` and
+  `vitest.config.ts` — a separate vitest config does not inherit it.
+- ESLint exempts `src/components/ui/**` from `react-refresh/only-export-components`;
+  the vendored files export variants next to components by design.
+- Base UI's `Button` warns if it renders a non-button. `EmptyState` uses a
+  styled `Link` instead, which is also correct semantically since it navigates.
+
+## Structural fix: activation completes step 1
+
+Codex found this by doing the first real upload, and the maintainer hit it too:
+activation lived only in the version list far below the upload cards, so the
+first-run journey stalled after step 1 with no visible way forward.
+
+Now: a draft shows **Draft ready** in the step 1 header and an
+**Activate master data and continue** button inside the step 1 card. The
+version list below is the audit and replacement surface, not the way to
+continue. Blocked steps 2–4 render a **Go to step N** button that scrolls to
+and focuses the step that unblocks them.

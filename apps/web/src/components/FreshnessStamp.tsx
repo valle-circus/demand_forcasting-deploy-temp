@@ -1,57 +1,53 @@
-import { formatDateTime, formatRelativeAge } from '../lib/formatting'
-import type { IsoDateTime } from '../lib/types'
+import { formatDateTime, formatRelativeAge } from '@/lib/formatting'
+import type { IsoDateTime } from '@/lib/types'
 
 interface FreshnessStampProps {
-  /**
-   * When the source system produced the data — a stock count time, a supplier
-   * document date. Null when the source carries no timestamp of its own.
-   */
+  /** When the source system produced the data. Null if it states no time. */
   sourceAt: IsoDateTime | null
   /** When this workspace accepted the import. */
   importedAt: IsoDateTime
   timeZone: string
-  /** What the source timestamp means here, e.g. "Counted" or "Ordered". */
+  /** What the source time means here, e.g. "Counted" or "Ordered". */
   sourceLabel?: string
 }
 
 /**
- * Shows source time and import time as two separate, labelled values.
+ * Source time and import time, as two separate values.
  *
- * This is the single most important primitive in the application. Collapsing
- * the two into one "last updated" is the mistake this product exists to avoid:
- * a Transgourmet PDF imported five minutes ago can describe orders from a week
- * ago, and a stock export uploaded today can have been counted on Friday.
- * "Last imported" is not "currently true".
+ * Collapsing them into one "last updated" is the mistake this product exists
+ * to avoid: a supplier PDF imported five minutes ago can describe orders from
+ * last week, and a stock export uploaded today may have been counted on
+ * Friday. Imported is not the same as true.
  */
 export function FreshnessStamp({
   sourceAt,
   importedAt,
   timeZone,
-  sourceLabel = 'Source time',
+  sourceLabel = 'Source',
 }: FreshnessStampProps) {
   return (
-    <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
-      <dt className="font-medium text-stone-700">{sourceLabel}</dt>
-      <dd className="text-stone-600">
+    <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs tabular">
+      <dt className="text-muted-foreground">{sourceLabel}</dt>
+      <dd>
         {sourceAt === null ? (
-          <span className="text-stone-500">
-            not stated by the source file
-          </span>
+          <span className="text-faint">not stated in the file</span>
         ) : (
           <>
-            {formatDateTime(sourceAt, timeZone)}{' '}
-            <span className="text-stone-500">
-              ({formatRelativeAge(sourceAt)})
+            {formatDateTime(sourceAt, timeZone)}
+            <span className="text-muted-foreground">
+              {' '}
+              · {formatRelativeAge(sourceAt)}
             </span>
           </>
         )}
       </dd>
 
-      <dt className="font-medium text-stone-700">Imported</dt>
-      <dd className="text-stone-600">
-        {formatDateTime(importedAt, timeZone)}{' '}
-        <span className="text-stone-500">
-          ({formatRelativeAge(importedAt)})
+      <dt className="text-muted-foreground">Imported</dt>
+      <dd>
+        {formatDateTime(importedAt, timeZone)}
+        <span className="text-muted-foreground">
+          {' '}
+          · {formatRelativeAge(importedAt)}
         </span>
       </dd>
     </dl>

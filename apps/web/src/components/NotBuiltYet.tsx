@@ -1,27 +1,12 @@
 /**
- * An explicit placeholder for a page that has not been implemented yet.
- *
- * It exists so an unfinished page is unmistakably unfinished. It never renders
- * sample numbers, mock tables, or synthetic charts — a screen that looks
- * populated but is not connected is worse than an empty one.
+ * An explicit placeholder. It never renders sample numbers or mock tables — a
+ * screen that looks populated but is not connected is worse than an empty one.
  */
-export function NotBuiltYet({
-  workPackage,
-  summary,
-}: {
-  workPackage: string
-  summary: string
-}) {
+export function NotBuiltYet({ summary }: { summary: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-stone-300 bg-white p-6 sm:p-8">
-      <p className="text-xs font-semibold tracking-wider text-stone-500 uppercase">
-        Not built yet · {workPackage}
-      </p>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600">{summary}</p>
-      <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-500">
-        Nothing is shown here rather than placeholder numbers, so this page
-        cannot be mistaken for connected data.
-      </p>
+    <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+      <p className="text-sm text-muted-foreground">Not built yet</p>
+      <p className="mx-auto mt-1 max-w-md text-xs text-faint">{summary}</p>
     </div>
   )
 }

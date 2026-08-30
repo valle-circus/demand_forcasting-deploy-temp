@@ -1,22 +1,25 @@
 import { useId, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
-import { useAuth } from '../../app/auth/authContext'
-import { ApiStatusLine } from '../../components/ApiStatusLine'
-import { BrandMark } from '../../components/BrandMark'
-import { errorMessage } from '../../lib/errors'
+import { useAuth } from '@/app/auth/authContext'
+import { ApiStatusLine } from '@/components/ApiStatusLine'
+import { BrandMark } from '@/components/BrandMark'
+import { Button } from '@/components/ui/button'
+import { errorMessage } from '@/lib/errors'
 
 interface RedirectState {
   from?: string
 }
 
+const FIELD_CLASS =
+  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none'
+
 /**
  * The sign-in gate.
  *
- * There is deliberately no self-sign-up, password reset, or role management.
- * Accounts are created by an administrator in Supabase, and FastAPI currently
- * treats every valid project user as a maintainer — so a public signup form
- * would hand maintainer access to anyone who found the URL.
+ * No self-sign-up, no password reset, no role management: accounts are created
+ * by an administrator in Supabase, and the API currently treats every valid
+ * project user as a maintainer.
  */
 export function SignInPage() {
   const { status, notice, signIn } = useAuth()
@@ -51,126 +54,104 @@ export function SignInPage() {
     }
   }
 
-  const unconfigured = status === 'unconfigured'
-
   return (
-    <main className="flex min-h-screen items-center justify-center bg-stone-100 px-4 py-10">
-      <div className="w-full max-w-md">
-        <div className="rounded-t-xl bg-stone-950 px-7 py-6 text-stone-50">
-          <BrandMark />
-          <h1 className="mt-5 text-xl font-semibold tracking-tight">
-            Supply planning workspace
-          </h1>
-          <p className="mt-1 text-sm text-stone-400">
-            Internal proposal tool. It does not place supplier orders.
-          </p>
-        </div>
+    <main className="grid min-h-screen place-items-center px-4 py-10">
+      <div className="w-full max-w-sm">
+        <BrandMark />
 
-        <div className="rounded-b-xl border border-t-0 border-stone-200 bg-white px-7 py-6">
-          {unconfigured ? (
-            <div
-              role="status"
-              className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
-            >
-              <p className="font-semibold">Authentication is not configured</p>
-              <p className="mt-2 leading-6">
-                This build has no browser Supabase values, so there is no
-                sign-in to attempt. Set{' '}
-                <code className="rounded bg-amber-100 px-1">
-                  VITE_SUPABASE_URL
-                </code>{' '}
-                and{' '}
-                <code className="rounded bg-amber-100 px-1">
-                  VITE_SUPABASE_PUBLISHABLE_KEY
-                </code>{' '}
-                in the environment, then reload.
+        {status === 'unconfigured' ? (
+          <div role="status" className="mt-6 rounded-lg border border-border p-4">
+            <h1 className="text-base font-medium">
+              Authentication is not configured
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              This build has no Supabase values, so there is no sign-in to
+              attempt.
+            </p>
+          </div>
+        ) : (
+          <>
+            <h1 className="mt-6 text-3xl font-semibold tracking-tight">
+              Sign in
+            </h1>
+
+            {notice !== null && (
+              <p role="status" className="mt-3 text-sm text-warning">
+                {notice}
               </p>
-            </div>
-          ) : (
-            <>
-              {notice !== null && (
-                <div
-                  role="status"
-                  className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            )}
+
+            <form
+              className="mt-6 space-y-4"
+              onSubmit={(event) => void handleSubmit(event)}
+              noValidate
+            >
+              <div>
+                <label htmlFor={emailId} className="mb-1 block text-sm font-medium">
+                  Email
+                </label>
+                <input
+                  id={emailId}
+                  type="email"
+                  name="email"
+                  autoComplete="username"
+                  required
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value)
+                  }}
+                  className={FIELD_CLASS}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor={passwordId}
+                  className="mb-1 block text-sm font-medium"
                 >
-                  {notice}
-                </div>
+                  Password
+                </label>
+                <input
+                  id={passwordId}
+                  type="password"
+                  name="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value)
+                  }}
+                  aria-describedby={error === null ? undefined : errorId}
+                  aria-invalid={error === null ? undefined : true}
+                  className={FIELD_CLASS}
+                />
+              </div>
+
+              {error !== null && (
+                <p id={errorId} role="alert" className="text-sm text-danger">
+                  {error}
+                </p>
               )}
 
-              <form onSubmit={(event) => void handleSubmit(event)} noValidate>
-                <div>
-                  <label
-                    htmlFor={emailId}
-                    className="block text-sm font-medium text-stone-800"
-                  >
-                    Email
-                  </label>
-                  <input
-                    id={emailId}
-                    type="email"
-                    name="email"
-                    autoComplete="username"
-                    required
-                    value={email}
-                    onChange={(event) => {
-                      setEmail(event.target.value)
-                    }}
-                    className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-950 focus:border-lime-600 focus:ring-2 focus:ring-lime-600/30 focus:outline-none"
-                  />
-                </div>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full"
+                disabled={submitting}
+              >
+                {submitting ? 'Signing in' : 'Sign in'}
+              </Button>
+            </form>
 
-                <div className="mt-4">
-                  <label
-                    htmlFor={passwordId}
-                    className="block text-sm font-medium text-stone-800"
-                  >
-                    Password
-                  </label>
-                  <input
-                    id={passwordId}
-                    type="password"
-                    name="password"
-                    autoComplete="current-password"
-                    required
-                    value={password}
-                    onChange={(event) => {
-                      setPassword(event.target.value)
-                    }}
-                    aria-describedby={error === null ? undefined : errorId}
-                    aria-invalid={error === null ? undefined : true}
-                    className="mt-1.5 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-950 focus:border-lime-600 focus:ring-2 focus:ring-lime-600/30 focus:outline-none"
-                  />
-                </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Accounts are created by an administrator. There is no self-service
+              sign-up.
+            </p>
+          </>
+        )}
 
-                {error !== null && (
-                  <p
-                    id={errorId}
-                    role="alert"
-                    className="mt-4 rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900"
-                  >
-                    {error}
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="mt-6 w-full rounded-lg bg-lime-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-lime-700 focus:ring-2 focus:ring-lime-600 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:bg-stone-300"
-                >
-                  {submitting ? 'Signing in…' : 'Sign in'}
-                </button>
-              </form>
-
-              <p className="mt-5 text-xs leading-5 text-stone-500">
-                Accounts are created by an administrator in Supabase. There is no
-                self-service sign-up.
-              </p>
-            </>
-          )}
-
-          <div className="mt-6 border-t border-stone-200 pt-4">
-            <ApiStatusLine />
-          </div>
+        <div className="mt-6 border-t border-border pt-3">
+          <ApiStatusLine />
         </div>
       </div>
     </main>

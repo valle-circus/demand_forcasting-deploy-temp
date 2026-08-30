@@ -56,13 +56,13 @@ describe('the proposal boundary', () => {
 
     // This is the one claim that must never be missing from any page.
     expect(
-      await screen.findByText(/nothing here places, approves, or sends/i),
+      await screen.findByText(/nothing here orders anything/i),
     ).toBeInTheDocument()
   })
 
   it('offers no way to dismiss that statement', async () => {
     renderApp()
-    await screen.findByText(/nothing here places, approves, or sends/i)
+    await screen.findByText(/nothing here orders anything/i)
 
     expect(
       screen.queryByRole('button', { name: /dismiss|close banner/i }),

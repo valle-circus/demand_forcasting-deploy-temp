@@ -3,11 +3,11 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SelectedLocationProvider } from '../../app/location/SelectedLocationProvider'
-import { NotFoundError, ValidationError } from '../../lib/errors'
-import type { MasterDataVersion, SourceImport } from '../../lib/types'
+import { SelectedLocationProvider } from '@/app/location/SelectedLocationProvider'
+import { NotFoundError, ValidationError } from '@/lib/errors'
+import type { MasterDataVersion, SourceImport } from '@/lib/types'
 
-vi.mock('../../lib/apiClient', () => ({
+vi.mock('@/lib/apiClient', () => ({
   listImports: vi.fn(),
   listMasterVersions: vi.fn(),
   fetchLocations: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock('../../lib/apiClient', () => ({
   activateMasterVersion: vi.fn(),
 }))
 
-const api = await import('../../lib/apiClient')
+const api = await import('@/lib/apiClient')
 const { DataSettingsPage } = await import('./DataSettingsPage')
 
 function sourceImport(overrides: Partial<SourceImport> = {}): SourceImport {
@@ -78,13 +78,25 @@ function renderPage() {
   )
 }
 
-/** The state of a brand-new environment: nothing imported, nothing active. */
+/** A brand-new environment: nothing imported, nothing active. */
 function freshWorkspace() {
   vi.mocked(api.listImports).mockResolvedValue([])
   vi.mocked(api.listMasterVersions).mockResolvedValue([])
   vi.mocked(api.fetchLocations).mockRejectedValue(
     new NotFoundError("Active master-data version 'development' was not found."),
   )
+}
+
+function stepOne() {
+  return screen.findByRole('region', { name: 'Master data & rules' })
+}
+
+async function uploadInto(region: HTMLElement, user: ReturnType<typeof userEvent.setup>) {
+  await user.upload(
+    within(region).getByLabelText(/choose a file/i),
+    new File(['x'], 'master.xlsx'),
+  )
+  await user.click(within(region).getByRole('button', { name: /upload and check/i }))
 }
 
 beforeEach(() => {
@@ -98,7 +110,7 @@ describe('a brand-new environment', () => {
     renderPage()
 
     expect(
-      await screen.findByRole('heading', { name: 'Planning inputs' }),
+      await screen.findByRole('heading', { name: 'Data & settings' }),
     ).toBeInTheDocument()
     // The 404 from /locations is expected here and must not blank the page.
     expect(
@@ -110,11 +122,8 @@ describe('a brand-new environment', () => {
     freshWorkspace()
     renderPage()
 
-    const master = await screen.findByRole('region', {
-      name: 'Master data & rules',
-    })
     expect(
-      within(master).getByRole('button', { name: /upload and validate/i }),
+      within(await stepOne()).getByRole('button', { name: /upload and check/i }),
     ).toBeInTheDocument()
 
     for (const title of [
@@ -123,23 +132,128 @@ describe('a brand-new environment', () => {
       'Purchase-order PDFs',
     ]) {
       const card = screen.getByRole('region', { name: title })
-      expect(within(card).getByText(/not available yet/i)).toBeInTheDocument()
       expect(
         within(card).getByText(/master-data version is active/i),
       ).toBeInTheDocument()
       expect(
-        within(card).queryByRole('button', { name: /upload and validate/i }),
+        within(card).queryByRole('button', { name: /upload and check/i }),
       ).not.toBeInTheDocument()
+      // A blocked step points at the step that unblocks it.
+      expect(
+        within(card).getByRole('button', { name: /go to step 1/i }),
+      ).toBeInTheDocument()
     }
   })
 
-  it('says the location selector is empty because no master version is active', async () => {
+  it('cannot scope a location upload before any location exists', async () => {
     freshWorkspace()
     renderPage()
 
-    const select = await screen.findByLabelText(/location for steps 3 and 4/i)
-    expect(select).toBeDisabled()
-    expect(select).toHaveTextContent(/no locations until a master version/i)
+    await stepOne()
+    expect(screen.getByRole('combobox')).toBeDisabled()
+  })
+})
+
+describe('activation completes step 1', () => {
+  it('offers activation inside step 1 once a draft exists', async () => {
+    // Activation used to live only in the version list far below, where it was
+    // easy to miss — the journey stalls until it happens.
+    vi.mocked(api.listImports).mockResolvedValue([sourceImport()])
+    vi.mocked(api.listMasterVersions).mockResolvedValue([masterVersion()])
+    vi.mocked(api.fetchLocations).mockRejectedValue(new NotFoundError('none'))
+
+    renderPage()
+
+    const master = await stepOne()
+    expect(
+      within(master).getByRole('button', {
+        name: /activate master data and continue/i,
+      }),
+    ).toBeInTheDocument()
+    expect(within(master).getByText('Draft ready')).toBeInTheDocument()
+  })
+
+  it('shows step 1 as active once a version is activated', async () => {
+    vi.mocked(api.listImports).mockResolvedValue([sourceImport()])
+    vi.mocked(api.listMasterVersions).mockResolvedValue([
+      masterVersion({ status: 'active', activated_at: '2026-08-29T10:00:00+00:00' }),
+    ])
+    vi.mocked(api.fetchLocations).mockResolvedValue({
+      master_data_version_id: 'version-1',
+      locations: [
+        {
+          location_id: 'LOC_A',
+          location_name: 'Kitchen A',
+          timezone: 'Europe/Berlin',
+          active: true,
+        },
+      ],
+    })
+
+    renderPage()
+
+    const master = await stepOne()
+    expect(within(master).getByText('Active')).toBeInTheDocument()
+    expect(
+      within(master).queryByRole('button', {
+        name: /activate master data and continue/i,
+      }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('confirms before activating, naming what is replaced', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.listImports).mockResolvedValue([sourceImport()])
+    vi.mocked(api.listMasterVersions).mockResolvedValue([
+      masterVersion({ id: 'v2', version_label: 'master-v2', status: 'draft' }),
+      masterVersion({ id: 'v1', version_label: 'master-v1', status: 'active' }),
+    ])
+    vi.mocked(api.fetchLocations).mockRejectedValue(new NotFoundError('none'))
+
+    renderPage()
+
+    await user.click(
+      within(await stepOne()).getByRole('button', {
+        name: /activate master data and continue/i,
+      }),
+    )
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent(/master-v2/)
+    expect(dialog).toHaveTextContent(/replaces master-v1/i)
+    expect(api.activateMasterVersion).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Activate' }))
+
+    await waitFor(() => {
+      expect(api.activateMasterVersion).toHaveBeenCalledWith('v2')
+    })
+    expect(api.activateMasterVersion).toHaveBeenCalledTimes(1)
+  })
+
+  it('abandons activation on cancel', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.listImports).mockResolvedValue([sourceImport()])
+    vi.mocked(api.listMasterVersions).mockResolvedValue([masterVersion()])
+    vi.mocked(api.fetchLocations).mockRejectedValue(new NotFoundError('none'))
+
+    renderPage()
+
+    await user.click(
+      within(await stepOne()).getByRole('button', {
+        name: /activate master data and continue/i,
+      }),
+    )
+    await user.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(api.activateMasterVersion).not.toHaveBeenCalled()
   })
 })
 
@@ -156,22 +270,12 @@ describe('import outcomes', () => {
     )
 
     renderPage()
-
-    const master = await screen.findByRole('region', {
-      name: 'Master data & rules',
-    })
-    const input = within(master).getByLabelText(/choose file/i)
-    await user.upload(
-      input,
-      new File(['x'], 'master.xlsx', { type: 'application/vnd.ms-excel' }),
-    )
-    await user.click(
-      within(master).getByRole('button', { name: /upload and validate/i }),
-    )
+    const master = await stepOne()
+    await uploadInto(master, user)
 
     const alert = await within(master).findByRole('alert')
-    expect(alert).toHaveTextContent(/rejected — nothing was changed/i)
     expect(alert).toHaveTextContent(/missing the required column/i)
+    expect(alert).toHaveTextContent(/nothing was changed/i)
     // The rejected attempt is persisted server-side, so it stays auditable.
     expect(alert).toHaveTextContent(/rejected-123/)
   })
@@ -184,20 +288,11 @@ describe('import outcomes', () => {
     )
 
     renderPage()
-
-    const master = await screen.findByRole('region', {
-      name: 'Master data & rules',
-    })
-    await user.upload(
-      within(master).getByLabelText(/choose file/i),
-      new File(['x'], 'master.xlsx'),
-    )
-    await user.click(
-      within(master).getByRole('button', { name: /upload and validate/i }),
-    )
+    const master = await stepOne()
+    await uploadInto(master, user)
 
     expect(
-      await within(master).findByText(/accepted, with warnings to review/i),
+      await within(master).findByText(/with warnings/i),
     ).toBeInTheDocument()
   })
 
@@ -210,24 +305,15 @@ describe('import outcomes', () => {
     vi.mocked(api.importMasterData).mockResolvedValue(sourceImport())
 
     renderPage()
-
-    const master = await screen.findByRole('region', {
-      name: 'Master data & rules',
-    })
-    await user.upload(
-      within(master).getByLabelText(/choose file/i),
-      new File(['x'], 'master.xlsx'),
-    )
-    await user.click(
-      within(master).getByRole('button', { name: /upload and validate/i }),
-    )
+    const master = await stepOne()
+    await uploadInto(master, user)
 
     expect(
       await within(master).findByText(/already imported/i),
     ).toBeInTheDocument()
   })
 
-  it('shows every validation issue with the remedy the API supplied', async () => {
+  it('shows each validation issue with the remedy the API supplied', async () => {
     freshWorkspace()
     const user = userEvent.setup()
     vi.mocked(api.listImports).mockResolvedValue([
@@ -248,147 +334,59 @@ describe('import outcomes', () => {
     ])
 
     renderPage()
+    const master = await stepOne()
 
-    const master = await screen.findByRole('region', {
-      name: 'Master data & rules',
-    })
-    await user.click(within(master).getByRole('button', { name: /review 1 issue/i }))
+    // Detail lives behind a disclosure rather than filling the card.
+    await user.click(within(master).getByRole('button', { name: /details/i }))
 
     expect(
       await within(master).findByText(/no maintained item mapping/i),
     ).toBeInTheDocument()
     // A problem without a fix is not actionable.
-    expect(within(master).getByText(/how to fix/i)).toBeInTheDocument()
     expect(
       within(master).getByText(/add the supplier article/i),
     ).toBeInTheDocument()
   })
 })
 
-describe('uploading versus running', () => {
+describe('boundaries stated on the page', () => {
   it('states that uploading never runs planning', async () => {
     freshWorkspace()
     renderPage()
 
-    await screen.findByRole('heading', { name: 'Planning inputs' })
+    await screen.findByRole('heading', { name: 'Data & settings' })
     expect(
-      screen.getAllByText(/uploading never runs planning/i).length,
-    ).toBeGreaterThan(0)
+      screen.getByText(/uploading never runs planning/i),
+    ).toBeInTheDocument()
   })
 
   it('offers no way to edit observed stock or purchase-order lines', async () => {
     freshWorkspace()
     renderPage()
 
-    await screen.findByRole('heading', { name: 'Maintained data & rules' })
-    expect(
-      screen.getByText(/never edited here/i),
-    ).toBeInTheDocument()
-  })
-})
-
-describe('activating a master version', () => {
-  beforeEach(() => {
-    vi.mocked(api.listImports).mockResolvedValue([sourceImport()])
-    vi.mocked(api.fetchLocations).mockRejectedValue(new NotFoundError('none'))
-    vi.mocked(api.listMasterVersions).mockResolvedValue([
-      masterVersion({ id: 'v2', version_label: 'master-v2', status: 'draft' }),
-      masterVersion({
-        id: 'v1',
-        version_label: 'master-v1',
-        status: 'active',
-        activated_at: '2026-08-28T09:00:00+00:00',
-      }),
-    ])
+    await screen.findByRole('heading', { name: 'Maintained data' })
+    expect(screen.getByText(/not edited here/i)).toBeInTheDocument()
   })
 
-  it('requires confirmation and names the version being replaced', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(
-      await screen.findByRole('button', { name: 'Activate' }),
-    )
-
-    const dialog = await screen.findByRole('dialog', {
-      name: /activate master-v2/i,
-    })
-    // The maintainer must see what they are displacing before confirming.
-    expect(dialog).toHaveTextContent(/master-v1 will be replaced/i)
-    expect(dialog).toHaveTextContent(/past results stay reproducible/i)
-    expect(api.activateMasterVersion).not.toHaveBeenCalled()
-  })
-
-  it('activates only the confirmed version', async () => {
-    const user = userEvent.setup()
-    vi.mocked(api.activateMasterVersion).mockResolvedValue({
-      id: 'v2',
-      environment: 'development',
-      version_label: 'master-v2',
-      status: 'active',
-      activated_at: '2026-08-29T10:00:00+00:00',
-      activated_by: 'user-1',
-    })
-
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: 'Activate' }))
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', {
-        name: 'Activate',
-      }),
-    )
-
-    await waitFor(() => {
-      expect(api.activateMasterVersion).toHaveBeenCalledWith('v2')
-    })
-    expect(api.activateMasterVersion).toHaveBeenCalledTimes(1)
-  })
-
-  it('abandons activation on cancel', async () => {
-    const user = userEvent.setup()
-    renderPage()
-
-    await user.click(await screen.findByRole('button', { name: 'Activate' }))
-    await user.click(
-      within(await screen.findByRole('dialog')).getByRole('button', {
-        name: 'Cancel',
-      }),
-    )
-
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    })
-    expect(api.activateMasterVersion).not.toHaveBeenCalled()
-  })
-
-  it('offers no activate control for the version already active', async () => {
-    renderPage()
-
-    await screen.findByRole('heading', { name: /master-data versions/i })
-    // Only the draft can be activated.
-    expect(screen.getAllByRole('button', { name: 'Activate' })).toHaveLength(1)
-  })
-})
-
-describe('maintained-data editors that are not built', () => {
-  it('shows them as planned rather than offering controls that would fail', async () => {
+  it('shows unbuilt editors as planned rather than as controls that would fail', async () => {
     freshWorkspace()
     renderPage()
 
-    await screen.findByRole('heading', { name: 'Maintained data & rules' })
+    await screen.findByRole('heading', { name: 'Maintained data' })
 
     for (const title of [
-      'Items & item policies',
+      'Items and policies',
       'Menu calendar',
       'Bill of materials',
     ]) {
-      expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
-    }
-    for (const button of screen.getAllByRole('button', {
-      name: /not available yet/i,
-    })) {
-      expect(button).toBeDisabled()
+      const heading = screen.getByRole('heading', { name: title })
+      expect(heading).toBeInTheDocument()
+      // No control at all beats a disabled one that implies it might work.
+      expect(
+        within(heading.closest('div')?.parentElement ?? document.body).queryByRole(
+          'button',
+        ),
+      ).not.toBeInTheDocument()
     }
   })
 })
