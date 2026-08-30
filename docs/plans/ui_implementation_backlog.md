@@ -672,7 +672,13 @@ backend path. None of these blocks WP0–WP5.
    duplicate submission, but a client-supplied idempotency key (or the
    deterministic `run_id` returning the existing run) would make retry after a
    dropped connection safe. Master backlog 2E already carries this item.
-4. **`GET /planning-runs/{run_id}` always returns all `projection_days`.** For
+4. **No historical daily balance is persisted.** `planning_projection_days`
+   starts at the run date, so the item chart cannot show any context before it.
+   `inventory_snapshots` holds a sparse per-import count, which would mislead if
+   drawn as one series alongside a projection. A stored daily actual-balance
+   series, or an endpoint returning past snapshots as discrete points, would let
+   the chart show where stock has actually been.
+5. **`GET /planning-runs/{run_id}` always returns all `projection_days`.** For
    many items over a long horizon this payload grows without bound. A
    `?include=` parameter, or a separate
    `/planning-runs/{run_id}/projections?item_id=` endpoint, would let the UI

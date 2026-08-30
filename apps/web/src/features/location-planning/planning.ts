@@ -68,6 +68,36 @@ export function riskLevel(row: NettingResult): RiskLevel {
   return row.first_stockout_date === null ? 'ok' : 'stockout'
 }
 
+/**
+ * Whole days from the start of the projection until the item first hits zero,
+ * counting deliveries already on order.
+ *
+ * Both dates are engine output; this only subtracts them so the table can say
+ * "runs out in 12 days" instead of making the reader do date arithmetic.
+ * Returns null when the engine projects no stockout.
+ */
+export function daysOfCover(row: NettingResult): number | null {
+  if (row.first_stockout_date === null) {
+    return null
+  }
+  const start = Date.parse(`${row.projection_start_date}T00:00:00Z`)
+  const stockout = Date.parse(`${row.first_stockout_date}T00:00:00Z`)
+  if (Number.isNaN(start) || Number.isNaN(stockout)) {
+    return null
+  }
+  return Math.max(0, Math.round((stockout - start) / 86_400_000))
+}
+
+/** Inclusive length of the projection window, in days. */
+export function horizonDays(row: NettingResult): number | null {
+  const start = Date.parse(`${row.projection_start_date}T00:00:00Z`)
+  const end = Date.parse(`${row.projection_end_date}T00:00:00Z`)
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return null
+  }
+  return Math.round((end - start) / 86_400_000) + 1
+}
+
 const RISK_ORDER: Record<RiskLevel, number> = {
   unavoidable: 0,
   stockout: 1,

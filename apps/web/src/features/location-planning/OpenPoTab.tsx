@@ -10,8 +10,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Toggle } from '@/components/ui/toggle'
-import { formatDate, formatQuantity } from '@/lib/formatting'
-import type { PurchaseOrdersResponse } from '@/lib/types'
+import {
+  formatCount,
+  formatDate,
+  formatGrams,
+  formatQuantity,
+  toNumber,
+} from '@/lib/formatting'
+import type { InventoryResponse, PurchaseOrdersResponse } from '@/lib/types'
 
 /**
  * Observed supplier lines, read from imported PDFs.
@@ -20,12 +26,37 @@ import type { PurchaseOrdersResponse } from '@/lib/types'
  * exported, not a live feed from the supplier portal. A line can be fulfilled,
  * cancelled or rescheduled without this view knowing.
  */
-export function OpenPoTab({ data }: { data: PurchaseOrdersResponse }) {
+export function OpenPoTab({
+  data,
+  inventory,
+}: {
+  data: PurchaseOrdersResponse
+  inventory: InventoryResponse | null
+}) {
   const [openOnly, setOpenOnly] = useState(true)
 
   const lines = data.lines.filter(
     (line) => !openOnly || line.derived_status === 'open',
   )
+
+  // `open_qty_units` counts packs, and the engine converts with
+  // `open_qty_units * pack_size_g` (netting.py). The same pack size is applied
+  // here so the weight on screen matches what netting used. Only possible for
+  // a line matched to an item present in the stock snapshot.
+  const packSizes = new Map(
+    (inventory?.items ?? []).map((item) => [
+      item.item_id,
+      toNumber(item.pack_size_g),
+    ]),
+  )
+
+  function weightOf(itemId: string | null, packs: number | null): string | null {
+    if (itemId === null || packs === null) {
+      return null
+    }
+    const packSize = packSizes.get(itemId) ?? null
+    return packSize === null ? null : formatGrams(packs * packSize)
+  }
 
   return (
     <div className="space-y-3">
@@ -36,8 +67,8 @@ export function OpenPoTab({ data }: { data: PurchaseOrdersResponse }) {
 
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {data.summary.document_count} documents ·{' '}
-          {data.summary.open_line_count} open lines
+          {formatCount(data.summary.document_count, 'document')} ·{' '}
+          {formatCount(data.summary.open_line_count, 'open line')}
           {data.summary.unmapped_line_count > 0 &&
             ` · ${String(data.summary.unmapped_line_count)} unmatched`}
         </p>
@@ -87,7 +118,18 @@ export function OpenPoTab({ data }: { data: PurchaseOrdersResponse }) {
                     )}
                   </TableCell>
                   <TableCell className="text-right tabular">
-                    {formatQuantity(line.open_qty_units, 'units')}
+                    {formatQuantity(line.open_qty_units, 'packs')}
+                    {(() => {
+                      const weight = weightOf(
+                        line.item_id,
+                        toNumber(line.open_qty_units),
+                      )
+                      return weight === null ? null : (
+                        <span className="block text-xs text-muted-foreground">
+                          {weight}
+                        </span>
+                      )
+                    })()}
                   </TableCell>
                   <TableCell>
                     {line.mapping_status === 'mapped' ? (

@@ -9,8 +9,10 @@ import type {
 } from '@/lib/types'
 import {
   byRisk,
+  daysOfCover,
   derivationSteps,
   exceptionsForLine,
+  horizonDays,
   riskLevel,
   runCurrency,
 } from './planning'
@@ -149,6 +151,38 @@ describe('item risk', () => {
       'late',
       'ok',
     ])
+  })
+})
+
+describe('how long stock lasts', () => {
+  it('counts days from the projection start to the engine stockout date', () => {
+    // Both dates are engine output; this only subtracts them so the reader
+    // does not have to do date arithmetic in their head.
+    expect(
+      daysOfCover(
+        netting({
+          projection_start_date: '2026-08-30',
+          first_stockout_date: '2026-09-11',
+        }),
+      ),
+    ).toBe(12)
+  })
+
+  it('has no answer when the engine projects no stockout', () => {
+    expect(daysOfCover(netting({ first_stockout_date: null }))).toBeNull()
+  })
+
+  it('reports the inclusive length of the projection window', () => {
+    // 30 Aug to 11 Oct inclusive is 43 days, which is the window every number
+    // in the risk table refers to.
+    expect(
+      horizonDays(
+        netting({
+          projection_start_date: '2026-08-30',
+          projection_end_date: '2026-10-11',
+        }),
+      ),
+    ).toBe(43)
   })
 })
 

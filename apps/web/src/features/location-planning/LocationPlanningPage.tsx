@@ -222,6 +222,7 @@ export function LocationPlanningPage() {
             <RiskStockTab
               netting={result.netting_results}
               projections={result.projection_days}
+              lines={result.planning_lines}
               inventory={inventoryData}
             />
           </TabsContent>
@@ -239,7 +240,10 @@ export function LocationPlanningPage() {
                 />
               )
             ) : purchaseOrders.state.status === 'success' ? (
-              <OpenPoTab data={purchaseOrders.state.data} />
+              <OpenPoTab
+                data={purchaseOrders.state.data}
+                inventory={inventoryData}
+              />
             ) : (
               <LoadingState label="Loading supplier documents" />
             )}

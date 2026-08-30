@@ -234,6 +234,29 @@ Use three secondary tabs or segmented views within this page:
 
 #### A. Risk & stock (default)
 
+**Every quantity in this view must name its time window.** Maintainer review on
+2026-08-30 found the table unreadable without it, because two different windows
+are in play and the numbers look inconsistent when neither is stated:
+
+| Value | Source | Window |
+|---|---|---|
+| Demand, closing balance, first stockout | `planning_netting_results` | `projection_start_date` → `projection_end_date`, the whole projection |
+| Requirement, caps, proposed quantity | `planning_lines` | `coverage_start_date` → `coverage_end_date`, the order coverage window |
+
+`ending_projected_balance_g` additionally assumes **only the candidate receipt
+this run proposes** and nothing ordered after it. Shown without that caveat it
+reads as a forecast shortfall rather than an artefact of a single-delivery
+projection.
+
+Shelf life never reduces demand. `recommend.py` applies it as a cap on the
+order quantity (`min(capped, shelf_life_cap_g)`), so the UI must not imply that
+a short shelf life lowers what is needed.
+
+Each row expands in place to show that item's daily projected balance from
+`planning_projection_days`, with the zero crossing, deliveries already on order,
+and the delivery this run proposes all marked and named in text. Historical
+balance before the run date is not available: no daily history is persisted.
+
 - summary counts for stockout risk, unavoidable pre-arrival risk, overdue open
   POs, and shelf/max-cover attention;
 - an item table with item, storage class, usable stock, expected PO receipts,

@@ -469,3 +469,78 @@ Two defects found by verifying rather than by tests:
 - Raw ISO dates in the drawer footer.
 
 Next: WP5 (Overview), then WP6 (states, accessibility, responsive, handoff).
+
+## Risk & stock rebuilt after maintainer review (2026-08-30)
+
+Feedback, and what it exposed.
+
+### The horizon was never stated — a real defect
+
+The risk table read "in stock 2 kg, needed 42 kg, on order 2 kg" with no time
+frame, and the numbers looked mutually inconsistent because **they answer
+different windows**:
+
+- `netting_results.gross_requirement_g` (42 kg) covers
+  `projection_start_date -> projection_end_date`, the **whole projection**
+  (30 Aug -> 11 Oct, 43 days in the demo run).
+- `planning_lines.gross_requirement_g` (9 kg) covers
+  `coverage_start_date -> coverage_end_date`, the **order coverage window**
+  (10 protection days).
+- `ending_projected_balance_g` (-31 kg) is the balance at the end of the
+  projection **assuming only the one candidate receipt** this run proposes.
+
+The table now states the window once above it, adds a "Lasts N days" column,
+and moves the closing balance into the expanded detail with the assumption
+spelled out. Verified against the live run before changing anything.
+
+### Shelf life does not reduce what is needed
+
+Asked directly, so recorded: `recommend.py:99-123` applies shelf life as
+`capped = min(capped, shelf_life_cap_g)`. It limits **how much may be ordered
+at once**, and never shrinks the requirement. Said in plain words in the
+expanded row.
+
+### The chart existed but was unreachable
+
+It was inside a Sheet on the Risk & stock row, and the maintainer clicked a
+Proposals row. Now the risk row expands in place with the chart inline. That is
+also what they asked for, so the two converged.
+
+Rebuilt on **Recharts** via shadcn `chart` rather than the earlier hand-drawn
+SVG, since it now needs an axis, reference lines and a tooltip — at that point
+it is a real chart and the `circus-ui` stack applies. Per `dataviz`: one series
+so no legend box, status colour reserved for the zero line, and both the
+stockout and the delivery markers stated in text as well as colour.
+
+- solid red line at zero, labelled "Empty"
+- dashed red vertical at `first_stockout_date`
+- dotted blue verticals where `open_po_receipts_g > 0` (already on order)
+- dotted green verticals where `candidate_receipts_g > 0` (proposed delivery)
+
+### One ingredient view, not two
+
+The maintainer asked for an additional tab listing every planned ingredient
+with a per-ingredient stock chart. That is the same item set the Risk & stock
+tab already covers — `netting_results` has one row per planned item — so it was
+built into that tab instead of a fourth one. Flagged for confirmation.
+
+### Not possible from persisted data
+
+"A bit into the past" for context. `planning_projection_days` starts at the run
+date; no historical daily balance is stored. `inventory_snapshots` gives sparse
+per-import counts, which would be misleading if drawn as one series with a
+projection. Logged as a contract observation rather than faked.
+
+### On order now shows weight
+
+`open_qty_units` counts **packs**, and `netting.py:245` converts with
+`open_qty_units * pack_size_g`. The tab applies the same pack size from the
+stock snapshot, so the weight on screen matches what netting used — confirmed
+against the demo run's `open_po_due_g` of 2000 g.
+
+### Process note
+
+An `apps/web/src/features/location-planning/NOTES.md` was created and then
+removed. `AGENTS.md` already designates `docs/scratchpads/` for cross-session
+notes and `docs/descriptions/` for behaviour — a new location beside the code
+fragments that. Keep frontend notes here.
