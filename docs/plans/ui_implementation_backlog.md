@@ -540,6 +540,11 @@ handing back nothing.
 - [x] `MasterVersionList` with a confirmation dialog that names the version
       being replaced and states that past runs stay reproducible; activation
       errors surface the server's conflict message.
+- [ ] Surface master activation as the final action inside Step 1: show **Draft
+      ready**, provide **Activate master data and continue** beside the accepted
+      upload, change the state to **Active** afterward, and make Step 2's blocker
+      link or move focus to that action. Keep version history below for audit and
+      replacement rather than making it the only place to continue.
 - [x] `PlannedFeatureCard` placeholders for item/policy, menu and BOM editing,
       visibly disabled with the reason each is deferred.
 - [x] Copy stating uploading never runs planning and never activates a draft
@@ -562,28 +567,50 @@ so the upload button could never enable. The card now owns it.
 
 ### WP4 — Location planning  → master backlog 2E (remaining bullets)
 
-- [ ] Page scaffold, location selector, `?tab=` URL state, active/inactive and
-      unknown-location route handling.
-- [ ] `FreshnessStrip` from `planning-status`, each chip linking to its card.
-- [ ] `BlockerList` + disabled run button with the returned reason as visible
-      text.
-- [ ] `RunAction` state machine with duplicate-submit prevention, long-run
-      messaging, `aria-live` completion announcement, and blocked/failed
-      persisted-run rendering.
-- [ ] `RiskStockTable` from `netting_results` + `/inventory`, with the 404
-      "no accepted stock import" empty state, filters, and severity.
-- [ ] `ItemProjectionDrawer` charting `projection_days` for one item only.
-- [ ] `OpenPoTable` from `/purchase-orders` with the permanent PDF-derived
-      caveat, filters, quarantined/mapping states, and its own 404 empty state.
-- [ ] `RecommendationTable` with run metadata, filters, and proposal labelling
-      on every surface.
-- [ ] `DerivationDrawer` — the waterfall in §3.4, provenance per row, binding
-      caps and MOQ inflation called out.
-- [ ] `DownloadActions` — authenticated blob download for CSV and JSON.
-- [ ] Tests: run button disabled with reason when blocked; double click
-      produces one request; completed run renders recommendations with the
-      proposal label; derivation values are read from the payload, not
-      recomputed; download sends the bearer header.
+> **Complete and verified 2026-08-30.** `pnpm check` passes with 101 tests, and
+> a real scenario run was computed end to end against the live API.
+
+- [x] Page scaffold, location selector, `?tab=` URL state so Overview can deep
+      link and a refresh keeps the view, and the no-location case falling back
+      to the chooser.
+- [x] `FreshnessStrip` — master version, forecast horizon, stock age, order
+      import age and run currency on one line, each source showing how old it
+      is rather than only that it exists.
+- [x] `BlockerList` plus a disabled run button whose reason is visible text,
+      not a tooltip on a control that cannot be focused.
+- [x] `RunAction` with duplicate-submit prevention, "this can take a while,
+      keep the tab open" while running, an `aria-live` announcement, and a
+      persisted blocked/failed run rendered rather than treated as an error.
+- [x] `RiskStockTab` from `netting_results`, sorted worst-first, with an
+      at-risk filter and a row drawer carrying the projected-balance chart.
+- [x] `ItemProjectionChart` drawn for the opened item only — the run payload
+      carries every item across every horizon day.
+- [x] `OpenPoTab` with the permanent "read from imported PDFs, not confirmed by
+      the supplier" caveat, an open-only filter, undated lines called out, and
+      a 404 rendered as "never imported" rather than as an error.
+- [x] `RecommendationTab` with run id, proposal count, and a closing line
+      stating that placing an order happens elsewhere.
+- [x] `DerivationDrawer` — the full chain in the order the engine applies it,
+      provenance on the policy-derived inputs, absent caps shown as "none"
+      rather than zero, and the engine's own exceptions quoted underneath.
+- [x] CSV and JSON downloads through the authenticated blob path.
+- [x] Tests (19): the pure risk and derivation logic including a line whose
+      numbers deliberately do not add up, plus page behaviour for blocked runs,
+      duplicate submission, staleness, the drawer, the purchase-order empty
+      state, and the absence of any approve/send/place-order control.
+
+**The boundary that shaped this:** the derivation drawer never recomputes.
+Every number is a stored field, and the claim that a cap bound or an order was
+inflated to a minimum comes from the engine's own `planning_exceptions`, not
+from a comparison made in the browser. A test feeds a line whose fields are
+mutually inconsistent and asserts the UI still shows what the engine stored — if
+those ever disagree the bug is in the engine, and quietly reconciling it here
+would hide it.
+
+**Found while verifying live:** while the last run was being fetched the page
+said "No result yet", which on a slow load could push a maintainer into starting
+a second synchronous calculation. Loading, failed-to-load and genuinely-absent
+are now three distinct states.
 
 ### WP5 — Overview  → master backlog 2F (remaining bullets)
 
@@ -673,6 +700,18 @@ backend logic:
 ---
 
 ## 8. Dated progress
+
+- 2026-08-30 — **WP4 complete and verified live.** Signed in against the real
+  API, computed a scenario run for `LOC_UI_DEMO_001` from Codex's test packet,
+  and confirmed the whole page against real persisted data: freshness strip,
+  risk table (1 of 1 items runs out, first stockout 11 Sep, ends at −31 kg),
+  proposals (7 order units from TRANSGOURMET), and the derivation drawer
+  showing the full chain with the engine's own rounding exception quoted.
+  Note the proposal is 7 units rather than the packet's documented 6: the run
+  used "now" as the cutoff instead of the packet's `2026-08-29T12:00:00+02:00`,
+  and the packet's README states a later cutoff legitimately changes the
+  result. Two defects found and fixed while verifying — a loading run reported
+  as "no result yet", and raw ISO dates in the drawer.
 
 - 2026-08-29 — Read the brief and all nine referenced sources; verified the API
   response shapes against `services.py` and migrations 001/002 rather than

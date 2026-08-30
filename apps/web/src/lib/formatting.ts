@@ -309,3 +309,9 @@ export function humanizeCode(value: string): string {
   const spaced = value.replace(/[_-]+/g, ' ').trim().toLowerCase()
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
 }
+
+/** A plain decimal without a unit, for use where the unit is a column header. */
+export function formatDecimalUnits(value: Numeric | null | undefined): string {
+  const parsed = toNumber(value)
+  return parsed === null ? NOT_AVAILABLE : formatDecimal(parsed, 2)
+}

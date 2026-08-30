@@ -106,15 +106,35 @@ describe('navigation', () => {
   })
 
   it('remembers the location the maintainer last opened', async () => {
-    fetchMock.mockImplementation(async (input) => {
+    // Each endpoint needs its own shape; one catch-all body would hand a page
+    // the wrong thing and fail this test for an unrelated reason.
+    fetchMock.mockImplementation((input) => {
       const url = String(input)
-      if (url.includes('/planning-status')) {
-        return new Response('{}', {
+      if (url.includes('/readiness')) {
+        return Promise.resolve(readinessResponse())
+      }
+      const body = url.includes('/locations/')
+        ? {
+            location_id: 'LOC_KOELN',
+            ready: false,
+            blockers: [],
+            sources: {
+              master_data_version: null,
+              planning_input: null,
+              stock: null,
+              purchase_orders: null,
+            },
+            latest_run: null,
+            latest_run_is_current: false,
+            proposal_only: true,
+          }
+        : { master_data_version_id: 'v1', locations: [] }
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
           status: 200,
           headers: { 'content-type': 'application/json' },
-        })
-      }
-      return readinessResponse()
+        }),
+      )
     })
 
     renderApp('/locations/LOC_KOELN')

@@ -431,3 +431,41 @@ Now: a draft shows **Draft ready** in the step 1 header and an
 version list below is the audit and replacement surface, not the way to
 continue. Blocked steps 2–4 render a **Go to step N** button that scrolls to
 and focuses the step that unblocks them.
+
+## WP4 done — Location planning (2026-08-30)
+
+Verified live: signed in, computed a scenario run for `LOC_UI_DEMO_001` from
+Codex's test packet, and read the result back. Real numbers throughout —
+1 of 1 items runs out, first stockout 11 Sep, ends at -31 kg, one proposal of
+7 order units from TRANSGOURMET, and the derivation drawer showing the full
+chain with the engine's own rounding exception quoted underneath.
+
+The proposal is 7 units, not the packet's documented 6. That is expected: the
+run used "now" as the cutoff rather than the packet's
+`2026-08-29T12:00:00+02:00`, and the README says a later cutoff legitimately
+changes PO status, coverage and the recommendation. Use the exact cutoff if the
+packet's oracle number needs reproducing.
+
+Decisions worth keeping (fuller notes in
+`apps/web/src/features/location-planning/NOTES.md`):
+
+- **The drawer never recomputes.** Every value is a stored field, and "a cap
+  bound" / "raised to the minimum" comes from `planning_exceptions`, never from
+  a browser-side comparison. A test feeds a deliberately inconsistent line to
+  hold that line.
+- The projection chart is hand-drawn SVG rather than the charting stack: one
+  series, no axes, no legend — only the zero crossing matters. Flagged as a
+  deliberate deviation from the skill's stack, revisit if it grows.
+- Tabs live in `?tab=`, so Overview can deep-link into a filtered view in WP5
+  and a refresh keeps the view.
+- Purchase orders load only when their tab is open; the run payload carries
+  every item's every horizon day, so the chart renders one item's rows only.
+
+Two defects found by verifying rather than by tests:
+
+- While the last run was being fetched the page said "No result yet". On a slow
+  load that could push someone into starting a second synchronous calculation.
+  Loading, failed-to-load and genuinely-absent are now distinct.
+- Raw ISO dates in the drawer footer.
+
+Next: WP5 (Overview), then WP6 (states, accessibility, responsive, handoff).
