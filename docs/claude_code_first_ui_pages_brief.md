@@ -206,6 +206,15 @@ shelf-life evidence is only potential attention/risk.
   explicit activate action. Field-level master/menu grid editing is a later
   separately scoped feature, so show a clear disabled/future state rather than
   inventing an API.
+- Treat activation as the final action within Step 1, not as a disconnected
+  maintenance task below the upload flow. After a successful upload, label the
+  result **Draft ready** and show a prominent **Activate master data and
+  continue** action directly in the Step 1 card. Once activated, label that
+  version **Active**. Keep the lower master-version list for audit/history and
+  replacement controls; when Step 2 is blocked on activation, its message
+  should link or move focus to the Step 1 action. Retain an explicit
+  confirmation before activation because it changes the item set, locations,
+  and rules used throughout the environment.
 
 Use the component structure proposed in section 11 of the journey document as
 a starting boundary, not as a requirement to build a generic design system.

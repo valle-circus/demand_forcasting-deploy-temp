@@ -338,7 +338,7 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
 | Supabase prototype store | Tables plus transaction/immutability migration and server repository implemented; migrations 001/002 reported applied, while 003 and live credential-based verification remain external steps |
 | Maintainer UI | Authenticated backend contract complete; React/Tailwind status shell and three-page journey/component plan exist, but domain pages are not implemented |
-| Current repository check | 65 Python tests pass; focused new-backend Ruff/strict-mypy checks pass; frontend lint/type/build passes |
+| Current repository check | 70 Python tests pass; focused new-backend Ruff/strict-mypy checks pass; frontend `pnpm check` passes with 82 tests |
 
 ## Source of truth for local V1
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
@@ -7,6 +8,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import __version__
 from .auth import IdentityVerifier, SupabaseIdentityVerifier
@@ -16,6 +18,38 @@ from .repository import CanonicalStore, SupabaseCanonicalStore
 from .routes import create_domain_router
 from .services import Backend, PlanningBackend
 from .supabase import ReadinessProbe, SupabaseReadinessProbe
+
+logger = logging.getLogger(__name__)
+
+
+class UnexpectedErrorBoundaryMiddleware:
+    """Return a sanitized error inside the CORS boundary for unexpected failures."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await self.app(scope, receive, send)
+        except Exception:
+            if scope["type"] != "http":
+                raise
+            logger.exception("Unhandled supply-planning API error")
+            response = JSONResponse(
+                status_code=500,
+                content={
+                    "error": {
+                        "code": "internal_error",
+                        "message": (
+                            "The planning service could not complete the request. "
+                            "Retry once; if it continues, ask the technical maintainer "
+                            "to inspect the API log."
+                        ),
+                        "details": {},
+                    }
+                },
+            )
+            await response(scope, receive, send)
 
 
 class HealthResponse(BaseModel):
@@ -59,6 +93,11 @@ def create_app(
             "It does not place supplier orders."
         ),
     )
+    # Keep the unexpected-error boundary inside CORS. Starlette's own server
+    # error middleware is outside user middleware, so without this ordering an
+    # escaped exception can be reported by browsers as a misleading CORS
+    # failure instead of a readable sanitized 500 response.
+    application.add_middleware(UnexpectedErrorBoundaryMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=list(resolved_settings.cors_origins),

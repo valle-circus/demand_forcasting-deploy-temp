@@ -55,6 +55,11 @@ class _RouteBackend:
         }
 
 
+class _FailingRouteBackend(_RouteBackend):
+    async def overview(self) -> dict[str, object]:
+        raise RuntimeError("private diagnostic detail")
+
+
 class ApiDomainTests(unittest.IsolatedAsyncioTestCase):
     def _settings(self) -> Settings:
         return Settings.model_validate(
@@ -149,6 +154,35 @@ class ApiDomainTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(422, response.status_code)
         self.assertEqual("validation_failed", response.json()["error"]["code"])
         self.assertIsNone(backend.upload_path)
+
+    async def test_unexpected_error_is_sanitized_and_keeps_cors_header(self) -> None:
+        backend = _FailingRouteBackend()
+        verifier = _Verifier()
+        with self.assertLogs(
+            "apps.api.supply_planning_api.main",
+            level="ERROR",
+        ) as captured:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(
+                    app=self._app(backend, verifier),
+                    raise_app_exceptions=False,
+                ),
+                base_url="http://test",
+                headers={
+                    "Authorization": "Bearer valid-token",
+                    "Origin": "http://localhost:5173",
+                },
+            ) as client:
+                response = await client.get("/api/v1/overview")
+
+        self.assertEqual(500, response.status_code)
+        self.assertIn("Unhandled supply-planning API error", captured.output[0])
+        self.assertEqual("internal_error", response.json()["error"]["code"])
+        self.assertNotIn("private diagnostic detail", response.text)
+        self.assertEqual(
+            "http://localhost:5173",
+            response.headers["access-control-allow-origin"],
+        )
 
 
 if __name__ == "__main__":

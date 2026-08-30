@@ -33,11 +33,15 @@ def read_validated_sheet_rows(
                 f"{path} sheet {sheet_name}: headers changed after validation; upload again"
             )
         rows: list[dict[str, Any]] = []
-        for row_number in range(2, sheet.max_row + 1):
-            values = tuple(
-                sheet.cell(row_number, column).value
-                for column in range(1, len(headers) + 1)
-            )
+        # The worksheet dimension is optional XLSX metadata. Some valid
+        # producers omit it, which leaves ``max_row`` as ``None`` in openpyxl
+        # read-only mode even though row data is available. Consume the row
+        # stream instead of treating that optimization hint as authoritative.
+        for values in sheet.iter_rows(
+            min_row=2,
+            max_col=len(headers),
+            values_only=True,
+        ):
             if not any(value not in (None, "") for value in values):
                 continue
             rows.append(dict(zip(headers, values, strict=True)))

@@ -3,16 +3,19 @@ from __future__ import annotations
 import hashlib
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
+from unittest.mock import patch
 
 from openpyxl import Workbook  # type: ignore[import-untyped]
 
 from apps.api.supply_planning_api.auth import AuthenticatedUser
 from apps.api.supply_planning_api.config import Settings
 from apps.api.supply_planning_api.repository import CanonicalStore, JsonObject, SchemaState
-from apps.api.supply_planning_api.services import PlanningBackend
+from apps.api.supply_planning_api.services import PlanningBackend, _date_value
+from apps.api.supply_planning_api.source_rows import read_validated_sheet_rows
 from apps.api.supply_planning_api.uploads import SavedUpload
 from supply_planning.adapters.template_xlsx import (
     DELIVERY_HEADERS,
@@ -183,6 +186,64 @@ class BackendImportServiceTests(unittest.IsolatedAsyncioTestCase):
             store.master_payload["source_import"]["id"],
             store.master_payload["master_data_version"]["source_import_id"],
         )
+
+
+class ValidatedSourceRowTests(unittest.TestCase):
+    def test_excel_midnight_datetime_is_normalized_to_service_date(self) -> None:
+        self.assertEqual(
+            date(2026, 8, 31),
+            _date_value(datetime(2026, 8, 31, 0, 0)),
+        )
+
+    def test_reads_rows_when_optional_worksheet_dimension_is_absent(self) -> None:
+        headers = ("item_id", "item_name")
+
+        class DimensionlessSheet:
+            @property
+            def max_row(self) -> int:
+                raise AssertionError("source-row reading must not require max_row")
+
+            def cell(self, row: int, column: int) -> SimpleNamespace:
+                value = headers[column - 1] if row == 1 else None
+                return SimpleNamespace(value=value)
+
+            def iter_rows(
+                self,
+                *,
+                min_row: int,
+                max_col: int,
+                values_only: bool,
+            ) -> tuple[tuple[object, ...], ...]:
+                self.assert_iter_arguments(min_row, max_col, values_only)
+                return (("ITEM_1", "Test item"),)
+
+            @staticmethod
+            def assert_iter_arguments(
+                min_row: int,
+                max_col: int,
+                values_only: bool,
+            ) -> None:
+                if (min_row, max_col, values_only) != (2, len(headers), True):
+                    raise AssertionError("unexpected worksheet iteration contract")
+
+        class DimensionlessWorkbook:
+            sheetnames = ["Items"]
+
+            def __getitem__(self, name: str) -> DimensionlessSheet:
+                if name != "Items":
+                    raise KeyError(name)
+                return DimensionlessSheet()
+
+            def close(self) -> None:
+                return None
+
+        with patch(
+            "apps.api.supply_planning_api.source_rows.load_workbook",
+            return_value=DimensionlessWorkbook(),
+        ):
+            rows = read_validated_sheet_rows(Path("dimensionless.xlsx"), "Items", headers)
+
+        self.assertEqual(({"item_id": "ITEM_1", "item_name": "Test item"},), rows)
 
 
 if __name__ == "__main__":

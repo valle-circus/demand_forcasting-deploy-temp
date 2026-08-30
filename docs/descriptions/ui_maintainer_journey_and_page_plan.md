@@ -338,6 +338,10 @@ validation.
 Accepted imports do not overwrite audit history and do not automatically
 activate a master draft or trigger a plan. Stock is replacement-by-new-snapshot;
 PO PDFs are cumulative/deduplicated; master/planning workbooks create versions.
+Because activation is the required completion of Step 1, a newly imported
+master draft must expose an inline **Activate master data and continue** action
+in the Step 1 card. The separate version list remains the audit/history surface;
+Step 2's blocked state should link or move focus back to the inline action.
 
 ### 7.4 Maintained-data workflow
 

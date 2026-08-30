@@ -53,7 +53,12 @@ not a task log or a replacement for the detailed engineering brief.
   upload packet under
   `outputs/01a043ce-e551-7492-b41a-bee3c09a1d99/ui_test_packet/` exercises all
   four source groups and replays to one 6-pack scenario proposal; it is not
-  production seed data. Verification: 67 Python tests, focused Ruff/mypy, and
+  production seed data. Valid XLSX inputs without optional worksheet-dimension
+  metadata are accepted by both stock and API audit readers; Excel midnight
+  datetimes in date-only planning fields are normalized; and unexpected API
+  failures retain sanitized CORS-enabled error responses. The first connected
+  master upload and activation succeeded. Verification: 70 Python tests,
+  focused Ruff/mypy, and
   the frontend `pnpm check` with 82 tests pass. The first remote write journey
   with that packet remains a maintainer-run development smoke test. Status:
   `active`.

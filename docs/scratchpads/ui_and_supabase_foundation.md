@@ -123,7 +123,7 @@
   locations/readiness, inventory, observed PO history, master activation,
   planning run/result/risk, Overview, and CSV/JSON endpoints. The complete
   calculation output, including daily projections, is persisted by one RPC.
-- Backend verification now passes all 65 Python tests plus focused Ruff and
+- Backend verification now passes all 70 Python tests plus focused Ruff and
   strict mypy. OpenAPI generation confirms every expected `/api/v1` route.
 - Root server credentials and an admin-created Auth user are configured for the
   development project. Claude verified the authenticated browser -> FastAPI
@@ -135,8 +135,23 @@
   `2026-08-29T12:00:00+02:00` completes with one 6-pack proposal.
 - The packet exposed a valid-XLSX compatibility edge: some producers omit
   optional worksheet dimension metadata, leaving `max_row=None` in openpyxl
-  read-only mode. The Apicbase adapter now iterates populated rows instead of
-  relying on that optional metadata.
+  read-only mode. Both the Apicbase adapter and the API's post-validation audit
+  row reader now iterate populated rows instead of relying on that optional
+  metadata. The first browser upload exposed the second occurrence after the
+  authoritative template validation had already passed.
+- Unexpected API exceptions are converted to a sanitized `internal_error`
+  response inside the configured CORS boundary. This prevents browsers from
+  masking a server failure as a misleading CORS rejection while keeping stack
+  traces and upstream details out of planner-facing responses.
+- The first connected master workbook upload and explicit activation succeeded.
+  Its UX exposed that activation is easy to miss when available only in the
+  lower version-history section; the frontend handover now requires an inline
+  **Activate master data and continue** action in Step 1.
+- The next connected planning-workbook upload exposed that Excel date cells may
+  reach the API audit-row reader as midnight `datetime` values. Date-only
+  canonical fields now normalize that representation before joining parsed and
+  source rows; the exact demo packet reaches persistence preparation with 42
+  forecast rows, 42 menu rows, and one BOM row.
 
 ## Open questions / unknowns
 

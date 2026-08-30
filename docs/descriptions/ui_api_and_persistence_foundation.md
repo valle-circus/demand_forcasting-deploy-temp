@@ -61,6 +61,9 @@ the root Python package. Vercel uses `apps/web` as its project root.
 - `GET /docs` exposes the generated OpenAPI documentation.
 - CORS origins are explicit environment configuration; no wildcard origin is
   used with credentials.
+- Unexpected HTTP failures are logged server-side and returned inside the CORS
+  boundary as a sanitized `internal_error` envelope. Browser clients therefore
+  do not misreport an escaped backend exception as a CORS configuration error.
 - Every other `/api/v1` route requires a Supabase access token. In this private
   prototype, any valid project user is a maintainer; role tiers are deferred.
 - `routes.py` exposes the identity, location, Overview, imports, master-version
@@ -166,6 +169,12 @@ persist accepted normalized source versions, and delete temporary files
 afterward. A later planning-run request references those visible accepted
 versions plus its deterministic cutoff; it does not carry a second hidden set
 of files.
+
+XLSX worksheet-dimension metadata is treated as optional. Both validation and
+the post-validation audit-row reader stream worksheet rows, so valid workbooks
+from producers that omit the dimension hint remain importable. Excel midnight
+`datetime` values in date-only planning fields are normalized to calendar dates
+before canonical rows are assembled.
 
 Raw upload retention is off by default. If audit/replay requirements later
 justify retention, add an approved retention period and private object-storage

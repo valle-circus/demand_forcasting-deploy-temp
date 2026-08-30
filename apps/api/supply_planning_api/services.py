@@ -161,7 +161,12 @@ def _decimal(value: Any) -> Decimal:
 
 
 def _date_value(value: Any) -> date:
-    if isinstance(value, date) and not isinstance(value, datetime):
+    # Excel date cells are commonly returned as midnight ``datetime`` values.
+    # Service dates are deliberately date-only, so normalize that representation
+    # before parsing strings from persisted API rows.
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
         return value
     return date.fromisoformat(str(value))
 
