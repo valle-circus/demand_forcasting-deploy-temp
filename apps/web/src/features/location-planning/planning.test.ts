@@ -9,12 +9,15 @@ import type {
 } from '@/lib/types'
 import {
   byRisk,
-  daysOfCover,
+  capBasisLabel,
+  constraintStatusPresentation,
   derivationSteps,
   exceptionsForLine,
-  horizonDays,
-  riskLevel,
+  needsAttention,
+  riskDisposition,
   runCurrency,
+  shelfLifeEvidence,
+  uncoveredDemandG,
 } from './planning'
 
 function netting(overrides: Partial<NettingResult> = {}): NettingResult {
@@ -36,6 +39,13 @@ function netting(overrides: Partial<NettingResult> = {}): NettingResult {
     minimum_projected_balance_g: 500,
     first_stockout_date: null,
     unavoidable_pre_candidate_stockout_g: 0,
+    risk_horizon_end_date: '2026-09-08',
+    risk_evaluated_through_date: '2026-09-08',
+    risk_horizon_fully_observed: true,
+    actionable_risk_status: 'covered',
+    first_stockout_within_horizon_date: null,
+    max_stockout_within_horizon_g: null,
+    projected_balance_at_risk_horizon_end_g: 500,
     ...overrides,
   }
 }
@@ -71,6 +81,15 @@ function line(overrides: Partial<PlanningLine> = {}): PlanningLine {
     proposed_order_units: 3,
     rounding_delta_g: 0,
     data_status: 'PROPOSAL',
+    rounding_direction: 'none',
+    candidate_expiry_date: null,
+    shelf_life_cap_basis: 'not_configured',
+    forecast_through_expiry: true,
+    projected_candidate_residual_at_expiry_g: 0,
+    max_cover_end_date: null,
+    forecast_through_max_cover: true,
+    binding_constraint: 'none',
+    constraint_status: 'feasible',
     ...overrides,
   }
 }
@@ -110,79 +129,166 @@ describe('run currency', () => {
 })
 
 describe('item risk', () => {
-  it('ranks an unfixable shortfall above a plain stockout', () => {
-    // Ordering now cannot fix a shortfall that lands before any delivery, so
-    // it is a different and worse problem.
+  it('takes the classification from the backend, not from a stockout date', () => {
+    // The v1 UI called any non-null first_stockout_date "at risk", which swept
+    // in shortages far beyond the item's own protection horizon and badly
+    // inflated the risk list. Only the explicit status decides now.
     expect(
-      riskLevel(
+      riskDisposition(netting({ actionable_risk_status: 'at_risk' })),
+    ).toBe('at_risk')
+    expect(riskDisposition(netting({ actionable_risk_status: 'covered' }))).toBe(
+      'covered',
+    )
+  })
+
+  it('calls a shortage beyond the decision window a later replan', () => {
+    // Covered for this decision, short afterwards. Real, but not today's job.
+    expect(
+      riskDisposition(
         netting({
-          first_stockout_date: '2026-09-01',
+          actionable_risk_status: 'covered',
+          first_stockout_date: '2026-10-02',
+        }),
+      ),
+    ).toBe('future_replan')
+  })
+
+  it('keeps incomplete evidence distinct from covered', () => {
+    // Reporting "not evaluated" as covered would claim safety nobody checked.
+    expect(
+      riskDisposition(netting({ actionable_risk_status: 'not_evaluated' })),
+    ).toBe('not_evaluated')
+  })
+
+  it('separates a shortfall that ordering cannot fix', () => {
+    expect(
+      riskDisposition(
+        netting({
+          actionable_risk_status: 'at_risk',
           unavoidable_pre_candidate_stockout_g: 300,
         }),
       ),
     ).toBe('unavoidable')
-    expect(riskLevel(netting({ first_stockout_date: '2026-09-01' }))).toBe(
-      'stockout',
-    )
-    expect(riskLevel(netting())).toBe('ok')
   })
 
   it('accepts a decimal string, as PostgREST may send one', () => {
     expect(
-      riskLevel(netting({ unavoidable_pre_candidate_stockout_g: '300.00' })),
+      riskDisposition(
+        netting({
+          actionable_risk_status: 'at_risk',
+          unavoidable_pre_candidate_stockout_g: '300.00',
+        }),
+      ),
     ).toBe('unavoidable')
   })
 
-  it('sorts worst first, then by earliest stockout', () => {
+  it('puts only current problems in the default filter', () => {
+    expect(needsAttention(netting({ actionable_risk_status: 'at_risk' }))).toBe(
+      true,
+    )
+    expect(
+      needsAttention(netting({ actionable_risk_status: 'not_evaluated' })),
+    ).toBe(true)
+    // A later replan must not inflate the attention count.
+    expect(
+      needsAttention(
+        netting({
+          actionable_risk_status: 'covered',
+          first_stockout_date: '2026-10-02',
+        }),
+      ),
+    ).toBe(false)
+  })
+
+  it('sorts worst first, then by earliest shortage in the window', () => {
     const rows = [
-      netting({ item_id: 'ok' }),
-      netting({ item_id: 'late', first_stockout_date: '2026-09-20' }),
-      netting({ item_id: 'early', first_stockout_date: '2026-09-02' }),
+      netting({ item_id: 'covered' }),
+      netting({
+        item_id: 'later',
+        actionable_risk_status: 'covered',
+        first_stockout_date: '2026-10-02',
+      }),
+      netting({ item_id: 'unknown', actionable_risk_status: 'not_evaluated' }),
+      netting({
+        item_id: 'soon',
+        actionable_risk_status: 'at_risk',
+        first_stockout_within_horizon_date: '2026-09-02',
+      }),
       netting({
         item_id: 'unfixable',
-        first_stockout_date: '2026-09-25',
+        actionable_risk_status: 'at_risk',
+        first_stockout_within_horizon_date: '2026-09-05',
         unavoidable_pre_candidate_stockout_g: 1,
       }),
     ]
 
     expect([...rows].sort(byRisk).map((row) => row.item_id)).toEqual([
       'unfixable',
-      'early',
-      'late',
-      'ok',
+      'soon',
+      'unknown',
+      'later',
+      'covered',
     ])
   })
 })
 
-describe('how long stock lasts', () => {
-  it('counts days from the projection start to the engine stockout date', () => {
-    // Both dates are engine output; this only subtracts them so the reader
-    // does not have to do date arithmetic in their head.
+describe('uncovered demand', () => {
+  it('reports a negative ending balance as unmet demand, not as stock', () => {
+    // You cannot hold minus 31 kg of pasta. The sign is a running backlog.
     expect(
-      daysOfCover(
-        netting({
-          projection_start_date: '2026-08-30',
-          first_stockout_date: '2026-09-11',
-        }),
-      ),
-    ).toBe(12)
+      uncoveredDemandG(netting({ ending_projected_balance_g: -31_000 })),
+    ).toBe(31_000)
   })
 
-  it('has no answer when the engine projects no stockout', () => {
-    expect(daysOfCover(netting({ first_stockout_date: null }))).toBeNull()
+  it('has nothing to report when demand is covered', () => {
+    expect(uncoveredDemandG(netting({ ending_projected_balance_g: 500 }))).toBeNull()
+  })
+})
+
+describe('shelf-life evidence', () => {
+  it('never presents a policy estimate as an exact expiry', () => {
+    const evidence = shelfLifeEvidence(
+      line({
+        candidate_expiry_date: '2026-09-20',
+        shelf_life_cap_basis: 'policy_approximation',
+      }),
+    )
+    expect(evidence.basis).toBe('policy_approximation')
+    expect(capBasisLabel(evidence.basis)).toMatch(/not from lot data/i)
   })
 
-  it('reports the inclusive length of the projection window', () => {
-    // 30 Aug to 11 Oct inclusive is 43 days, which is the window every number
-    // in the risk table refers to.
+  it('flags a forecast that does not reach the expiry', () => {
+    // Without coverage to that date the check is unproven, not passed.
     expect(
-      horizonDays(
-        netting({
-          projection_start_date: '2026-08-30',
-          projection_end_date: '2026-10-11',
+      shelfLifeEvidence(
+        line({
+          candidate_expiry_date: '2026-09-20',
+          forecast_through_expiry: false,
         }),
-      ),
-    ).toBe(43)
+      ).coverageIncomplete,
+    ).toBe(true)
+  })
+
+  it('surfaces a projected leftover at expiry', () => {
+    expect(
+      shelfLifeEvidence(
+        line({ projected_candidate_residual_at_expiry_g: 1200 }),
+      ).residualAtExpiryG,
+    ).toBe(1200)
+  })
+})
+
+describe('constraint outcome', () => {
+  it('distinguishes a reduced order from an impossible one', () => {
+    expect(constraintStatusPresentation('feasible').tone).toBe('ready')
+    expect(constraintStatusPresentation('reduced_to_safe_multiple').tone).toBe(
+      'warning',
+    )
+    // Nothing fits under the cap, so the engine proposes nothing and React
+    // must not manufacture a quantity.
+    expect(constraintStatusPresentation('no_safe_positive_order').tone).toBe(
+      'blocked',
+    )
   })
 })
 

@@ -35,6 +35,9 @@ export function RecommendationTab({
   const names = new Map(
     (inventory?.items ?? []).map((item) => [item.item_id, item.item_name]),
   )
+  const explanationByLine = new Map(
+    run.planning_line_explanations.map((entry) => [entry.planning_line_id, entry]),
+  )
   const lineById = new Map(
     run.planning_lines.map((line) => [line.planning_line_id, line]),
   )
@@ -146,6 +149,11 @@ export function RecommendationTab({
       <DerivationDrawer
         line={openLine}
         exceptions={run.exceptions}
+        explanation={
+          openLineId === null
+            ? null
+            : (explanationByLine.get(openLineId) ?? null)
+        }
         itemName={
           openLine === null
             ? ''

@@ -1,11 +1,14 @@
 import { toNumber } from '@/lib/formatting'
 import type {
+  BindingConstraint,
+  ConstraintStatus,
   NettingResult,
   PlanningException,
   PlanningLine,
   PlanningRun,
   PlanningStatusResponse,
   Provenance,
+  ShelfLifeCapBasis,
 } from '@/lib/types'
 
 /**
@@ -52,66 +55,85 @@ export function runStatusLabel(run: PlanningRun): string {
 // Item risk
 // ---------------------------------------------------------------------------
 
-export type RiskLevel = 'unavoidable' | 'stockout' | 'ok'
+/**
+ * What the maintainer should do about one item.
+ *
+ * Derived from the backend's `actionable_risk_status`, never from a stockout
+ * date. Before the v2 engine correction this was computed in the browser from
+ * `first_stockout_date`, which counted shortages far beyond the item's own
+ * protection horizon as current risk and badly inflated the risk list. Those
+ * later shortages are real, but they are the next planning cycle's problem.
+ */
+export type RiskDisposition =
+  | 'unavoidable'
+  | 'at_risk'
+  | 'not_evaluated'
+  | 'future_replan'
+  | 'covered'
+
+export function riskDisposition(row: NettingResult): RiskDisposition {
+  if (row.actionable_risk_status === 'at_risk') {
+    // A shortfall landing before any order placed now could arrive cannot be
+    // fixed by ordering, so it is called out separately.
+    return (toNumber(row.unavoidable_pre_candidate_stockout_g) ?? 0) > 0
+      ? 'unavoidable'
+      : 'at_risk'
+  }
+  if (row.actionable_risk_status === 'not_evaluated') {
+    // Incomplete evidence. Emphatically not the same as covered.
+    return 'not_evaluated'
+  }
+  // Covered through this decision's horizon, but the forecast runs short
+  // afterwards — expected to be handled by a later review, not now.
+  return row.first_stockout_date === null ? 'covered' : 'future_replan'
+}
 
 /**
- * Risk for one item, from the persisted netting summary.
+ * Demand left unmet at the end of the full forecast, in grams.
  *
- * `unavoidable` means the shortfall lands before any order placed now could
- * arrive — ordering cannot fix it, so it is worse than a plain projected
- * stockout and is ranked above it.
+ * `ending_projected_balance_g` goes negative to express a running backlog, not
+ * a physical quantity — you cannot hold minus 31 kg of pasta. This flips the
+ * sign so it can be labelled as what it is: demand nobody has ordered for yet,
+ * assuming no later planning cycle places an order. Returns null when the
+ * balance is non-negative, because then there is no backlog to report.
  */
-export function riskLevel(row: NettingResult): RiskLevel {
-  if ((toNumber(row.unavoidable_pre_candidate_stockout_g) ?? 0) > 0) {
-    return 'unavoidable'
-  }
-  return row.first_stockout_date === null ? 'ok' : 'stockout'
+export function uncoveredDemandG(row: NettingResult): number | null {
+  const balance = toNumber(row.ending_projected_balance_g)
+  return balance === null || balance >= 0 ? null : Math.abs(balance)
 }
 
-/**
- * Whole days from the start of the projection until the item first hits zero,
- * counting deliveries already on order.
- *
- * Both dates are engine output; this only subtracts them so the table can say
- * "runs out in 12 days" instead of making the reader do date arithmetic.
- * Returns null when the engine projects no stockout.
- */
-export function daysOfCover(row: NettingResult): number | null {
-  if (row.first_stockout_date === null) {
-    return null
-  }
-  const start = Date.parse(`${row.projection_start_date}T00:00:00Z`)
-  const stockout = Date.parse(`${row.first_stockout_date}T00:00:00Z`)
-  if (Number.isNaN(start) || Number.isNaN(stockout)) {
-    return null
-  }
-  return Math.max(0, Math.round((stockout - start) / 86_400_000))
+/** True for the dispositions that belong in the default "needs attention" filter. */
+export function needsAttention(row: NettingResult): boolean {
+  const disposition = riskDisposition(row)
+  return (
+    disposition === 'unavoidable' ||
+    disposition === 'at_risk' ||
+    disposition === 'not_evaluated'
+  )
 }
 
-/** Inclusive length of the projection window, in days. */
-export function horizonDays(row: NettingResult): number | null {
-  const start = Date.parse(`${row.projection_start_date}T00:00:00Z`)
-  const end = Date.parse(`${row.projection_end_date}T00:00:00Z`)
-  if (Number.isNaN(start) || Number.isNaN(end)) {
-    return null
-  }
-  return Math.round((end - start) / 86_400_000) + 1
-}
-
-const RISK_ORDER: Record<RiskLevel, number> = {
+const DISPOSITION_ORDER: Record<RiskDisposition, number> = {
   unavoidable: 0,
-  stockout: 1,
-  ok: 2,
+  at_risk: 1,
+  not_evaluated: 2,
+  future_replan: 3,
+  covered: 4,
 }
 
-/** Worst first, then earliest stockout, so the top row is the real problem. */
+/** Worst first, then earliest shortage inside the decision window. */
 export function byRisk(left: NettingResult, right: NettingResult): number {
-  const bySeverity = RISK_ORDER[riskLevel(left)] - RISK_ORDER[riskLevel(right)]
+  const bySeverity =
+    DISPOSITION_ORDER[riskDisposition(left)] -
+    DISPOSITION_ORDER[riskDisposition(right)]
   if (bySeverity !== 0) {
     return bySeverity
   }
-  const leftDate = left.first_stockout_date ?? '9999-12-31'
-  const rightDate = right.first_stockout_date ?? '9999-12-31'
+  const leftDate =
+    left.first_stockout_within_horizon_date ?? left.first_stockout_date ?? '9999-12-31'
+  const rightDate =
+    right.first_stockout_within_horizon_date ??
+    right.first_stockout_date ??
+    '9999-12-31'
   return leftDate.localeCompare(rightDate)
 }
 
@@ -245,6 +267,79 @@ export function exceptionsForLine(
   return exceptions.filter(
     (exception) => exception.planning_line_id === planningLineId,
   )
+}
+
+// ---------------------------------------------------------------------------
+// Shelf-life and constraint evidence
+// ---------------------------------------------------------------------------
+
+const CAP_BASIS_LABELS: Record<ShelfLifeCapBasis, string> = {
+  not_configured: 'No shelf life configured',
+  // A configured anchor plus shelf-life days. Never an exact lot MHD, and the
+  // wording must not let anyone read it as one.
+  policy_approximation: 'Estimated from the item policy, not from lot data',
+  exact_lot_expiry: 'From exact lot data',
+}
+
+export function capBasisLabel(basis: ShelfLifeCapBasis): string {
+  return CAP_BASIS_LABELS[basis] ?? basis
+}
+
+const BINDING_LABELS: Record<BindingConstraint, string> = {
+  none: 'Nothing limited this order',
+  shelf_life: 'Limited by shelf life',
+  max_cover: 'Limited by maximum cover',
+  shelf_life_and_max_cover: 'Limited by shelf life and maximum cover',
+}
+
+export function bindingConstraintLabel(constraint: BindingConstraint): string {
+  return BINDING_LABELS[constraint] ?? constraint
+}
+
+const CONSTRAINT_STATUS_LABELS: Record<
+  ConstraintStatus,
+  { label: string; tone: 'ready' | 'warning' | 'blocked' }
+> = {
+  feasible: { label: 'Safe to order', tone: 'ready' },
+  // A hard cap forced a smaller purchasable multiple than the raw need.
+  reduced_to_safe_multiple: { label: 'Reduced to a safe amount', tone: 'warning' },
+  // Pack sizes leave nothing that fits under the cap. There is no proposal.
+  no_safe_positive_order: { label: 'No safe order possible', tone: 'blocked' },
+}
+
+export function constraintStatusPresentation(status: ConstraintStatus): {
+  label: string
+  tone: 'ready' | 'warning' | 'blocked'
+} {
+  return (
+    CONSTRAINT_STATUS_LABELS[status] ?? { label: status, tone: 'warning' as const }
+  )
+}
+
+export interface ShelfLifeEvidence {
+  expiryDate: string | null
+  basis: ShelfLifeCapBasis
+  /** True when the forecast does not reach the candidate's expiry. */
+  coverageIncomplete: boolean
+  /** Above zero means some of the proposed delivery is projected to expire unused. */
+  residualAtExpiryG: number | null
+}
+
+/**
+ * What is known about whether the proposed delivery can be consumed in time.
+ *
+ * Read only. Feasibility is decided in Python; a residual above zero is the
+ * engine's own projection, not a browser estimate, and it is evidence of waste
+ * risk rather than a claim about actual waste.
+ */
+export function shelfLifeEvidence(line: PlanningLine): ShelfLifeEvidence {
+  return {
+    expiryDate: line.candidate_expiry_date,
+    basis: line.shelf_life_cap_basis,
+    coverageIncomplete:
+      line.candidate_expiry_date !== null && !line.forecast_through_expiry,
+    residualAtExpiryG: toNumber(line.projected_candidate_residual_at_expiry_g),
+  }
 }
 
 // ---------------------------------------------------------------------------

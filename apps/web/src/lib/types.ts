@@ -246,7 +246,59 @@ export interface PlanningLine {
   proposed_order_units: Numeric
   rounding_delta_g: Numeric
   data_status: string
+
+  // --- v2 shelf-life and constraint evidence -------------------------------
+  /** Which way pack/MOQ rounding moved the quantity. */
+  rounding_direction: RoundingDirection
+  /** When the proposed receipt is estimated to expire. */
+  candidate_expiry_date: IsoDate | null
+  /**
+   * How that expiry was established. `policy_approximation` is a configured
+   * anchor plus shelf-life days — it is **not** an exact lot MHD, and the UI
+   * must never present it as one.
+   */
+  shelf_life_cap_basis: ShelfLifeCapBasis
+  /** False when the forecast does not reach the candidate's expiry. */
+  forecast_through_expiry: boolean
+  /** Candidate quantity still on hand at expiry. Above zero implies waste risk. */
+  projected_candidate_residual_at_expiry_g: Numeric | null
+  max_cover_end_date: IsoDate | null
+  forecast_through_max_cover: boolean
+  binding_constraint: BindingConstraint
+  /**
+   * Whether a safe purchasable quantity exists. A hard cap may force a lower
+   * multiple, or leave no safe positive order at all.
+   */
+  constraint_status: ConstraintStatus
 }
+
+export type RoundingDirection = 'none' | 'up' | 'down'
+
+export type ShelfLifeCapBasis =
+  | 'not_configured'
+  | 'policy_approximation'
+  | 'exact_lot_expiry'
+
+export type BindingConstraint =
+  | 'none'
+  | 'shelf_life'
+  | 'max_cover'
+  | 'shelf_life_and_max_cover'
+
+export type ConstraintStatus =
+  | 'feasible'
+  | 'reduced_to_safe_multiple'
+  | 'no_safe_positive_order'
+
+/**
+ * Whether an item needs a decision **now**.
+ *
+ * This is the backend's classification against the item's own protection
+ * horizon. A shortage after that horizon is a later replan, not current risk,
+ * and `not_evaluated` means the evidence was incomplete — which is not the
+ * same as covered.
+ */
+export type ActionableRiskStatus = 'at_risk' | 'covered' | 'not_evaluated'
 
 export interface PlanningRecommendation {
   recommendation_id: string
@@ -289,8 +341,24 @@ export interface NettingResult {
   open_po_after_final_demand_g: Numeric
   ending_projected_balance_g: Numeric
   minimum_projected_balance_g: Numeric
+  /**
+   * First shortage anywhere in the uploaded forecast. Context only — a date
+   * after the protection horizon is a later replan, not current risk. Use
+   * `actionable_risk_status` for anything a maintainer must act on.
+   */
   first_stockout_date: IsoDate | null
   unavoidable_pre_candidate_stockout_g: Numeric
+
+  // --- v2 actionable risk ---------------------------------------------------
+  /** End of the item's own protection horizon: lead time plus review cadence. */
+  risk_horizon_end_date: IsoDate | null
+  /** How far the evidence actually reached, which may fall short of the above. */
+  risk_evaluated_through_date: IsoDate | null
+  risk_horizon_fully_observed: boolean
+  actionable_risk_status: ActionableRiskStatus
+  first_stockout_within_horizon_date: IsoDate | null
+  max_stockout_within_horizon_g: Numeric | null
+  projected_balance_at_risk_horizon_end_g: Numeric | null
 }
 
 export interface ProjectionDay {
@@ -310,7 +378,71 @@ export interface PlanningRunSummary {
   recommendation_count: number
   issue_count: number
   blocker_count: number
+  /** Items classified `at_risk` — needing a decision now. */
   items_at_risk: number
+  /** Items whose evidence was incomplete. Distinct from covered. */
+  items_risk_not_evaluated: number
+  /** Covered now, but short later in the forecast. Context, not risk. */
+  future_stockout_items: number
+}
+
+/**
+ * The active policy behind one planning line, joined from the immutable master
+ * version the run used. Supplied so the browser never has to infer lead time,
+ * review cadence, or shelf-life settings from calculation dates.
+ */
+export interface PlanningLineExplanation {
+  planning_line_id: string
+  item: {
+    item_id: string
+    item_name: string
+    storage_class: string
+    pack_size_g: Numeric
+    shelf_life_days: number | null
+    min_safety_days: Numeric | null
+    max_cover_days: Numeric | null
+  } | null
+  planning_policy: {
+    item_type: string
+    official_supplier: string | null
+    ordering_channel: string | null
+    supplier_id: string | null
+    supplier_article_number: string | null
+    packs_per_order_unit: Numeric | null
+    order_unit: string | null
+    lead_time_calendar_days: number | null
+    shelf_life_anchor: string | null
+    yield_factor: Numeric | null
+    moq_order_units: Numeric | null
+    case_multiple_order_units: Numeric | null
+    data_status: string | null
+    provenance: Provenance | null
+  } | null
+  delivery_rule: {
+    delivery_rule_id: string
+    ordering_channel: string | null
+    storage_class: string
+    delivery_weekday: number | null
+    covered_service_weekdays: number[]
+    order_weekday: number | null
+    review_period_days: number | null
+    effective_from: IsoDate
+    effective_to: IsoDate | null
+    data_status: string | null
+    provenance: Provenance | null
+  } | null
+  protection_mode: string | null
+  evidence_scope: Record<string, unknown>
+}
+
+/** Where each derived field came from, so the drawer can cite its sources. */
+export interface ExplanationContext {
+  calculation_owner: 'python_backend'
+  master_data_version_id: string | null
+  policy_version: string | null
+  code_version: string | null
+  field_lineage: Record<string, string[]>
+  daily_projection_fields: string[]
 }
 
 export interface PlanningRunResponse {
@@ -323,6 +455,8 @@ export interface PlanningRunResponse {
   netting_results: NettingResult[]
   /** Every item × every horizon day. Render lazily, per opened item only. */
   projection_days: ProjectionDay[]
+  planning_line_explanations: PlanningLineExplanation[]
+  explanation_context: ExplanationContext
   proposal_only: true
 }
 
@@ -445,18 +579,30 @@ export interface PurchaseOrdersResponse {
 export interface OverviewKpis {
   locations_ready: number
   locations_total: number
-  /** Only counted when the location's latest run is current. */
+  locations_at_risk: number
+  /** Backend-classified `at_risk`, counted only from a current run. */
   items_at_risk: number
-  /** Only counted when the location's latest run is current. */
+  /** Incomplete evidence. Never fold this into risk, or into zero risk. */
+  items_risk_not_evaluated: number
   recommendations_due: number
   blocking_issues: number
   open_purchase_order_lines: number
 }
 
+/**
+ * One row per location, complete. The backend supplies names, timezones,
+ * freshness and the earliest risk date, so Overview needs no per-location
+ * follow-up requests and computes no dates of its own.
+ */
 export interface OverviewLocationRow {
   location_id: string
+  location_name: string
+  timezone: string
   ready: boolean
   items_at_risk: number
+  items_risk_not_evaluated: number
+  earliest_risk_date: IsoDate | null
+  sources: PlanningStatusSources
   latest_run: PlanningRun | null
   latest_run_is_current: boolean
   blockers: PlanningBlocker[]

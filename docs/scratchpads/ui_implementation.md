@@ -633,3 +633,70 @@ fragments that. Keep frontend notes here.
   grounded Overview executive summary and one plain-language recommendation
   explanation. The model is presentation-only; persisted engine fields remain
   authoritative, and raw uploads/credentials are excluded from the prompt.
+
+## v2 backend adoption — semantics, not types (2026-08-31)
+
+Codex corrected the planning logic (`b5c819d`) and the change is **semantic**,
+not a type upgrade. Every affected label, filter, badge and test was reviewed.
+
+### What the browser must no longer decide
+
+Deleted, because their business meaning came from the wrong field:
+
+| Removed | Why | Replacement |
+|---|---|---|
+| `riskLevel()` | Called any non-null `first_stockout_date` "at risk", sweeping in shortages far past the item's own protection horizon | `riskDisposition()` reading `actionable_risk_status` |
+| `daysOfCover()` | Counted days to a full-forecast shortage, including zero-demand calendar days | **Covered through** `risk_horizon_end_date` |
+| `horizonDays()` | Described the full projection as if it were the decision window | The decision window is the planning line's `coverage_end_date` |
+
+### The five label changes that mattered
+
+- **Needed → To protect.** Now `planning_lines.gross_requirement_g`, the demand
+  this order must cover. Full-forecast demand is secondary context in the
+  expanded row.
+- **Lasts N days → Covered through <date>**, or "short from <date>" when the
+  shortage falls inside the decision window.
+- **Ending −31 kg → Uncovered demand … if no further orders are placed.** A
+  negative balance is a running backlog, not physical stock; `uncoveredDemandG`
+  flips the sign so it can be named for what it is.
+- **Runs out (later) → Replan later.** Covered now, short after the horizon.
+- **not_evaluated → "Not enough data"**, never folded into covered and never
+  counted as zero risk.
+
+### Verified live on a fresh v2 run (`improved-6e39406bde2f`)
+
+The same item that previously screamed "Runs out — at risk" now reads
+**"Replan later"** with *"All 1 ingredients are covered for this decision"* —
+because `actionable_risk_status = covered`, `first_stockout_within_horizon_date
+= null`, and the forecast shortage on 12 Sep falls after the 09 Sep horizon.
+`projected_balance_at_risk_horizon_end_g = 2000` matches Codex's documented
++2 kg oracle.
+
+Chart: defaults to the decision horizon with a display-only **Full forecast**
+toggle, straight daily segments (not a smoothed curve, which would imply a zero
+crossing on a day it never happened), receipts labelled **On order +2.0 kg** and
+**Proposed +8.0 kg**, and plotted stock floored at zero so a backlog is never
+drawn as negative stock.
+
+Drawer: shelf-life evidence (estimated expiry, leftover at expiry, and the
+`policy_approximation` caveat stated **inline**, never hover-only), constraint
+status and binding constraint when anything bound, and the policy context
+(lead time, review cadence, shelf life, max cover) from
+`planning_line_explanations`.
+
+### New: the definition layer
+
+`components/InfoHint.tsx` — a focusable, click-toggled popover for "what does
+this column mean and which window does it use". Deliberately limited to
+nice-to-know: required warnings, blockers, approximations and remedies are all
+rendered inline, because anyone who never opens a popover would otherwise miss
+them.
+
+### Not yet adopted
+
+`/overview` now returns the complete read model — `location_name`, `timezone`,
+`earliest_risk_date`, per-location `sources`, `locations_at_risk` and
+`items_risk_not_evaluated`. The types are in place, so **WP5 must consume it
+directly and must not fan out one `planning-status` call per location**, which
+was the earlier workaround. The contract observation asking for those fields is
+now resolved.

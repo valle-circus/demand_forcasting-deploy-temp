@@ -770,6 +770,20 @@ backend logic:
 
 ## 8. Dated progress
 
+- 2026-08-31 — **Adopted the v2 backend contract** (Codex `b5c819d`). Treated as
+  a semantic change, not a type upgrade. Deleted three TypeScript helpers whose
+  business meaning came from the wrong field — `riskLevel`, `daysOfCover`,
+  `horizonDays` — and rebuilt risk on the explicit `actionable_risk_status`.
+  Relabelled Needed → **To protect** (planning-line demand), Lasts →
+  **Covered through**, and the negative ending balance → **uncovered demand**.
+  Added shelf-life evidence, constraint status and policy context to the drawer,
+  a step-geometry chart with labelled receipts and a decision/full-forecast
+  zoom, and an `InfoHint` definition layer. Verified live on a fresh v2 run: the
+  item that previously read "Runs out — at risk" now reads **Replan later**,
+  with the +2 kg horizon-end balance matching Codex's oracle. `pnpm check`
+  green with 117 tests. **WP5 must consume the new complete `/overview` read
+  model directly — no per-location `planning-status` fan-out.**
+
 - 2026-08-30 — **Codex backend correction complete.** The API now returns
   explicit item-specific risk status/window and candidate expiry, cap basis,
   evidence completeness, residual at expiry, binding constraint, and safe

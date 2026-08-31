@@ -71,6 +71,8 @@ function runResponse(): PlanningRunResponse {
       issue_count: 1,
       blocker_count: 0,
       items_at_risk: 1,
+      items_risk_not_evaluated: 0,
+      future_stockout_items: 0,
     },
     inputs: [],
     planning_lines: [
@@ -104,6 +106,15 @@ function runResponse(): PlanningRunResponse {
         proposed_order_units: 3,
         rounding_delta_g: 0,
         data_status: 'PROPOSAL',
+        rounding_direction: 'up',
+        candidate_expiry_date: '2026-09-20',
+        shelf_life_cap_basis: 'policy_approximation',
+        forecast_through_expiry: true,
+        projected_candidate_residual_at_expiry_g: 0,
+        max_cover_end_date: null,
+        forecast_through_max_cover: true,
+        binding_constraint: 'max_cover',
+        constraint_status: 'feasible',
       },
     ],
     recommendations: [
@@ -151,9 +162,42 @@ function runResponse(): PlanningRunResponse {
         minimum_projected_balance_g: -200,
         first_stockout_date: '2026-09-12',
         unavoidable_pre_candidate_stockout_g: 0,
+        risk_horizon_end_date: '2026-09-08',
+        risk_evaluated_through_date: '2026-09-08',
+        risk_horizon_fully_observed: true,
+        actionable_risk_status: 'at_risk',
+        first_stockout_within_horizon_date: '2026-09-05',
+        max_stockout_within_horizon_g: 400,
+        projected_balance_at_risk_horizon_end_g: -400,
       },
     ],
     projection_days: [],
+    planning_line_explanations: [
+      {
+        planning_line_id: 'line-1',
+        item: {
+          item_id: 'ITEM_PASTA',
+          item_name: 'Pasta',
+          storage_class: 'TK',
+          pack_size_g: 2000,
+          shelf_life_days: 30,
+          min_safety_days: 2,
+          max_cover_days: 14,
+        },
+        planning_policy: null,
+        delivery_rule: null,
+        protection_mode: 'stocked',
+        evidence_scope: {},
+      },
+    ],
+    explanation_context: {
+      calculation_owner: 'python_backend',
+      master_data_version_id: 'v1',
+      policy_version: '1',
+      code_version: '0.1.0',
+      field_lineage: {},
+      daily_projection_fields: [],
+    },
     proposal_only: true,
   }
 }
@@ -342,6 +386,116 @@ describe('observed supplier documents', () => {
       await screen.findByText(/no supplier documents imported/i),
     ).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('what counts as risk after the v2 engine correction', () => {
+  function withNetting(overrides: Record<string, unknown>) {
+    const base = runResponse()
+    vi.mocked(api.getPlanningRun).mockResolvedValue({
+      ...base,
+      netting_results: [{ ...base.netting_results[0], ...overrides }],
+    } as PlanningRunResponse)
+  }
+
+  it('does not treat a shortage beyond the decision window as risk', async () => {
+    // The old UI called any first_stockout_date "at risk", which swept in
+    // shortages a later review will handle and inflated the list.
+    withNetting({
+      actionable_risk_status: 'covered',
+      first_stockout_within_horizon_date: null,
+      first_stockout_date: '2026-10-02',
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('Replan later')).toBeInTheDocument()
+    expect(
+      screen.getByText(/all 1 ingredients are covered for this decision/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Needs an order')).not.toBeInTheDocument()
+  })
+
+  it('keeps incomplete evidence distinct from covered', async () => {
+    withNetting({
+      actionable_risk_status: 'not_evaluated',
+      risk_evaluated_through_date: '2026-09-02',
+      first_stockout_within_horizon_date: null,
+    })
+
+    renderPage()
+
+    // Silence here would claim a safety check nobody actually performed.
+    expect(await screen.findByText('Not enough data')).toBeInTheDocument()
+    expect(screen.queryByText('Covered')).not.toBeInTheDocument()
+  })
+
+  it('shows demand for this decision, not the whole forecast', async () => {
+    // netting gross is 12.4 kg across the full projection; the planning line's
+    // 12.4 kg is what this order has to protect. They answer different windows,
+    // so the column must come from the line.
+    renderPage()
+
+    const row = await screen.findByRole('row', { name: /Pasta/ })
+    expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('12.4 kg')
+  })
+})
+
+describe('shelf-life evidence in the drawer', () => {
+  it('never presents a policy estimate as an exact expiry', async () => {
+    const user = userEvent.setup()
+    renderPage('/locations/LOC_A?tab=proposals')
+
+    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+
+    const drawer = await screen.findByRole('dialog')
+    expect(within(drawer).getByText(/not from lot data/i)).toBeInTheDocument()
+    // Inline, not hidden behind a hover: this caveat must not be missable.
+    expect(
+      within(drawer).getByText(/not the actual date on the delivered goods/i),
+    ).toBeInTheDocument()
+  })
+
+  it('warns when the forecast does not reach the expiry', async () => {
+    const user = userEvent.setup()
+    const base = runResponse()
+    vi.mocked(api.getPlanningRun).mockResolvedValue({
+      ...base,
+      planning_lines: [
+        { ...base.planning_lines[0], forecast_through_expiry: false },
+      ],
+    } as PlanningRunResponse)
+
+    renderPage('/locations/LOC_A?tab=proposals')
+    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+
+    expect(
+      await screen.findByText(/does not reach that date, so this check is incomplete/i),
+    ).toBeInTheDocument()
+  })
+
+  it('says plainly when no safe order exists rather than inventing one', async () => {
+    const user = userEvent.setup()
+    const base = runResponse()
+    vi.mocked(api.getPlanningRun).mockResolvedValue({
+      ...base,
+      planning_lines: [
+        {
+          ...base.planning_lines[0],
+          constraint_status: 'no_safe_positive_order',
+          binding_constraint: 'shelf_life',
+        },
+      ],
+    } as PlanningRunResponse)
+
+    renderPage('/locations/LOC_A?tab=proposals')
+    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+
+    const drawer = await screen.findByRole('dialog')
+    expect(within(drawer).getByText('No safe order possible')).toBeInTheDocument()
+    expect(
+      within(drawer).getByText(/needs a manual decision/i),
+    ).toBeInTheDocument()
   })
 })
 

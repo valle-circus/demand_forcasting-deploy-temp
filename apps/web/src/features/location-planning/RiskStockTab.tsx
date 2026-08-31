@@ -2,6 +2,7 @@ import { ChevronRight } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Fragment, useState } from 'react'
 
+import { InfoHint } from '@/components/InfoHint'
 import { StatusBadge } from '@/components/StatusBadge'
 import {
   Table,
@@ -12,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Toggle } from '@/components/ui/toggle'
-import { formatCount, formatDate, formatGrams } from '@/lib/formatting'
+import { formatDate, formatGrams } from '@/lib/formatting'
 import type {
   InventoryResponse,
   NettingResult,
@@ -20,17 +21,26 @@ import type {
   ProjectionDay,
 } from '@/lib/types'
 import { StockProjectionChart } from './StockProjectionChart'
-import { byRisk, daysOfCover, horizonDays, riskLevel } from './planning'
-import type { RiskLevel } from './planning'
+import {
+  byRisk,
+  needsAttention,
+  riskDisposition,
+  uncoveredDemandG,
+} from './planning'
+import type { RiskDisposition } from './planning'
 
-const RISK_PRESENTATION: Record<
-  RiskLevel,
-  { tone: 'blocked' | 'warning' | 'ready'; label: string }
+const DISPOSITION: Record<
+  RiskDisposition,
+  { tone: 'blocked' | 'warning' | 'ready' | 'neutral'; label: string }
 > = {
   // Ordering now cannot fix this: the shortfall lands before anything arrives.
   unavoidable: { tone: 'blocked', label: 'Too late to fix' },
-  stockout: { tone: 'warning', label: 'Runs out' },
-  ok: { tone: 'ready', label: 'Covered' },
+  at_risk: { tone: 'warning', label: 'Needs an order' },
+  // Incomplete evidence. Never shown as covered, never counted as safe.
+  not_evaluated: { tone: 'neutral', label: 'Not enough data' },
+  // Short later in the forecast, but after this decision's horizon.
+  future_replan: { tone: 'neutral', label: 'Replan later' },
+  covered: { tone: 'ready', label: 'Covered' },
 }
 
 interface RiskStockTabProps {
@@ -46,7 +56,7 @@ export function RiskStockTab({
   lines,
   inventory,
 }: RiskStockTabProps) {
-  const [riskOnly, setRiskOnly] = useState(false)
+  const [attentionOnly, setAttentionOnly] = useState(false)
   const [openItemId, setOpenItemId] = useState<string | null>(null)
 
   const names = new Map(
@@ -60,24 +70,24 @@ export function RiskStockTab({
 
   const rows = [...netting]
     .sort(byRisk)
-    .filter((row) => !riskOnly || riskLevel(row) !== 'ok')
+    .filter((row) => !attentionOnly || needsAttention(row))
 
-  const atRisk = netting.filter((row) => riskLevel(row) !== 'ok').length
-  const window = netting[0]
-  const horizon = horizonDays(window)
+  const attention = netting.filter(needsAttention).length
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {/* The window every number in this table refers to, stated once. */}
         <p className="text-sm text-muted-foreground">
-          {formatDate(window.projection_start_date)} –{' '}
-          {formatDate(window.projection_end_date)}
-          {horizon !== null && ` · ${formatCount(horizon, 'day')}`}
-          {atRisk > 0 && ` · ${String(atRisk)} of ${String(netting.length)} run out`}
+          {attention === 0
+            ? `All ${String(netting.length)} ingredients are covered for this decision.`
+            : `${String(attention)} of ${String(netting.length)} ingredients need attention now.`}
         </p>
-        <Toggle pressed={riskOnly} onPressedChange={setRiskOnly} size="sm">
-          At risk only
+        <Toggle
+          pressed={attentionOnly}
+          onPressedChange={setAttentionOnly}
+          size="sm"
+        >
+          Needs attention
         </Toggle>
       </div>
 
@@ -87,19 +97,37 @@ export function RiskStockTab({
             <TableRow>
               <TableHead>Ingredient</TableHead>
               <TableHead className="text-right">In stock</TableHead>
-              <TableHead className="text-right">Needed</TableHead>
+              <TableHead className="text-right">
+                <span className="inline-flex items-center gap-1">
+                  To protect
+                  <InfoHint label="What does “to protect” mean?">
+                    Demand this ordering decision has to cover, up to the end of
+                    this item&rsquo;s protection window. It is not the whole
+                    uploaded forecast.
+                  </InfoHint>
+                </span>
+              </TableHead>
               <TableHead className="text-right">On order</TableHead>
-              <TableHead className="text-right">Lasts</TableHead>
-              <TableHead>Empty on</TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  Covered through
+                  <InfoHint label="What does “covered through” mean?">
+                    The end of this item&rsquo;s protection window: its lead time
+                    plus the review cadence. A shortage after it is handled by a
+                    later review.
+                  </InfoHint>
+                </span>
+              </TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => {
               const open = openItemId === row.item_id
-              const cover = daysOfCover(row)
               const name = names.get(row.item_id) ?? row.item_id
               const line = lineByItem.get(row.item_id) ?? null
+              const disposition = riskDisposition(row)
+              const shortage = row.first_stockout_within_horizon_date
 
               return (
                 <Fragment key={row.item_id}>
@@ -124,28 +152,37 @@ export function RiskStockTab({
                     <TableCell className="text-right tabular">
                       {formatGrams(row.opening_on_hand_g)}
                     </TableCell>
+                    {/* Demand for this decision, from the planning line — not
+                        the full-forecast total, which spans a longer window. */}
                     <TableCell className="text-right tabular">
-                      {formatGrams(row.gross_requirement_g)}
+                      {line === null
+                        ? '—'
+                        : formatGrams(line.gross_requirement_g)}
                     </TableCell>
                     <TableCell className="text-right tabular">
                       {formatGrams(row.open_po_due_g)}
                     </TableCell>
-                    <TableCell className="text-right tabular">
-                      {cover === null ? 'whole period' : formatCount(cover, 'day')}
-                    </TableCell>
                     <TableCell className="tabular">
-                      {row.first_stockout_date === null
-                        ? '—'
-                        : formatDate(row.first_stockout_date)}
+                      {shortage !== null ? (
+                        <span className="text-warning">
+                          short from {formatDate(shortage)}
+                        </span>
+                      ) : (
+                        formatDate(
+                          row.risk_horizon_end_date ??
+                            line?.coverage_end_date ??
+                            null,
+                        )
+                      )}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge {...RISK_PRESENTATION[riskLevel(row)]} />
+                      <StatusBadge {...DISPOSITION[disposition]} />
                     </TableCell>
                   </TableRow>
 
                   {open && (
                     <TableRow className="bg-surface">
-                      <TableCell colSpan={7} className="p-4">
+                      <TableCell colSpan={6} className="p-4">
                         {/* Only opacity and transform move: animating height
                             causes jank on a table row. */}
                         <motion.div
@@ -157,7 +194,7 @@ export function RiskStockTab({
                             row={row}
                             line={line}
                             name={name}
-                            cover={cover}
+                            disposition={disposition}
                             days={projections.filter(
                               (day) => day.item_id === row.item_id,
                             )}
@@ -180,66 +217,100 @@ function ItemDetail({
   row,
   line,
   name,
-  cover,
+  disposition,
   days,
 }: {
   row: NettingResult
   line: PlanningLine | null
   name: string
-  cover: number | null
+  disposition: RiskDisposition
   days: ProjectionDay[]
 }) {
+  const horizonEnd = row.risk_horizon_end_date ?? line?.coverage_end_date ?? null
+  const uncovered = uncoveredDemandG(row)
+
   return (
     <div>
       <p className="text-sm">
-        {cover === null ? (
+        {disposition === 'covered' && (
           <>
-            <span className="font-medium">{name}</span> stays in stock for the
-            whole period.
+            <span className="font-medium">{name}</span> is covered through{' '}
+            {formatDate(horizonEnd)}.
           </>
-        ) : (
+        )}
+        {disposition === 'future_replan' && (
           <>
-            <span className="font-medium">{name}</span> runs out in{' '}
-            <span className="text-warning">{formatCount(cover, 'day')}</span>, on{' '}
-            {formatDate(row.first_stockout_date)}.
+            <span className="font-medium">{name}</span> is covered through{' '}
+            {formatDate(horizonEnd)}. The forecast runs short on{' '}
+            {formatDate(row.first_stockout_date)}, which a later review handles.
+          </>
+        )}
+        {disposition === 'not_evaluated' && (
+          <>
+            <span className="font-medium">{name}</span> could not be assessed —
+            the evidence does not reach{' '}
+            {formatDate(horizonEnd)}
+            {row.risk_evaluated_through_date !== null && (
+              <> (it stops at {formatDate(row.risk_evaluated_through_date)})</>
+            )}
+            .
+          </>
+        )}
+        {(disposition === 'at_risk' || disposition === 'unavoidable') && (
+          <>
+            <span className="font-medium">{name}</span> runs short on{' '}
+            <span className="text-warning">
+              {formatDate(row.first_stockout_within_horizon_date)}
+            </span>
+            , inside the window this decision has to cover.
+            {disposition === 'unavoidable' &&
+              ' Ordering now cannot fix it — the shortfall lands before any delivery could arrive.'}
           </>
         )}
       </p>
 
       <StockProjectionChart
         days={days}
-        firstStockoutDate={row.first_stockout_date}
+        horizonEndDate={horizonEnd}
+        shortageDate={
+          row.first_stockout_within_horizon_date ?? row.first_stockout_date
+        }
       />
 
-      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-        <li>
-          <span className="mr-1.5 inline-block h-0.5 w-3 align-middle bg-info" />
-          Already on order
-        </li>
-        <li>
-          <span className="mr-1.5 inline-block h-0.5 w-3 align-middle bg-primary" />
-          Proposed delivery
-        </li>
-        <li>
-          <span className="mr-1.5 inline-block h-0.5 w-3 align-middle bg-danger" />
-          Empty
-        </li>
-      </ul>
-
-      {/* The closing balance is meaningless without saying what it assumes. */}
-      <p className="mt-3 max-w-2xl text-xs text-muted-foreground">
-        Ends at {formatGrams(row.ending_projected_balance_g)}
-        {line !== null && (
-          <>
-            {' '}
-            — this run plans one delivery covering{' '}
-            {formatCount(line.protection_days, 'day')}, and the projection
-            assumes nothing is ordered after it
-          </>
+      {/* Full-forecast context, kept clearly secondary and clearly labelled. */}
+      <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+        <Detail label="Demand across the whole forecast">
+          {formatGrams(row.gross_requirement_g)}
+        </Detail>
+        <Detail label="Balance at the end of this window">
+          {formatGrams(row.projected_balance_at_risk_horizon_end_g)}
+        </Detail>
+        {uncovered !== null && (
+          <Detail
+            label={`Uncovered demand by ${formatDate(row.projection_end_date)}`}
+          >
+            {formatGrams(uncovered)}{' '}
+            <span className="text-muted-foreground">
+              if no further orders are placed
+            </span>
+          </Detail>
         )}
-        . Shelf life limits how much may be ordered at once; it does not reduce
-        what is needed.
-      </p>
+      </dl>
+    </div>
+  )
+}
+
+function Detail({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="tabular">{children}</dd>
     </div>
   )
 }
