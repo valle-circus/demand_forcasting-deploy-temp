@@ -156,19 +156,19 @@ the checkboxes below remain the milestone authority.
 
 - [x] Define the two page groups, dataset cards, drop-zone states, update
       semantics, validation presentation, and upload-to-adapter mapping.
-- [ ] Build the three-route application shell, side navigation, authenticated
+- [x] Build the three-route application shell, side navigation, authenticated
       user/environment status, persistent demo/proposal banner, and responsive
       navigation drawer.
-- [ ] Build upload cards for master data, forecast/menu/BOM, current stock, and
+- [x] Build upload cards for master data, forecast/menu/BOM, current stock, and
       cumulative PO PDFs, with explicit global/location scope.
-- [ ] Show source timestamp separately from imported timestamp, plus version,
+- [x] Show source timestamp separately from imported timestamp, plus version,
       horizon/document range, record count, mapping/validation status, and
       current/superseded state.
-- [ ] Show actionable file/sheet/record/field/remedy errors and link mapping
+- [x] Show actionable file/sheet/record/field/remedy errors and link mapping
       issues to the relevant maintained data.
-- [ ] Keep stock and observed PO lines summary-only: correction means re-export,
+- [x] Keep stock and observed PO lines summary-only: correction means re-export,
       re-upload, or correct the maintained mapping, never inline editing.
-- [ ] Add import/version history and clear accepted-with-warnings/rejected/known-
+- [x] Add import/version history and clear accepted-with-warnings/rejected/known-
       empty states without automatically activating a master draft or running
       planning.
 
@@ -190,18 +190,20 @@ the checkboxes below remain the milestone authority.
       completion metadata.
 - [x] Make deterministic `run_id` persistence retry-idempotent and reject a
       reused ID with a different input hash; cover the RPC contract statically.
-- [ ] Prevent duplicate browser submissions while a synchronous run is in
-      flight.
-- [ ] Build the location selector, freshness/preflight strip, run action, and
+- [x] Prevent duplicate browser submissions while a synchronous run is in
+      flight. Guarded by an in-flight ref rather than the disabled attribute
+      alone, since a fast second click lands before React re-renders; covered
+      by a test asserting two rapid clicks produce one request.
+- [x] Build the location selector, freshness/preflight strip, run action, and
       validating/running/completed/blocked/failed states.
-- [ ] Build risk/stock, open-PO, and recommendation tables with plain-language
+- [x] Build risk/stock, open-PO, and recommendation tables with plain-language
       units, provenance, filters, and empty/error states.
 - [x] Correct the item risk/read-model contract so demand, receipts, coverage,
       shortage, and shelf-life feasibility are explicit for the active
       recommendation horizon; full-forecast shortage remains secondary context.
-- [ ] Build the recommendation derivation drawer and server-generated canonical
+- [x] Build the recommendation derivation drawer and server-generated canonical
       CSV/JSON downloads; never reconstruct calculations in TypeScript.
-- [ ] Keep every recommendation visibly proposal-only; do not add placement,
+- [x] Keep every recommendation visibly proposal-only; do not add placement,
       approval, supplier-send, comments, assignment, or ERP status.
 
 #### 2F — Overview cockpit and risk persistence
@@ -224,14 +226,15 @@ the checkboxes below remain the milestone authority.
 - [x] Correct `/overview` and run-summary `items_at_risk` so they count only
       backend-classified actionable-horizon risk, not any stockout anywhere in
       the uploaded forecast.
-- [ ] Build KPI cards, location-risk table, data-freshness panel, latest-run
+- [x] Build KPI cards, location-risk table, data-freshness panel, latest-run
       activity, and direct corrective/drill-down actions.
-- [ ] Keep actual waste, supplier service level, actual OOS, and mixed-unit
+- [x] Keep actual waste, supplier service level, actual OOS, and mixed-unit
       total quantity out until authoritative definitions/data exist; label
       shelf/max-cover evidence only as attention or potential risk.
-- [ ] Apply forward migration
+- [x] Apply forward migration
       `202608300004_actionable_risk_and_shelf_life.sql` in the development
-      Supabase SQL Editor before the next connected v2 planning run.
+      Supabase SQL Editor. Applied; readiness reports ready on v2 API code and
+      a v2 run was computed successfully on 2026-08-31.
 
 #### 2G — versioned maintained-data and menu editing
 

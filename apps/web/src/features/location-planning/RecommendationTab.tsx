@@ -116,15 +116,20 @@ export function RecommendationTab({
           </TableHeader>
           <TableBody>
             {run.recommendations.map((row) => (
-              <TableRow
-                key={row.recommendation_id}
-                onClick={() => {
-                  setOpenLineId(row.planning_line_id)
-                }}
-                className="cursor-pointer"
-              >
+              <TableRow key={row.recommendation_id}>
                 <TableCell className="font-medium">
-                  {names.get(row.item_id) ?? row.item_id}
+                  {/* Focusable control, not a row click handler: the
+                      derivation must be reachable by keyboard. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenLineId(row.planning_line_id)
+                    }}
+                    className="-m-1 rounded-md p-1 text-left underline-offset-2 select-none hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                  >
+                    {names.get(row.item_id) ?? row.item_id}
+                    <span className="sr-only"> — show how this was calculated</span>
+                  </button>
                 </TableCell>
                 <TableCell className="tabular">
                   {formatDate(row.order_date)}

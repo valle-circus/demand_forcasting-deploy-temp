@@ -673,22 +673,32 @@ fan-out.
 
 ### WP6 — Hardening, verification, handoff  → 2H (frontend parts)
 
-- [ ] Sweep every required state across all three pages: loading, empty,
-      unauthenticated, unavailable, validation error, blocked,
-      accepted-with-warnings, stale calculation, completed proposal.
-- [ ] Accessibility pass: keyboard-only traversal of all three pages, focus
-      order and visible focus, `aria-live` regions, status without colour,
-      skip link, drawer/dialog focus management.
-- [ ] Responsive pass at 360 / 768 / 1024 / 1440 px.
-- [ ] `pnpm check` (lint + typecheck + test + build) green.
-- [ ] Connected smoke test against the running local API. Readiness, migration
-      003 and credentials were verified (2026-08-29); migration 004 must now be
-      applied before a v2 run. The remaining data prerequisites are a safe Auth
-      user and a master workbook safe to import into `development`. Record
-      honestly what was and was not exercised—no live-success claims without
-      evidence.
-- [ ] Update this backlog, the scratchpad, master backlog 2D/2E/2F, and
-      `MEMORY.md` if a durable decision changed.
+> **Complete 2026-08-31.** `pnpm check` passes with 128 tests. Handover in
+> `docs/plans/ui_slice_handover.md`.
+
+- [x] Every required state is covered by tests: loading, empty, unauthenticated,
+      unavailable (503, distinct from empty), validation error, blocked,
+      accepted-with-warnings, stale calculation, completed proposal, plus the
+      first-run 404 and `not_evaluated`.
+- [x] Accessibility pass. **Found and fixed two real defects**: the expandable
+      risk row and the recommendation row were `onClick` handlers on `<tr>`,
+      unreachable by keyboard and selecting text instead of opening on touch.
+      Both are now real buttons with `aria-expanded`, covered by keyboard tests.
+      Verified elsewhere: skip link, focus moved to `<main>` on navigation,
+      focus trap and restore in the drawer and dialog, `aria-live` on the run
+      and upload states, and status carried by icon or dot **plus text**.
+- [x] Responsive pass at 375 / 1440 px in a real browser, and by the layout at
+      768 / 1024. Tables scroll inside their own container, so the page body
+      never scrolls horizontally; KPI cards stack; the sidebar becomes a drawer.
+- [x] `pnpm check` green: lint, typecheck, 128 tests, build.
+- [x] Connected smoke test against the live API and a real Supabase session.
+      Migration 004 is applied — readiness reports ready on v2 code. Exercised:
+      sign-in, the first-run state, all four imports, master activation, a v2
+      planning run, the risk table, the projection chart, the derivation drawer
+      and Overview. **Not exercised:** more than one ingredient, more than one
+      location, CSV/JSON download against a browser save dialog, and any
+      deployed environment.
+- [x] Backlog, scratchpad, journey description and `MEMORY.md` updated.
 
 ### WP7 — Optional grounded LLM assistance after the core UI
 

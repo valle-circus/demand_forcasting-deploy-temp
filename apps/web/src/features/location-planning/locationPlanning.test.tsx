@@ -348,7 +348,8 @@ describe('the derivation drawer', () => {
     const user = userEvent.setup()
     renderPage('/locations/LOC_A?tab=proposals')
 
-    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+    // A button, not a row click: the derivation must be keyboard reachable.
+    await user.click(await screen.findByRole('button', { name: /Pasta/ }))
 
     const drawer = await screen.findByRole('dialog')
     expect(within(drawer).getByText('Gross requirement')).toBeInTheDocument()
@@ -367,7 +368,8 @@ describe('the derivation drawer', () => {
     const user = userEvent.setup()
     renderPage('/locations/LOC_A?tab=proposals')
 
-    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+    // A button, not a row click: the derivation must be keyboard reachable.
+    await user.click(await screen.findByRole('button', { name: /Pasta/ }))
 
     const drawer = await screen.findByRole('dialog')
     const shelfRow = within(drawer).getByText('Shelf-life cap').closest('li')
@@ -446,7 +448,8 @@ describe('shelf-life evidence in the drawer', () => {
     const user = userEvent.setup()
     renderPage('/locations/LOC_A?tab=proposals')
 
-    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+    // A button, not a row click: the derivation must be keyboard reachable.
+    await user.click(await screen.findByRole('button', { name: /Pasta/ }))
 
     const drawer = await screen.findByRole('dialog')
     expect(within(drawer).getByText(/not from lot data/i)).toBeInTheDocument()
@@ -467,7 +470,8 @@ describe('shelf-life evidence in the drawer', () => {
     } as PlanningRunResponse)
 
     renderPage('/locations/LOC_A?tab=proposals')
-    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+    // A button, not a row click: the derivation must be keyboard reachable.
+    await user.click(await screen.findByRole('button', { name: /Pasta/ }))
 
     expect(
       await screen.findByText(/does not reach that date, so this check is incomplete/i),
@@ -489,7 +493,8 @@ describe('shelf-life evidence in the drawer', () => {
     } as PlanningRunResponse)
 
     renderPage('/locations/LOC_A?tab=proposals')
-    await user.click(await screen.findByRole('cell', { name: 'Pasta' }))
+    // A button, not a row click: the derivation must be keyboard reachable.
+    await user.click(await screen.findByRole('button', { name: /Pasta/ }))
 
     const drawer = await screen.findByRole('dialog')
     expect(within(drawer).getByText('No safe order possible')).toBeInTheDocument()
@@ -499,11 +504,38 @@ describe('shelf-life evidence in the drawer', () => {
   })
 })
 
+describe('keyboard access', () => {
+  it('opens an ingredient detail without a mouse', async () => {
+    // Was a click handler on the table row, which no keyboard could reach and
+    // which selected text instead of expanding on touch.
+    const user = userEvent.setup()
+    renderPage()
+
+    const trigger = await screen.findByRole('button', { name: /Pasta/ })
+    trigger.focus()
+    expect(trigger).toHaveFocus()
+
+    await user.keyboard('{Enter}')
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('opens the derivation without a mouse', async () => {
+    const user = userEvent.setup()
+    renderPage('/locations/LOC_A?tab=proposals')
+
+    const trigger = await screen.findByRole('button', { name: /Pasta/ })
+    trigger.focus()
+    await user.keyboard('{Enter}')
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+})
+
 describe('the proposal boundary', () => {
   it('offers nothing that approves, sends or places an order', async () => {
     renderPage('/locations/LOC_A?tab=proposals')
 
-    await screen.findByRole('cell', { name: 'Pasta' })
+    await screen.findByRole('button', { name: /Pasta/ })
 
     for (const forbidden of [
       /approve/i,

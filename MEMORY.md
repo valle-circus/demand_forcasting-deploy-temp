@@ -15,6 +15,28 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-31: **The three-page maintainer UI is built, connected and verified;
+  the frontend slice of Milestone 2 (2D/2E/2F) is complete.** A maintainer can
+  sign in, read Overview, import all four sources in order, activate a master
+  version, compute one location's run, inspect risk, the daily stock
+  projection and every proposal's full derivation, and download the
+  server-generated CSV/JSON. Three rules are enforced in code and pinned by
+  tests: no planning arithmetic in the browser (`planning.ts` reads fields, and
+  a test feeds a deliberately inconsistent line to prove the UI shows what the
+  engine stored); risk comes from `actionable_risk_status`, never from a
+  stockout date — the three helpers that derived meaning from
+  `first_stockout_date`, full-projection demand or date arithmetic were deleted
+  during v2 adoption; and a count with no current run behind it renders
+  **not known**, never `0`. Migration 004 is applied and readiness reports ready
+  on v2 code. Stack is React 19 + Vite + Tailwind v4 + shadcn/ui on Base UI,
+  lucide, Geist, motion and Recharts, following the `circus-ui` skill. Verified:
+  `pnpm check` passes with 128 tests, plus a live browser journey against real
+  Supabase Auth and a v2 run. **Not verified:** more than one ingredient or
+  location, and any deployed environment. Evidence:
+  `docs/plans/ui_slice_handover.md`,
+  `docs/plans/ui_implementation_backlog.md`,
+  `docs/scratchpads/ui_implementation.md`, and `apps/web/src`. Status: `active`.
+
 - 2026-08-30: **The actionable-horizon and candidate-MHD backend v2 contract is
   implemented; React adoption and Supabase migration 004 application remain.**
   Full uploaded-forecast projection stays a data visibility window, while the

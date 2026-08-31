@@ -131,15 +131,19 @@ export function RiskStockTab({
 
               return (
                 <Fragment key={row.item_id}>
-                  <TableRow
-                    onClick={() => {
-                      setOpenItemId(open ? null : row.item_id)
-                    }}
-                    aria-expanded={open}
-                    className="cursor-pointer"
-                  >
+                  <TableRow>
                     <TableCell className="font-medium">
-                      <span className="flex items-center gap-1.5">
+                      {/* A real button, not a click handler on the row: the
+                          detail has to be reachable by keyboard, and on touch
+                          a bare row handler selects text instead of opening. */}
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => {
+                          setOpenItemId(open ? null : row.item_id)
+                        }}
+                        className="-m-1 flex w-full items-center gap-1.5 rounded-md p-1 text-left select-none hover:text-accent-text focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      >
                         <ChevronRight
                           aria-hidden="true"
                           className={`size-3.5 shrink-0 text-muted-foreground transition-transform duration-150 ${
@@ -147,7 +151,7 @@ export function RiskStockTab({
                           }`}
                         />
                         {name}
-                      </span>
+                      </button>
                     </TableCell>
                     <TableCell className="text-right tabular">
                       {formatGrams(row.opening_on_hand_g)}

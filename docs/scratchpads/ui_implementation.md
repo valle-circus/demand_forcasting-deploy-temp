@@ -757,3 +757,30 @@ block nobody asked for on a page whose job is "what needs attention now". Flag
 if that call is wrong.
 
 Next: WP6 — states sweep, accessibility, responsive, and honest handoff notes.
+
+## WP6 done — hardening and handover (2026-08-31)
+
+The initial backlog is complete. Handover: `docs/plans/ui_slice_handover.md`.
+
+**Two real accessibility defects found and fixed.** The expandable risk row and
+the recommendation row were `onClick` handlers on `<tr>`: unreachable by
+keyboard entirely, and on touch they selected text instead of opening. Both are
+now real `<button>` elements with `aria-expanded`, pinned by keyboard tests.
+Worth remembering as a pattern — a clickable table row is not an accessible
+control, however convenient it is to write.
+
+Verified in a real browser at 375 px and 1440 px: tables scroll inside their own
+container so the page body never scrolls sideways, KPI cards stack, the sidebar
+becomes a drawer, and the projection chart stays legible.
+
+One tooling note: in the browser pane's mobile emulation, synthetic clicks on
+the row time out and can select text. The DOM confirmed `aria-expanded="true"`
+and the detail row present, so it is an emulation artifact rather than a product
+fault — but check the DOM rather than the screenshot when a mobile interaction
+looks like it failed.
+
+**Exercised live:** sign-in, first-run state, all four imports, activation, a v2
+run, risk table, projection chart, derivation drawer, Overview.
+**Not exercised:** more than one ingredient, more than one location, the
+download save dialog, and any deployed environment. That last gap is the main
+reason the handover's first recommendation is to get realistic data in.
