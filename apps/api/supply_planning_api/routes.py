@@ -213,8 +213,7 @@ def create_domain_router(
         risk_rows = [
             row
             for row in result["netting_results"]
-            if row.get("first_stockout_date") is not None
-            or float(row.get("unavoidable_pre_candidate_stockout_g", 0)) > 0
+            if row.get("actionable_risk_status") == "at_risk"
         ]
         return {
             "run": result["run"],

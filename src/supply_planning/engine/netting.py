@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -22,6 +22,12 @@ class InventoryEventKind(StrEnum):
     OPEN_PO_RECEIPT = "open_po_receipt"
     CANDIDATE_RECEIPT = "candidate_receipt"
     DEMAND = "demand"
+
+
+class ActionableRiskStatus(StrEnum):
+    AT_RISK = "at_risk"
+    COVERED = "covered"
+    NOT_EVALUATED = "not_evaluated"
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +119,13 @@ class NettingResult:
     unavoidable_pre_candidate_stockout_g: Decimal
     events: tuple[InventoryEvent, ...]
     days: tuple[InventoryProjectionDay, ...]
+    risk_horizon_end_date: date | None = None
+    risk_evaluated_through_date: date | None = None
+    risk_horizon_fully_observed: bool = False
+    actionable_risk_status: ActionableRiskStatus = ActionableRiskStatus.NOT_EVALUATED
+    first_stockout_within_horizon_date: date | None = None
+    projected_balance_at_risk_horizon_end_g: Decimal | None = None
+    max_stockout_within_horizon_g: Decimal = Decimal("0")
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -136,9 +149,102 @@ class NettingResult:
             "unavoidable_pre_candidate_stockout_g": str(
                 self.unavoidable_pre_candidate_stockout_g
             ),
+            "risk_horizon_end_date": (
+                self.risk_horizon_end_date.isoformat()
+                if self.risk_horizon_end_date
+                else None
+            ),
+            "risk_evaluated_through_date": (
+                self.risk_evaluated_through_date.isoformat()
+                if self.risk_evaluated_through_date
+                else None
+            ),
+            "risk_horizon_fully_observed": self.risk_horizon_fully_observed,
+            "actionable_risk_status": self.actionable_risk_status.value,
+            "first_stockout_within_horizon_date": (
+                self.first_stockout_within_horizon_date.isoformat()
+                if self.first_stockout_within_horizon_date
+                else None
+            ),
+            "projected_balance_at_risk_horizon_end_g": (
+                str(self.projected_balance_at_risk_horizon_end_g)
+                if self.projected_balance_at_risk_horizon_end_g is not None
+                else None
+            ),
+            "max_stockout_within_horizon_g": str(
+                self.max_stockout_within_horizon_g
+            ),
             "events": [event.as_dict() for event in self.events],
             "days": [day.as_dict() for day in self.days],
         }
+
+
+def classify_actionable_risk(
+    result: NettingResult,
+    *,
+    risk_horizon_end_date: date | None,
+) -> NettingResult:
+    """Attach the policy-owned risk window without changing the full projection.
+
+    A shortage after the current recommendation horizon remains visible through
+    ``first_stockout_date`` but is not actionable for this run. When forecast
+    evidence ends before the policy horizon, a no-stockout result is explicitly
+    ``not_evaluated`` rather than incorrectly reported as covered.
+    """
+
+    if risk_horizon_end_date is None:
+        return replace(
+            result,
+            risk_horizon_end_date=None,
+            risk_evaluated_through_date=None,
+            risk_horizon_fully_observed=False,
+            actionable_risk_status=ActionableRiskStatus.NOT_EVALUATED,
+            first_stockout_within_horizon_date=None,
+            projected_balance_at_risk_horizon_end_g=None,
+            max_stockout_within_horizon_g=Decimal("0"),
+        )
+    if risk_horizon_end_date < result.projection_start_date:
+        raise ValueError("risk_horizon_end_date must not be before projection start")
+
+    evaluated_through = min(risk_horizon_end_date, result.projection_end_date)
+    scoped_days = tuple(
+        day for day in result.days if day.projection_date <= evaluated_through
+    )
+    stockout_days = tuple(day for day in scoped_days if day.stockout_g > 0)
+    fully_observed = result.projection_end_date >= risk_horizon_end_date
+    if stockout_days:
+        status = ActionableRiskStatus.AT_RISK
+    elif fully_observed:
+        status = ActionableRiskStatus.COVERED
+    else:
+        status = ActionableRiskStatus.NOT_EVALUATED
+    balance_at_horizon = (
+        next(
+            (
+                day.closing_balance_g
+                for day in scoped_days
+                if day.projection_date == risk_horizon_end_date
+            ),
+            None,
+        )
+        if fully_observed
+        else None
+    )
+    return replace(
+        result,
+        risk_horizon_end_date=risk_horizon_end_date,
+        risk_evaluated_through_date=evaluated_through,
+        risk_horizon_fully_observed=fully_observed,
+        actionable_risk_status=status,
+        first_stockout_within_horizon_date=(
+            stockout_days[0].projection_date if stockout_days else None
+        ),
+        projected_balance_at_risk_horizon_end_g=balance_at_horizon,
+        max_stockout_within_horizon_g=max(
+            (day.stockout_g for day in stockout_days),
+            default=Decimal("0"),
+        ),
+    )
 
 
 def _dates(start: date, end: date) -> Iterable[date]:

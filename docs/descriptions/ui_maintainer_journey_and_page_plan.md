@@ -1,9 +1,10 @@
 # Maintainer UI journey and three-page plan
 
-**Status:** high-level product and UX direction defined 2026-08-28; the
-authenticated FastAPI/Supabase backend contract was implemented 2026-08-29.
-The three domain pages and detailed visual design are not implemented; live
-verification awaits migration 003 plus safe Supabase/Auth configuration.
+**Status:** product/UX direction and authenticated FastAPI/Supabase backend are
+implemented. Claude has built the connected Data & settings and first Location
+planning slices. Codex completed the v2 horizon/MHD backend on 2026-08-30;
+migration 004, frontend adoption of its explicit fields, Overview, and final
+hardening remain.
 
 ## 1. Product outcome and primary user
 
@@ -195,7 +196,7 @@ new business facts.
 |---|---|---|
 | **Locations ready to plan** | Locations with an active master version, an accepted planning input, stock snapshot, and known PO source. Opens data freshness. | Implemented in the Overview/planning-status API; approved freshness thresholds remain future policy. |
 | **Locations at risk** | Distinct locations whose latest current run has a projected stockout inside its horizon. Opens the filtered location view. | Implemented from persisted netting summaries. |
-| **Items at risk** | Distinct location/item pairs with `first_stockout_date`; display the earliest risk date. | Implemented in the run/Overview read models. |
+| **Items at risk** | Distinct location/item pairs whose latest current run has `actionable_risk_status = at_risk`; display `first_stockout_within_horizon_date`. A later full-forecast shortage is secondary context. | Implemented in the v2 run/Overview read models. |
 | **Recommendations due** | Positive proposals whose `order_date` is today/past, grouped by location. Label “recommendations”, never “orders”. | Implemented from persisted recommendations. |
 | **Blocking issues** | Blockers in current imports or latest current runs; warnings remain separate. | Implemented for current run blockers and import readiness. |
 | **Latest planning run** | Status, planning-as-of time, completion time, location, and whether its inputs are still current. | Implemented; a newer accepted import makes the prior run stale. |
@@ -248,14 +249,30 @@ this run proposes** and nothing ordered after it. Shown without that caveat it
 reads as a forecast shortfall rather than an artefact of a single-delivery
 projection.
 
-Shelf life never reduces demand. `recommend.py` applies it as a cap on the
-order quantity (`min(capped, shelf_life_cap_g)`), so the UI must not imply that
-a short shelf life lowers what is needed.
+The order/protection window is the default operational view. `Needed` must not
+use full-forecast demand as its primary value; show **Demand to protect through
+<coverage end>** from the active planning line. A shortage after that date is
+secondary **future replan expected** context, not an at-risk item. Full-forecast
+shortage must not feed the default risk filter, run summary, or Overview KPI.
+The uploaded forecast end is a data-coverage fact, not an editable global
+planning horizon.
+
+Shelf life never reduces demand, but the proposal must demonstrate whether the
+candidate can be consumed before expiry. Show estimated expiry, exact versus
+policy-approximation basis, projected candidate residual at expiry, and an
+incomplete-forecast warning. The v2 backend returns this supply-position-aware
+candidate evidence explicitly. `policy_approximation` is still not exact lot
+MHD and must not be described as proof of actual waste avoidance.
 
 Each row expands in place to show that item's daily projected balance from
 `planning_projection_days`, with the zero crossing, deliveries already on order,
 and the delivery this run proposes all marked and named in text. Historical
 balance before the run date is not available: no daily history is persisted.
+The default chart range is the active recommendation window, with optional
+display-only zoom to four weeks or the full forecast. Existing and proposed
+receipts show their quantities, the series uses discrete daily steps/straight
+segments rather than smoothing, and cumulative uncovered demand is not labelled
+as negative physical stock.
 
 - summary counts for stockout risk, unavoidable pre-arrival risk, overdue open
   POs, and shelf/max-cover attention;
@@ -294,6 +311,28 @@ not live confirmation from the supplier portal.
   final recommendation; and
 - **Download CSV** and **Download JSON** actions generated from the persisted
   canonical run, not reconstructed in the browser.
+
+The result uses three levels of progressive disclosure. The primary table is
+for scanning, focusable info popovers define unfamiliar metrics and their time
+windows, and the drawer is the audit view. Required warnings and remedies stay
+visible in the row/drawer and are never hover-only.
+
+The run read model supplies `planning_line_explanations` from the exact
+immutable master version used by the run. It includes the item/storage/pack
+context, shelf-life/safety/max-cover values, lead time, shelf-life anchor,
+supplier/channel, MOQ/case/order-unit settings, delivery/review rule,
+provenance/data status, protection mode, and explicit evidence scope. The
+shared `explanation_context.field_lineage` maps calculated fields to their
+owning datasets/policy inputs; the existing run `inputs` rows retain exact
+versions and hashes. Claude must join this context by `planning_line_id` and
+format it, not reconstruct it.
+
+The deepest currently supported view can reconcile the persisted arithmetic
+and daily item-level demand. It cannot claim exact MHD for existing stock,
+historical daily stock, or dish/silo-level demand contributions because those
+rows are not currently persisted in the result contract. These are visible
+evidence limits and later backend/data extensions, never values inferred by
+the browser.
 
 ### 6.3 Run interaction
 
@@ -428,7 +467,7 @@ never the status carrier.
 | Pure calculation result | `ImprovedRunResult` in `src/supply_planning/application/run_improved.py` |
 | CSV/JSON/review outputs | `src/supply_planning/adapters/v1_outputs.py` |
 | Domain/result records | `src/supply_planning/domain/models.py`, `engine/netting.py` |
-| Current prototype schema and demo data | migrations `202608280001`, `202608280002`, `202608290003`; `supabase/seed.sql` |
+| Current prototype schema and demo data | migrations `202608280001`, `202608280002`, `202608290003`, `202608300004`; `supabase/seed.sql` |
 
 ### 9.2 Implemented API surface
 
@@ -469,21 +508,22 @@ engine remains unaware of HTTP and Supabase.
 
 ## 10. Supabase schema assessment and minimal workflow model
 
-### 10.1 What the three migrations now provide
+### 10.1 What the four migrations now provide
 
 Migrations 001 and 002 define the tables. Migration 003 adds immutable-version
-guards and narrow transaction RPCs used by the FastAPI repository. The
-maintainer reports 001 and 002 applied through the SQL Editor; 003 still needs
-to be run there before the connected UI can exercise writes:
+guards and narrow transaction RPCs used by the FastAPI repository. Migration
+004 adds the corrected actionable-risk and shelf-life derivation contract plus
+the v2 planning persistence RPC. The maintainer reports 001–003 applied through
+the SQL Editor; 004 must be applied before the next connected planning run:
 
 | Tables | Implemented backend capability |
 |---|---|
 | `master_data_versions`, `locations`, `items`, `item_policy_overrides`, `delivery_rules` | Versioned master/rule drafts and active version. |
 | `planning_runs`, `planning_run_inputs` | Run identity, status, reproducibility metadata. |
-| `planning_lines`, `planning_recommendations`, `planning_exceptions` | Recommendation table, derivation drawer, run issues and exports. |
+| `planning_lines`, `planning_recommendations`, `planning_exceptions` | Recommendation table, derivation drawer, candidate expiry/cap/residual/rounding evidence, run issues and exports. |
 | `source_imports` | Data & settings cards, freshness, compact validation issues, file metadata, and immutable import history. |
 | `forecast_daily`, `menu_calendar`, `bom_lines`, `inventory_snapshots`, `purchase_order_lines` | Normalized accepted inputs for readiness, location views, and run assembly. |
-| `planning_netting_results` | Item risk, first stockout, projected balance, and Overview/location summaries. |
+| `planning_netting_results` | Explicit actionable-risk status/window, full-forecast context, projected balance, and Overview/location summaries. |
 | `planning_projection_days` | Daily stock, demand, PO receipt, candidate receipt, and stockout timeline for location-level explanation and charts. |
 
 RLS is enabled and browser roles currently have no table access. Keep domain
@@ -499,7 +539,9 @@ The schema files are:
   projection extension; and
 - `supabase/migrations/202608290003_ui_backend_transactions.sql` — immutable
   finalized inputs/active master rows, atomic import/activation/run functions,
-  and service-role-only execution grants.
+  and service-role-only execution grants; and
+- `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` —
+  additive v2 risk/MHD derivation columns and `persist_planning_run_v2`.
 
 `supabase/seed.sql` contains one clearly synthetic location/item/import/run/risk
 example for UI development. It is not operational evidence and must never be
@@ -617,12 +659,14 @@ them before polishing screens:
 
 ## 13. Suggested implementation order
 
-1. Apply migration 003 and configure Supabase/Auth environment values.
-2. Build the three-route React shell, sign-in/session handling, and shared
+1. Apply migration 004; Supabase/Auth and migrations 001–003 are already
+   configured in the development environment.
+2. Keep the implemented three-route React shell, sign-in/session handling, and shared
    status/empty/error components.
-3. Build **Data & settings** against the four implemented import endpoints.
-4. Build **Location planning** against readiness, inventory, PO, run, risk,
-   recommendation, and download endpoints.
+3. Keep the implemented **Data & settings** workflow and finish the inline
+   master-activation UX.
+4. Update **Location planning** to consume the v2 risk/MHD fields and correct
+   chart/label semantics.
 5. Build **Overview** against the implemented current-run summary.
 6. Add field-level master/menu editing only as a separately scoped follow-up;
    workbook draft import and activation are sufficient for the first UI slice.

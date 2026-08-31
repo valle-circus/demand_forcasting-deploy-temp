@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,7 +17,19 @@ from apps.api.supply_planning_api.services import (
     SelectedSources,
 )
 from supply_planning.adapters.canonical_csv import CanonicalInputBundle, load_canonical_bundle
-from supply_planning.domain.models import InputSourceStatus, Location, Provenance, RunMode
+from supply_planning.domain.models import (
+    DeliveryCoverageRule,
+    InputSourceStatus,
+    Item,
+    ItemPlanningPolicy,
+    ItemType,
+    Location,
+    Provenance,
+    RunMode,
+    ShelfLifeAnchor,
+    StockQuantityUnit,
+    StorageClass,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "synthetic_improved"
 AS_OF = datetime.fromisoformat("2026-08-25T00:00:00+02:00")
@@ -132,6 +145,16 @@ class _FixtureBackend(PlanningBackend):
             raise AssertionError("unexpected location")
         return self._sources
 
+    async def _load_master(self, version_id: str | None = None) -> LoadedMaster:
+        if version_id is not None:
+            self.assert_master_version(version_id)
+        return self._sources.master
+
+    @staticmethod
+    def assert_master_version(version_id: str) -> None:
+        if version_id != MASTER_VERSION_ID:
+            raise AssertionError(f"unexpected master version {version_id}")
+
 
 class _StatusBackend(PlanningBackend):
     def __init__(
@@ -174,6 +197,38 @@ class _StatusBackend(PlanningBackend):
             "run_id": "run-currentness",
             "location_id": location_id,
             "master_data_version_id": MASTER_VERSION_ID,
+        }
+
+
+class _OverviewBackend(PlanningBackend):
+    async def list_locations(self) -> JsonObject:
+        return {
+            "locations": [
+                {
+                    "location_id": "LOC_A",
+                    "location_name": "Location A",
+                    "timezone": "Europe/Berlin",
+                    "active": True,
+                }
+            ]
+        }
+
+    async def planning_status(self, location_id: str) -> JsonObject:
+        return {
+            "location_id": location_id,
+            "ready": True,
+            "blockers": [],
+            "sources": {
+                "master_data_version": {"id": MASTER_VERSION_ID},
+                "planning_input": {"id": PLANNING_IMPORT_ID},
+                "stock": {"id": STOCK_IMPORT_ID},
+                "purchase_orders": None,
+            },
+            "latest_run": {
+                "run_id": "run-risk-contract",
+                "created_at": "2026-08-30T08:00:00+00:00",
+            },
+            "latest_run_is_current": True,
         }
 
 
@@ -281,7 +336,120 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
             len(result["projection_days"]),
             len(store.persisted_payload["projection_days"]),
         )
+        persisted_lines = store.persisted_payload["planning_lines"]
+        if persisted_lines:
+            self.assertIn("candidate_expiry_date", persisted_lines[0])
+            self.assertIn(
+                "projected_candidate_residual_at_expiry_g",
+                persisted_lines[0],
+            )
+            self.assertIn("constraint_status", persisted_lines[0])
+        persisted_netting = store.persisted_payload["netting_results"][0]
+        self.assertIn("actionable_risk_status", persisted_netting)
+        self.assertIn("risk_horizon_end_date", persisted_netting)
+        self.assertIn("first_stockout_within_horizon_date", persisted_netting)
+        self.assertEqual(
+            result["explanation_context"]["calculation_owner"],
+            "python_backend",
+        )
+        self.assertEqual(
+            result["explanation_context"]["field_lineage"]["gross_requirement_g"],
+            ["forecast_daily", "menu_calendar", "bom_lines"],
+        )
         self.assertTrue(result["proposal_only"])
+
+    async def test_line_explanation_exposes_exact_versioned_policy_context(self) -> None:
+        settings = Settings.model_validate(
+            {"APP_ENV": "test", "CORS_ORIGINS": "http://localhost:5173"}
+        )
+        item = Item(
+            "ITEM_A",
+            "Item A",
+            StorageClass.RT,
+            Decimal("1000"),
+            shelf_life_days=30,
+            min_safety_days=Decimal("2"),
+            max_cover_days=Decimal("14"),
+        )
+        policy = ItemPlanningPolicy(
+            "ITEM_A",
+            ItemType.INGREDIENT,
+            "Transgourmet",
+            "TRANSGOURMET",
+            "TRANSGOURMET",
+            None,
+            None,
+            Decimal("1"),
+            "PACK",
+            StockQuantityUnit.PACK,
+            None,
+            None,
+            3,
+            ShelfLifeAnchor.RECEIPT_DATE,
+            Decimal("1"),
+            Decimal("1"),
+            Decimal("1"),
+            "SOURCE_VALUE",
+        )
+        rule = DeliveryCoverageRule(
+            "RULE",
+            "LOC_A",
+            "TRANSGOURMET",
+            StorageClass.RT,
+            None,
+            (),
+            None,
+            7,
+            AS_OF.date(),
+            None,
+            True,
+            "SOURCE_VALUE",
+        )
+        backend = _StatusBackend(
+            cast(CanonicalStore, _RunStore()),
+            settings,
+            LoadedMaster(
+                version={"id": MASTER_VERSION_ID},
+                locations=(Location("LOC_A", "Location A", "Europe/Berlin"),),
+                items=(item,),
+                policies=(policy,),
+                rules=(rule,),
+            ),
+        )
+
+        explanations = await backend._planning_line_explanations(
+            run={"master_data_version_id": MASTER_VERSION_ID},
+            lines=[
+                {
+                    "planning_line_id": "LINE-EXPLAIN",
+                    "item_id": item.item_id,
+                    "schedule_rule_id": rule.delivery_rule_id,
+                    "shelf_life_cap_basis": "policy_approximation",
+                    "forecast_through_expiry": True,
+                    "forecast_through_max_cover": True,
+                }
+            ],
+        )
+
+        explanation = explanations[0]
+        self.assertEqual(explanation["planning_line_id"], "LINE-EXPLAIN")
+        self.assertEqual(explanation["item"]["item_name"], item.item_name)
+        self.assertEqual(
+            explanation["planning_policy"]["lead_time_calendar_days"],
+            policy.lead_time_calendar_days,
+        )
+        self.assertEqual(
+            explanation["delivery_rule"]["review_period_days"],
+            rule.review_period_days,
+        )
+        self.assertFalse(
+            explanation["evidence_scope"]["exact_candidate_lot_expiry"]
+        )
+        self.assertFalse(
+            explanation["evidence_scope"][
+                "existing_inventory_lot_expiry_available"
+            ]
+        )
 
     async def test_production_mode_is_explicitly_disabled(self) -> None:
         backend, store = self._backend()
@@ -328,6 +496,94 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(current["latest_run_is_current"])
         self.assertFalse(stale["latest_run_is_current"])
+
+    async def test_run_summary_does_not_count_future_replan_as_current_risk(self) -> None:
+        settings = Settings.model_validate(
+            {"APP_ENV": "test", "CORS_ORIGINS": "http://localhost:5173"}
+        )
+        store = _RunStore()
+        store.tables.update(
+            {
+                "planning_runs": [{"run_id": "run-risk-contract"}],
+                "planning_run_inputs": [],
+                "planning_lines": [],
+                "planning_recommendations": [],
+                "planning_exceptions": [],
+                "planning_projection_days": [],
+                "planning_netting_results": [
+                    {
+                        "run_id": "run-risk-contract",
+                        "item_id": "FUTURE",
+                        "first_stockout_date": "2026-09-20",
+                        "first_stockout_within_horizon_date": None,
+                        "actionable_risk_status": "covered",
+                    },
+                    {
+                        "run_id": "run-risk-contract",
+                        "item_id": "NOW",
+                        "first_stockout_date": "2026-09-02",
+                        "first_stockout_within_horizon_date": "2026-09-02",
+                        "actionable_risk_status": "at_risk",
+                    },
+                    {
+                        "run_id": "run-risk-contract",
+                        "item_id": "UNKNOWN",
+                        "first_stockout_date": None,
+                        "first_stockout_within_horizon_date": None,
+                        "actionable_risk_status": "not_evaluated",
+                    },
+                ],
+            }
+        )
+        backend = PlanningBackend(cast(CanonicalStore, store), settings)
+
+        result = await backend.get_planning_run("run-risk-contract")
+
+        self.assertEqual(result["summary"]["items_at_risk"], 1)
+        self.assertEqual(result["summary"]["items_risk_not_evaluated"], 1)
+        self.assertEqual(result["summary"]["future_stockout_items"], 1)
+
+    async def test_overview_uses_persisted_actionable_risk_status(self) -> None:
+        settings = Settings.model_validate(
+            {"APP_ENV": "test", "CORS_ORIGINS": "http://localhost:5173"}
+        )
+        store = _RunStore()
+        store.tables["planning_netting_results"] = [
+            {
+                "run_id": "run-risk-contract",
+                "item_id": "FUTURE",
+                "first_stockout_date": "2026-09-20",
+                "actionable_risk_status": "covered",
+            },
+            {
+                "run_id": "run-risk-contract",
+                "item_id": "NOW",
+                "first_stockout_date": "2026-09-02",
+                "first_stockout_within_horizon_date": "2026-09-02",
+                "actionable_risk_status": "at_risk",
+            },
+            {
+                "run_id": "run-risk-contract",
+                "item_id": "UNKNOWN",
+                "first_stockout_date": None,
+                "actionable_risk_status": "not_evaluated",
+            },
+        ]
+        backend = _OverviewBackend(cast(CanonicalStore, store), settings)
+
+        result = await backend.overview()
+
+        self.assertEqual(result["kpis"]["items_at_risk"], 1)
+        self.assertEqual(result["kpis"]["items_risk_not_evaluated"], 1)
+        self.assertEqual(result["kpis"]["locations_at_risk"], 1)
+        self.assertEqual(result["locations"][0]["items_at_risk"], 1)
+        self.assertEqual(result["locations"][0]["items_risk_not_evaluated"], 1)
+        self.assertEqual(result["locations"][0]["location_name"], "Location A")
+        self.assertEqual(result["locations"][0]["timezone"], "Europe/Berlin")
+        self.assertEqual(result["locations"][0]["earliest_risk_date"], "2026-09-02")
+        self.assertEqual(
+            result["locations"][0]["sources"]["stock"]["id"], STOCK_IMPORT_ID
+        )
 
 
 if __name__ == "__main__":

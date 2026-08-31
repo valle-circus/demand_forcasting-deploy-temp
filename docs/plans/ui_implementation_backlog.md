@@ -562,6 +562,39 @@ workbook covers that location. Four equal cards would have walked a maintainer
 on a fresh environment into a chain of conflicts, so the cards are numbered and
 each explains its own blocker before the API has to.
 
+### Maintainer horizon/MHD review — correction tranche (2026-08-30)
+
+- [x] Backend actionable-horizon/MHD contract supplied and tested. Migration
+      `004` must be applied before the next connected v2 run; React must use
+      `actionable_risk_status`, not classify every full-forecast
+      `first_stockout_date` as current risk.
+- [ ] Replace the primary full-forecast `Needed` value with server-returned
+      demand for the active protection window and show the coverage end.
+- [ ] Default the stock chart to the decision window; make four-week/full-
+      forecast controls display-only.
+- [ ] Label existing and proposed receipt quantities directly and replace the
+      smoothed curve with a discrete daily representation.
+- [ ] Present cumulative uncovered demand separately from physical usable stock.
+- [ ] Show server-returned MHD evidence: expiry, cap basis, projected residual,
+      and incomplete forecast. Do not infer shelf-life safety in TypeScript.
+- [ ] Surface lead time, review cadence, protection end, and next review as
+      versioned policy context. Do not add one global ad-hoc run-horizon slider.
+- [ ] Update `PlanningRunResponse` for `planning_line_explanations` and
+      `explanation_context`; join by `planning_line_id` and show the exact
+      item/policy/delivery-rule version used by the run.
+- [ ] Audit and replace every old risk/KPI/label/helper listed in the Claude
+      brief's mandatory v2 UI impact table; update fixtures and tests rather
+      than adapting only the visible demo row.
+- [ ] Add progressive disclosure: a concise scan layer, focusable metric
+      definitions, and a complete derivation/source-lineage drawer. Never hide
+      blockers, approximations, evidence gaps or remedies in hover-only copy.
+- [ ] State the current evidence limits in the drawer: no exact existing-stock
+      lot MHD, no historical daily balance, and no persisted dish/silo
+      contribution breakdown. Do not infer any of these in TypeScript.
+
+Backend/engine prerequisites and evidence are in
+`docs/plans/planning_horizon_and_shelf_life_correction_plan.md`.
+
 **Also found:** file state was initially split between the page and the card,
 so the upload button could never enable. The card now owns it.
 
@@ -622,9 +655,10 @@ are now three distinct states.
       freshness columns, and drill-down.
 - [ ] `DataFreshnessPanel` and `LatestRunActivity`.
 - [ ] `ObservedPoActivity` as a collapsed secondary section.
-- [ ] Composition of `/overview` + `/locations` + per-location
-      `planning-status` with partial-failure handling (one location failing
-      must not blank the page).
+- [ ] Render the complete `/overview` read model with page-level failure
+      handling. The backend now includes location labels, source freshness,
+      current-run status, risk counts, and earliest actionable-risk dates, so
+      do not issue one `planning-status` request per location.
 - [ ] Tests: stale run is labelled stale and its KPIs are not presented as
       current; no waste/OOS/mixed-unit total appears anywhere; each KPI card
       navigates.
@@ -640,12 +674,42 @@ are now three distinct states.
 - [ ] Responsive pass at 360 / 768 / 1024 / 1440 px.
 - [ ] `pnpm check` (lint + typecheck + test + build) green.
 - [ ] Connected smoke test against the running local API. Readiness, migration
-      003 and credentials are already verified (2026-08-29), so the only
-      remaining prerequisites are a safe Auth user and a master workbook that is
-      safe to import into `development`. Record honestly what was and was not
-      exercised — no live-success claims without evidence.
+      003 and credentials were verified (2026-08-29); migration 004 must now be
+      applied before a v2 run. The remaining data prerequisites are a safe Auth
+      user and a master workbook safe to import into `development`. Record
+      honestly what was and was not exercised—no live-success claims without
+      evidence.
 - [ ] Update this backlog, the scratchpad, master backlog 2D/2E/2F, and
       `MEMORY.md` if a durable decision changed.
+
+### WP7 — Optional grounded LLM assistance after the core UI
+
+This is a post-core enhancement, not a dependency for the 2 September demo or
+the first feedback cycle. The Python engine and persisted derivation remain the
+only calculation authority.
+
+- [ ] Add an optional **Executive summary** panel on Overview that turns the
+      current `/overview` readiness, staleness, risk and blocker fields into a
+      short prioritised paragraph with links to the exact locations/actions.
+      It must say when data or a current run is missing instead of filling gaps.
+- [ ] Add an optional **Explain this quantity** action beside a recommendation.
+      Ground it only in the persisted planning line, item policy, netting row,
+      accepted open POs, daily demand/receipts and engine exceptions: demand to
+      protect, stock, POs, lead/review horizon, shelf life, max cover, MOQ/case
+      and rounding. The model may simplify wording but may not recompute or
+      alter the quantity.
+- [ ] Keep the existing derivation drawer and source lineage visible as the
+      deterministic fallback. Label generated text, retain the input/run
+      version and generation time, and fail without blocking the normal UI.
+- [ ] Decide provider, minimum normalized payload, data classification,
+      retention/logging, latency and cost limits before enabling the feature.
+      Do not send raw XLSX/PDF contents or credentials to a model.
+- [ ] Build a small evaluation set from validated synthetic scenarios,
+      including the two-location 2 September packet: Berlin pre-arrival pod
+      risk, Berlin shelf/max/rounding cases, Hamburg PO-covered zero orders,
+      stale runs, missing fields and conflicting exceptions. Reject unsupported
+      claims, invented causes, hidden uncertainty and any ordering/approval
+      language.
 
 ---
 
@@ -654,24 +718,23 @@ are now three distinct states.
 Documented per the brief's rule rather than worked around with a parallel
 backend path. None of these blocks WP0–WP5.
 
-1. **`GET /api/v1/overview` — add per-location display and freshness fields.**
-   Today: `locations[]` has `location_id, ready, items_at_risk, latest_run,
-   latest_run_is_current, blockers`. The Overview page also needs
-   `location_name`, `timezone`, `earliest_risk_date`, and the four
-   `sources` freshness rows that `planning-status` already computes internally
-   in the same request. Without them the browser makes `1 + N` extra calls for
-   data the server just discarded. Proposed addition to each row:
-   `location_name`, `timezone`, `earliest_risk_date`,
-   `sources: {master_data_version, planning_input, stock, purchase_orders}`.
+1. **Resolved 2026-08-30 — `GET /api/v1/overview` supplies the complete
+   per-location read model.** `locations[]` now includes `location_name`,
+   `timezone`, `earliest_risk_date`, and
+   `sources: {master_data_version, planning_input, stock, purchase_orders}`;
+   `kpis` also includes `locations_at_risk`. Claude should consume these fields
+   directly rather than constructing a browser-side `1 + N` request path.
 2. **`GET /locations/{id}/inventory` and `/purchase-orders` return 404 for
    "not imported yet".** This conflates "known empty" with "not found", which
    the journey doc §8 separates. A 200 with `source_import: null` and an empty
    list would let the UI distinguish them without inferring from the status
    code. The frontend will special-case the 404 in the meantime.
-3. **`POST /planning-runs` has no idempotency key.** The frontend prevents
-   duplicate submission, but a client-supplied idempotency key (or the
-   deterministic `run_id` returning the existing run) would make retry after a
-   dropped connection safe. Master backlog 2E already carries this item.
+3. **Resolved backend side — deterministic planning-run retry is idempotent.**
+   The engine derives `run_id` from the complete input/policy hash and the
+   atomic persistence RPC returns the existing run for the same ID/hash while
+   rejecting an ID/hash collision. The frontend must still disable duplicate
+   submission while a synchronous request is in flight, but it does not need
+   to invent an idempotency key.
 4. **No historical daily balance is persisted.** `planning_projection_days`
    starts at the run date, so the item chart cannot show any context before it.
    `inventory_snapshots` holds a sparse per-import count, which would mislead if
@@ -706,6 +769,16 @@ backend logic:
 ---
 
 ## 8. Dated progress
+
+- 2026-08-30 — **Codex backend correction complete.** The API now returns
+  explicit item-specific risk status/window and candidate expiry, cap basis,
+  evidence completeness, residual at expiry, binding constraint, and safe
+  rounding outcome. Run/Overview counts no longer use full-forecast
+  `first_stockout_date`. Exact packet replay `improved-ded5498f7198` is covered
+  through 7 Sep, has a future-context shortage on 10 Sep, and keeps the safe
+  6-pack proposal with zero candidate residual at estimated expiry. Claude can
+  implement the unchecked presentation items in the correction tranche and
+  WP5 after migration 004 is applied; no TypeScript business logic is needed.
 
 - 2026-08-30 — **WP4 complete and verified live.** Signed in against the real
   API, computed a scenario run for `LOC_UI_DEMO_001` from Codex's test packet,

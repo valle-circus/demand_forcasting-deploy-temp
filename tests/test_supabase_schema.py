@@ -170,6 +170,33 @@ class SupabaseSchemaTests(unittest.TestCase):
             columns["planning_projection_days"],
         )
 
+    def test_actionable_risk_and_shelf_life_evidence_columns_exist(self) -> None:
+        columns = _table_columns(_schema_sql())
+        self.assertTrue(
+            {
+                "candidate_expiry_date",
+                "shelf_life_cap_basis",
+                "forecast_through_expiry",
+                "projected_candidate_residual_at_expiry_g",
+                "max_cover_end_date",
+                "forecast_through_max_cover",
+                "binding_constraint",
+                "constraint_status",
+                "rounding_direction",
+            }.issubset(columns["planning_lines"])
+        )
+        self.assertTrue(
+            {
+                "risk_horizon_end_date",
+                "risk_evaluated_through_date",
+                "risk_horizon_fully_observed",
+                "actionable_risk_status",
+                "first_stockout_within_horizon_date",
+                "projected_balance_at_risk_horizon_end_g",
+                "max_stockout_within_horizon_g",
+            }.issubset(columns["planning_netting_results"])
+        )
+
     def test_backend_transaction_and_immutability_functions_exist(self) -> None:
         schema = _schema_sql().lower()
         for function in (
@@ -177,6 +204,7 @@ class SupabaseSchemaTests(unittest.TestCase):
             "persist_master_import_v1",
             "persist_source_import_v1",
             "persist_planning_run_v1",
+            "persist_planning_run_v2",
         ):
             self.assertIn(f"create function public.{function}", schema)
             self.assertIn(f"grant execute on function public.{function}", schema)
@@ -184,6 +212,14 @@ class SupabaseSchemaTests(unittest.TestCase):
         self.assertIn("forecast_daily_reject_finalized_mutation", schema)
         self.assertIn("purchase_order_lines_reject_finalized_mutation", schema)
         self.assertIn("active master-data versions are immutable", schema)
+
+    def test_deterministic_run_retry_is_idempotent_and_hash_guarded(self) -> None:
+        schema = _schema_sql().lower()
+
+        self.assertIn("where run_id = requested_run_id", schema)
+        self.assertIn("if existing_input_hash <> requested_input_hash then", schema)
+        self.assertIn("existing run_id has a different input hash", schema)
+        self.assertIn("return requested_run_id", schema)
 
 
 if __name__ == "__main__":

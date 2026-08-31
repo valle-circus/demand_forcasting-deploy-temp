@@ -1,6 +1,6 @@
 # Supabase prototype persistence
 
-The three migrations establish the temporary prototype store for:
+The four migrations establish the temporary prototype store for:
 
 - versioned application-maintained master data and planning rules; and
 - canonical source imports/inputs, planning runs, netting summaries,
@@ -23,6 +23,9 @@ authority.
 - `202608290003_ui_backend_transactions.sql`: finalized-source and active-
   master immutability guards plus service-role-only transaction functions for
   imports, master activation, and full planning result persistence.
+- `202608300004_actionable_risk_and_shelf_life.sql`: additive v2 derivation
+  fields for actionable item horizons and candidate MHD/max-cover evidence,
+  plus `persist_planning_run_v2`.
 
 This is intentionally smaller than the original schema plan. File metadata and
 small validation issue lists live on `source_imports`; `po_id` stays on each PO

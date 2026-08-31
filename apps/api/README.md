@@ -23,9 +23,13 @@ overview, location, planning-run, risk, and download contracts. The browser
 uses Supabase directly only for Auth; it never receives the server secret and
 does not access domain tables directly.
 
-Before connected writes, apply all three files in `supabase/migrations/` in
-filename order. If 001 and 002 already exist in the project, run only
-`202608290003_ui_backend_transactions.sql` as a forward migration in the
+Planning-run reads return per-line explanation context from the exact immutable
+master version used by the run. The frontend can therefore show policy inputs,
+provenance and field lineage without reimplementing calculations.
+
+Before connected writes, apply all four files in `supabase/migrations/` in
+filename order. If 001–003 already exist in the project, run only
+`202608300004_actionable_risk_and_shelf_life.sql` as a forward migration in the
 Supabase SQL Editor. Configure a safe Supabase Auth user plus the server values
-in `.env`; readiness stays degraded until the required tables and RPCs are
+in `.env`; readiness stays degraded until the required tables and v2 RPC are
 visible. The local test suite uses fakes and does not prove the remote project.

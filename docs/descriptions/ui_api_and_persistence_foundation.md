@@ -70,29 +70,33 @@ the root Python package. Vercel uses `apps/web` as its project root.
   activation, planning-run, risks, recommendations, and CSV/JSON contracts.
 - `services.py` reuses the Python XLSX/PDF adapters, assembles canonical inputs,
   calls the pure engine, and builds portable read models.
+- The Overview read model returns aggregate actionable-risk KPIs and one
+  self-contained row per location with its display metadata, source freshness,
+  current-run status, blockers, risk counts, and earliest actionable-risk date.
+  The browser does not need to reconstruct these semantics or make one status
+  request per location.
+- The planning-run read model enriches each persisted planning line with a
+  `planning_line_explanations` record loaded from the exact immutable master
+  version referenced by the run. Item, lead/review, shelf-life, safety,
+  max-cover, pack/MOQ/case, supplier and delivery-rule context is therefore
+  available to an audit drawer without duplicating it in another result table.
+  `explanation_context.field_lineage` names the authoritative dataset/policy
+  inputs for each calculated field.
 - `repository.py` keeps PostgREST persistence behind a protocol so Snowflake
   can later replace result/input storage without changing the browser or engine.
 
 The readiness endpoint returning `degraded/not_configured` is expected until
-all three migrations are applied and server environment variables are
+all four migrations are applied and server environment variables are
 configured. Render process health remains healthy during that setup, while
 authenticated domain actions fail closed.
 
 ### Browser application
 
-The current page is intentionally only a foundation/status shell. It:
-
-- confirms the browser can reach the Python API;
-- shows the API's sanitized Supabase state;
-- shows whether browser-safe Supabase Auth configuration is present;
-- retains the demo/proposal warning; and
-- names upload, master maintenance, and recommendation review as later product
-  slices.
-
-The next UI retains a persistent side navigation with exactly three top-level
-destinations: Overview, Location planning, and Data & settings. That decision
-was made after the foundation was built; it does not mean those routes or
-workflows are already implemented.
+The browser now has authenticated shell/navigation, the connected Data &
+settings workflow, and the first Location planning result view. Overview and
+the v2 risk/MHD presentation correction remain frontend work. The persistent
+side navigation has exactly three top-level destinations: Overview, Location
+planning, and Data & settings.
 
 The frontend contains a lazy Supabase client initializer for Auth. It
 does not query domain tables directly and receives no elevated credential.
@@ -153,11 +157,16 @@ other source imports, master activation, and a complete planning result. A run
 is persisted atomically with its selected inputs, lines, recommendations,
 exceptions, netting summaries, and daily projection rows.
 
-The maintainer reports migrations 001 and 002 applied manually through the
-Supabase SQL Editor. Migration 003 must now be pasted and run there as one
-additional forward migration. The local repository has no project link or
-credentials, so it cannot claim that remote application or live workflow
-verification occurred. Never rewrite the already-applied files.
+`202608300004_actionable_risk_and_shelf_life.sql` adds only the v2 derivation
+columns required for item-specific actionable risk and tagged-candidate
+shelf/max-cover evidence. It also adds `persist_planning_run_v2`, which is the
+readiness marker and atomic RPC used by the corrected backend.
+
+The maintainer reports migrations 001–003 applied manually through the
+Supabase SQL Editor and has already verified Auth plus the earlier connected
+workflow. Migration 004 must now be pasted and run there as one additional
+forward migration before the next v2 planning run. Never rewrite the already-
+applied files.
 
 ## Upload and retention boundary
 
@@ -183,11 +192,9 @@ ephemeral local filesystem.
 
 ## Deferred work
 
-- Turn the defined three-page plan into detailed wireframes and test the
-  information hierarchy/terminology with the maintainer before visual polish.
-- Apply migration 003, add safe environment values and at least one Supabase
-  Auth user, then verify readiness and one representative workflow live.
-- Build the three React pages against the implemented OpenAPI contracts.
+- Apply migration 004 and verify readiness plus one representative v2 run.
+- Complete Overview and update Location planning to render the explicit v2
+  risk/MHD fields without browser-side calculation.
 - Add field-level draft editing and change-event history after the upload/
   activation workflow proves useful; workbook import remains the V1 write path.
 - Add frontend component/E2E tests and live API smoke coverage in a safe dev

@@ -468,7 +468,10 @@ Two defects found by verifying rather than by tests:
   Loading, failed-to-load and genuinely-absent are now distinct.
 - Raw ISO dates in the drawer footer.
 
-Next: WP5 (Overview), then WP6 (states, accessibility, responsive, handoff).
+Superseded on 2026-08-30: Codex has supplied the corrected backend contract.
+WP5 and the Location horizon/MHD slice may continue after migration 004 is
+applied; React must consume the explicit fields rather than recreate the
+classification.
 
 ## Risk & stock rebuilt after maintainer review (2026-08-30)
 
@@ -499,6 +502,23 @@ Asked directly, so recorded: `recommend.py:99-123` applies shelf life as
 `capped = min(capped, shelf_life_cap_g)`. It limits **how much may be ordered
 at once**, and never shrinks the requirement. Said in plain words in the
 expanded row.
+
+Follow-up correction after maintainer review: that sentence was technically
+true but not sufficient. The old cap used gross adjusted demand through
+expiry and does not subtract projected on-hand/other receipts competing for the
+same demand. It therefore does **not** prove that the candidate will be consumed
+before MHD. UI copy must stop at “policy cap recorded” until the backend returns
+candidate residual-at-expiry evidence.
+
+The same review found a contract mismatch: `first_stockout_date` spans the full
+uploaded forecast, while `_netting_issues` scopes actionable stockout to the
+planning-line coverage end. The current React helper and API/Overview summary
+use the full-horizon field and therefore report the demo item at risk even
+though shortage starts only after the current 10-day decision window. Tracked
+in `docs/plans/planning_horizon_and_shelf_life_correction_plan.md`; do not fix it
+by duplicating horizon comparisons in React. The v2 backend now persists
+`actionable_risk_status` and `first_stockout_within_horizon_date`; those are the
+frontend contract.
 
 ### The chart existed but was unreachable
 
@@ -544,3 +564,72 @@ An `apps/web/src/features/location-planning/NOTES.md` was created and then
 removed. `AGENTS.md` already designates `docs/scratchpads/` for cross-session
 notes and `docs/descriptions/` for behaviour — a new location beside the code
 fragments that. Keep frontend notes here.
+
+## Backend horizon/MHD correction completed (2026-08-30)
+
+- Engine policy version is now
+  `template-recommendation-v2-2026-08-30`; the changed policy produces a new
+  deterministic run id instead of returning an old idempotent result.
+- Candidate sizing floors unmet pre-arrival demand out of the controllable
+  stock position. A later proposal cannot repair an earlier missed service.
+- Shelf-life and max-cover caps simulate a tagged candidate while consuming
+  projected on-hand, accepted POs, and earlier planned receipts first.
+- Pack/MOQ rounding cannot exceed a hard cap. The engine either uses the
+  largest safe purchasable multiple or returns
+  `no_safe_positive_order` plus `INFEASIBLE_ORDER_CONSTRAINTS`.
+- Netting persists `at_risk`, `covered`, or `not_evaluated` for the active
+  item-specific horizon. Full-forecast first shortage remains separate.
+- Planning lines persist expiry, cap basis, forecast completeness, projected
+  candidate residual, max-cover end, binding constraint, constraint status,
+  and rounding direction.
+- Exact UI packet replay `improved-ded5498f7198`: 6 packs; covered through
+  2026-09-07; first full-forecast shortage 2026-09-10; 2 kg balance at the
+  action horizon; expiry 2026-09-30; residual 0; shelf cap 27 kg; max-cover cap
+  11 kg.
+- Verification: 83 Python tests pass; focused Ruff and strict mypy on changed
+  engine/API modules pass. Full-project mypy still has pre-existing adapter
+  typing errors outside this tranche.
+- Overview now supplies location labels/timezone, four source-freshness rows,
+  earliest actionable-risk date, and `locations_at_risk` in one response; WP5
+  must not fan out to one status request per location.
+- External next step: Valentin runs
+  `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` in the
+  Supabase SQL Editor. Readiness then requires `persist_planning_run_v2`.
+- Frontend next step: update TypeScript response types and render/filter the
+  explicit v2 fields; fix chart range/receipt labels/discrete geometry and
+  continue WP5. Do not edit Python or migrations in that handover.
+
+## Explainability handover refinement (2026-08-30)
+
+- The planning-run API now returns `planning_line_explanations` from the exact
+  immutable master version used by the run: item/storage/pack, shelf-life and
+  safety/max-cover values, lead/anchor, supplier/channel, MOQ/case, delivery/
+  review rule, provenance, protection mode and evidence scope.
+- `explanation_context.field_lineage` maps the calculation fields to the
+  normalized input datasets or policy fields; existing run inputs carry exact
+  versions/hashes and daily projections carry item demand and receipt events.
+- Claude must implement a scan layer, focusable definitions, and a derivation/
+  source-lineage drawer. Required warnings are not hover-only.
+- Current honest limits: no exact lot MHD for existing inventory, no historical
+  daily stock series, and no persisted dish/silo contribution rows. Those are
+  backend/data follow-ups, not calculations for React.
+
+## Two-location colleague-demo packet and LLM follow-up (2026-08-30)
+
+- The synthetic packet beside the original smoke-test files now contains one
+  global master/planning pair for `LOC_DEMO_BERLIN_001` and
+  `LOC_DEMO_HAMBURG_002`, plus one Apicbase-style stock workbook and one
+  parseable Transgourmet PDF per location. Its README owns the exact 2 September
+  cutoffs and upload order.
+- Berlin replay `improved-9bd06fb63c77` has one actionable long-lead pod risk
+  on 26 September before the 30 September candidate receipt. Hamburg replay
+  `improved-7383aef1b01e` has all five items covered; stock and four accepted
+  open-PO lines explain several zero recommendations. Both runs have zero
+  blockers and byte-identical replays.
+- Fresh, TK, Kuehl, RT and pod cases are all represented. The fresh showcase is
+  deliberately scoped through 12 September while the six-week demand/menu
+  horizon remains available for the 35-day pod policy.
+- Optional LLM assistance is now tracked in master backlog 2H and UI WP7: one
+  grounded Overview executive summary and one plain-language recommendation
+  explanation. The model is presentation-only; persisted engine fields remain
+  authoritative, and raw uploads/credentials are excluded from the prompt.

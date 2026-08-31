@@ -216,12 +216,13 @@ After the technical Milestone 1 exit, build only a thin UI over the same contrac
 No supplier dispatch, ERP write, approval workflow, statistical optimization,
 or complex calendar integration belongs in this milestone.
 
-**Backend progress (2026-08-29):** the monorepo now contains authenticated
-FastAPI imports, immutable Supabase versions, master activation, synchronous
-scenario runs, atomic result persistence, and the Overview/location/read/
-download contracts. The React/TypeScript/Vite/Tailwind domain pages and
-field-level editors remain open; live verification requires migration 003 and
-safe cloud/Auth configuration. The granular checklist is in
+**Backend progress (updated 2026-08-30):** the monorepo now contains
+authenticated FastAPI imports, immutable Supabase versions, master activation,
+synchronous scenario runs, atomic result persistence, corrected actionable-
+horizon/MHD v2 derivations, and the Overview/location/read/download contracts.
+Migration 004 must be applied before the next connected v2 run. Claude has
+implemented the Auth shell, Data & settings, and first Location slice; v2
+presentation, Overview, and field-level editors remain open. The granular checklist is in
 `docs/plans/phase2_supply_planning_master_backlog.md`; architecture and
 environment rules are in
 `docs/descriptions/ui_api_and_persistence_foundation.md`. The defined

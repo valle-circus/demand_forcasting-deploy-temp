@@ -424,7 +424,25 @@ One record per dataset snapshot used by a run: `run_id`, `dataset`, `source_vers
 
 ### 5.3 `planning_lines`
 
-One derivation record per run/location/item/supplier candidate. It retains stable IDs, `order_date`, `expected_delivery_date`, `gross_requirement_g`, yield and safety values plus provenance, `usable_on_hand_g`, `open_po_due_g`, `raw_order_g`, shelf-life/max-cover caps, `capped_order_g`, `proposed_order_units`, and `rounding_delta_g`.
+One derivation record per run/location/item/supplier candidate. It retains
+stable IDs, order/receipt and coverage dates, demand/yield/safety values plus
+provenance, usable on-hand, accepted open POs, raw and capped order grams, and
+purchasable units. The v2 fields also retain candidate expiry, shelf-life cap
+basis, forecast-through-expiry evidence, projected candidate residual at
+expiry, max-cover end/evidence, binding constraint, constraint status, and
+rounding magnitude/direction. A hard shelf/MHD or max-cover cap is never
+silently exceeded by pack/MOQ rounding.
+
+### 5.3a `planning_netting_results` and `planning_projection_days`
+
+One netting result persists the full uploaded-forecast projection plus a
+separate item-specific actionable-risk window. The v2 risk contract includes
+`risk_horizon_end_date`, `risk_evaluated_through_date`, whether that horizon is
+fully observed, `actionable_risk_status`, the first/max shortage inside the
+horizon, and the balance at horizon end. `first_stockout_date` remains the
+first shortage anywhere in the full forecast and is secondary context only.
+Daily rows preserve dated demand, existing PO receipts, candidate receipts,
+signed balance, and uncovered demand.
 
 ### 5.4 `planning_recommendations` and `exceptions`
 
@@ -455,8 +473,10 @@ statuses, structured issues, one dated netting result per location/item,
 planning derivations and purchase recommendations. Each netting result retains
 the opening stock, daily demand and receipt events, signed balances, in-horizon
 PO quantity, overdue and post-horizon PO quantities, first projected stockout,
-and unrounded net requirement in grams. Separate table-ready CSVs persist final
-order units, all policy intermediates, exceptions and mapping reviews.
+and unrounded net requirement in grams. The improved audit schema is v2 and
+adds the explicit actionable-risk and candidate expiry/cap/residual evidence
+above. Separate table-ready CSVs persist final order units, all policy
+intermediates, exceptions and mapping reviews.
 
 The selected snapshot is treated as the opening balance at the projection
 start. If its calendar date is older, the assumption is a warning in

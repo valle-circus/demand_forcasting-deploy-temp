@@ -26,10 +26,12 @@
 - [x] Implement the Auth boundary, schema-aware readiness, portable/Supabase
   repository, four import services, immutable persistence, synchronous run,
   atomic outputs, and UI read/download endpoints.
-- [ ] Apply migration 003 and configure Auth/API values to verify the backend
+- [x] Apply migration 003 and configure Auth/API values to verify the backend
   against the real Supabase project.
-- [ ] Build Data & settings first, then Location planning, Overview, and
-  versioned master/menu editing in that dependency order.
+- [x] Build Data & settings and the first Location planning slice.
+- [ ] Apply migration 004 and verify one v2 planning persistence/read journey.
+- [ ] Finish the v2 Location presentation, Overview, and then versioned
+  master/menu editing in that dependency order.
 
 ## Key decisions (and why)
 
@@ -123,8 +125,9 @@
   locations/readiness, inventory, observed PO history, master activation,
   planning run/result/risk, Overview, and CSV/JSON endpoints. The complete
   calculation output, including daily projections, is persisted by one RPC.
-- Backend verification now passes all 70 Python tests plus focused Ruff and
-  strict mypy. OpenAPI generation confirms every expected `/api/v1` route.
+- Backend verification now passes all 83 Python tests plus focused Ruff and
+  strict mypy on the changed v2 engine/API boundary. OpenAPI generation
+  confirms every expected `/api/v1` route.
 - Root server credentials and an admin-created Auth user are configured for the
   development project. Claude verified the authenticated browser -> FastAPI
   journey; Codex independently verified the full live schema contract.
@@ -152,6 +155,10 @@
   canonical fields now normalize that representation before joining parsed and
   source rows; the exact demo packet reaches persistence preparation with 42
   forecast rows, 42 menu rows, and one BOM row.
+- The corrected Overview read model now keeps actionable-horizon semantics and
+  returns location metadata, source freshness, current-run status, earliest
+  actionable risk, and `locations_at_risk` without a browser-side N+1 status
+  request.
 
 ## Open questions / unknowns
 
@@ -213,3 +220,14 @@
 - Frontend verification: run `pnpm check` from `apps/web`.
 - Focused API quality checks cover `apps/api/supply_planning_api`, the touched
   engine adapter/orchestrator files, and the backend/schema test modules.
+
+## 2026-08-30 actionable-risk/MHD v2 follow-up
+
+- A fourth additive migration now exists:
+  `202608300004_actionable_risk_and_shelf_life.sql`.
+- It adds explicit item risk-window and candidate expiry/cap/residual fields plus
+  `persist_planning_run_v2`; it does not replace or delete any table.
+- Migrations 001–003 remain applied. Migration 004 must be run manually in the
+  Supabase SQL Editor before the next connected v2 planning run.
+- The API readiness probe now requires the v2 RPC, so a missing migration is
+  visible instead of failing only during persistence.

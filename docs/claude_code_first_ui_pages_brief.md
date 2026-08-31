@@ -52,9 +52,15 @@ The backend now provides:
 - Overview, location/readiness, inventory, PO, import, run, risk,
   recommendation, and CSV/JSON download endpoints.
 
-All three migrations are applied in the selected development Supabase project.
-On 2026-08-29, Codex verified through the configured server boundary that all
-18 required tables and all four transaction RPCs are visible. Claude also
+Migrations 001–003 are applied in the selected development Supabase project.
+Before the next connected planning run, Valentin must apply the new forward
+migration
+`supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` through
+the Supabase SQL Editor. It adds derivation columns only—no replacement tables—
+and the `persist_planning_run_v2` RPC. Until it is applied, readiness will
+honestly report the v2 persistence dependency as missing. Claude must not add
+tables or work around that state. On 2026-08-29, Codex verified the earlier
+18-table/four-RPC contract. Claude also
 verified the authenticated browser-to-FastAPI journey with the maintainer's
 admin-created user. Continue to treat `/api/v1/readiness` as the runtime truth:
 if it later reports a missing dependency, show that non-secret blocker; do not
@@ -77,8 +83,11 @@ seed data. Follow the strict sequence already implemented on Data & settings:
 master upload -> explicit activation -> planning upload -> location stock ->
 location PO PDFs. Use `LOC_UI_DEMO_001` and the readme's exact timezone-aware
 cutoffs. The packet was replayed through the existing Python XLSX/PDF adapters
-and the pure scenario engine; it completed with one 6-pack proposal. Do not
-hard-code that output in React: it is only a connected smoke-test oracle.
+and the corrected pure scenario engine as `improved-ded5498f7198`; it completed
+with one safe 6-pack proposal, `actionable_risk_status = covered` through
+7 September, a future-context shortage on 10 September, and zero projected
+candidate residual at estimated expiry. Do not hard-code that output in React:
+it is only a connected smoke-test oracle.
 
 The test also confirmed two UX rules that must remain explicit:
 
@@ -176,6 +185,13 @@ Build the exception-first hierarchy from section 5 of the journey document:
 - source freshness/current-run information;
 - latest planning activity and secondary observed open-PO activity.
 
+The backend now returns the complete Overview read model. In addition to the
+aggregate KPIs (including `locations_at_risk`), every `locations[]` row carries
+`location_name`, `timezone`, `earliest_risk_date`, the four `sources` freshness
+records, current-run status, risk counts, and blockers. Consume this response
+directly; do not fan out to one `planning-status` request per location or
+recalculate an earliest risk date in React.
+
 Do not display actual waste, actual OOS, or mixed-unit total quantities. Cap or
 shelf-life evidence is only potential attention/risk.
 
@@ -191,6 +207,112 @@ shelf-life evidence is only potential attention/risk.
   planning lines, exceptions, netting results, and daily projections.
 - Server-generated CSV/JSON download actions.
 - Distinguish observed PO lines from calculated recommendations everywhere.
+
+#### Horizon and MHD backend contract ready for frontend adoption
+
+Maintainer review on 2026-08-30 found that the old connected view mixed
+the full uploaded-forecast projection with the item-specific actionable
+recommendation horizon. Read
+`docs/plans/planning_horizon_and_shelf_life_correction_plan.md` before further
+Location planning or Overview work.
+
+- Use `planning_netting_results.actionable_risk_status` for the default risk
+  filter, row status, and Overview meaning. It is `at_risk`, `covered`, or
+  `not_evaluated`. Do not treat every full-forecast `first_stockout_date` as
+  current risk. A
+  shortage after the active planning-line coverage end is expected to be
+  reconsidered in a later review cycle and must not inflate the default risk
+  filter or Overview KPI.
+- Use `planning_lines.gross_requirement_g` plus `coverage_end_date` for
+  **Demand to protect through <date>**. Do not use full-forecast gross demand
+  as the primary `Needed` value. The
+  customer-facing action is demand protected by the current recommendation,
+  its coverage end, the existing receipts, and the proposed receipt.
+- Keep forecast/data horizon, item protection horizon, shelf-life feasibility
+  window, and chart display range distinct. A display zoom is welcome; one
+  global ad-hoc planning-horizon slider is not.
+- Show the explicit backend fields `candidate_expiry_date`,
+  `shelf_life_cap_basis`, `forecast_through_expiry`,
+  `projected_candidate_residual_at_expiry_g`, `binding_constraint`, and
+  `constraint_status`. A `policy_approximation` is not exact lot MHD. React
+  must not derive or override feasibility.
+- In the chart, label existing/proposed receipt quantities, use discrete daily
+  geometry instead of smoothing, and distinguish usable stock from cumulative
+  uncovered demand.
+
+The corrected backend contract is supplied and tested. Claude can now finish
+the Location horizon/MHD slice and WP5 Overview, provided it only formats and
+filters the explicit fields above.
+
+#### Mandatory UI impact pass after the v2 logic correction
+
+Do not treat this as a type-only API upgrade. Review every existing Location
+and Overview label, filter, chart marker, KPI, empty state, and test against the
+following semantic changes:
+
+| Existing/ambiguous UI behavior | Correct backend meaning | Required UI adjustment |
+|---|---|---|
+| Any non-null full-forecast `first_stockout_date` means **At risk** | Only `actionable_risk_status = at_risk` is current decision risk | Use the explicit status for filters, badges, KPIs and alerts; present a later shortage as **Future replan expected** |
+| `Needed` shows `netting_results.gross_requirement_g` | That value spans the complete uploaded forecast | Use `planning_lines.gross_requirement_g` and `coverage_end_date` as **Demand to protect through <date>**; keep full-forecast demand secondary |
+| `Lasts N days` is presented as a stock KPI | It is derived from a full-forecast shortage and includes calendar/zero-demand days | Prefer **Covered through**, **Shortage within decision window**, or **Future shortage on** using server dates/statuses |
+| A negative ending balance looks like negative physical stock | It is cumulative uncovered demand if no later planning cycle places another order | Separate non-negative usable stock from the labelled full-forecast counterfactual |
+| Receipt jumps are visible but unexplained | Daily projection includes both accepted POs and the new candidate | Label each existing and proposed receipt with date and quantity |
+| A smoothed curve appears to cross zero between dates | The engine evaluates closing balance at daily grain | Use step/straight daily geometry and state that shortage begins on the returned date |
+| `10 days` appears to be a universal or user-chosen horizon | Stocked-item protection is item lead time plus versioned review cadence; fresh uses delivery/service windows | Show the item policy context; do not add one global planning-horizon control |
+| Shelf-life cap is described as proof of MHD safety | It is candidate-specific supply-position evidence; it may be a policy approximation and may have incomplete forecast coverage | Show expiry basis, evidence completeness and residual; never claim exact MHD or actual waste without exact lot data |
+| Pack/MOQ rounding always produces an ordinary proposal | A hard cap may force a lower safe multiple or no safe positive order | Show `constraint_status`, `rounding_direction`, binding constraint and the backend exception/remedy; never manufacture a proposal in React |
+| Overview risk counts use browser helpers | Overview now returns backend-classified current-run counts | Render `/overview` values directly and keep stale/not-evaluated states distinct from zero risk |
+
+Update the existing frontend tests and fixtures for every affected row above.
+Delete or replace old TypeScript helpers whose business meaning came from
+`first_stockout_date`, full-projection demand, or arithmetic comparisons.
+
+#### Progressive explanation without overloading the primary view
+
+Use progressive disclosure, not a permanently dense table:
+
+1. **Scanning layer:** recommendation, status, covered-through date, demand to
+   protect, observed stock/POs, and the one most important exception.
+2. **Definition layer:** small focusable info buttons/popovers can explain what
+   a metric means and which window it uses. Never put a required warning,
+   blocker, approximation, or remedy only in hover content.
+3. **Audit layer:** the existing derivation drawer is the complete answer to
+   “why this quantity?”. Show the ordered arithmetic, versioned policy inputs,
+   source versions/provenance, dated receipts/projection, caps, rounding,
+   exceptions and known evidence limits.
+
+`GET /api/v1/planning-runs/{run_id}` now supplies everything needed for that
+audit layer:
+
+- `planning_lines` — persisted demand/yield/safety/stock/PO/raw-order/cap/
+  rounding/final-proposal values;
+- `planning_line_explanations` — one object per line from the exact immutable
+  master version used by the run, including item name/storage/pack size,
+  shelf-life days, safety days, max-cover days, lead time, shelf-life anchor,
+  MOQ/case/order-unit settings, supplier/channel, delivery/review rule,
+  provenance/data status, protection mode, and evidence scope;
+- `explanation_context.field_lineage` — which normalized datasets or policy
+  fields own each calculation field; `inputs` carries their exact versions,
+  hashes, provenance and record counts;
+- `projection_days` and `netting_results` — daily item demand, accepted and
+  candidate receipts, balance/uncovered demand, both risk windows and their
+  status;
+- `exceptions` (persisted `planning_exceptions` rows) — backend-authored code,
+  severity, message and remedy;
+  and
+- run metadata — planning cutoff, code/policy version, config hash and exact
+  master version.
+
+Update `apps/web/src/lib/types.ts` for these fields. Join explanations by
+`planning_line_id`; do not derive policy inputs from dates or reverse-engineer
+formulas in React.
+
+Be explicit about the current evidence boundary. The API can explain the full
+persisted recommendation arithmetic and daily item-level demand, but it does
+not have exact lot/MHD quantities for existing stock, historical daily stock
+balances, or persisted dish/silo contribution rows. Label those as unavailable
+rather than inferring them. Exact lot MHD and dish-level demand-lineage drill-
+down are future backend/data extensions, not frontend calculations.
 
 ### Data & settings
 
@@ -248,7 +370,7 @@ in configuration and code.
 - Run `pnpm check` from `apps/web` plus the relevant frontend test command.
 - Exercise the three routes at desktop and small-screen widths.
 - When safe environment values are present, test sign-in and one representative
-  connected journey. Do not claim live success if migration 003, Auth, or
+  connected journey. Do not claim live success if migration 004, Auth, or
   credentials are absent.
 - Update the UI sections of the backlog and scratchpad, but do not mark backend
   or live-cloud work complete without evidence.

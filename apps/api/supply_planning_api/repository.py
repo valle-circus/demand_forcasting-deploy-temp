@@ -36,7 +36,7 @@ REQUIRED_SCHEMA_TABLES = tuple(sorted(CANONICAL_TABLES))
 REQUIRED_SCHEMA_FUNCTIONS = (
     "activate_master_data_version_v1",
     "persist_master_import_v1",
-    "persist_planning_run_v1",
+    "persist_planning_run_v2",
     "persist_source_import_v1",
 )
 
@@ -353,7 +353,7 @@ class SupabaseCanonicalStore:
 
     async def persist_planning_run(self, payload: JsonObject) -> str:
         result = await self._rpc(
-            "persist_planning_run_v1",
+            "persist_planning_run_v2",
             {"p_payload": payload},
         )
         if isinstance(result, str):
@@ -363,7 +363,7 @@ class SupabaseCanonicalStore:
             if isinstance(value, str):
                 return value
             if isinstance(value, dict):
-                candidate = value.get("persist_planning_run_v1")
+                candidate = value.get("persist_planning_run_v2")
                 if isinstance(candidate, str):
                     return candidate
         raise RepositoryUnavailableError(

@@ -156,16 +156,15 @@ write in this project.
 - an authenticated FastAPI boundary with schema-aware readiness, controlled
   import/run/master-activation routes, portable Supabase repositories, read
   models, downloads, CORS, and tests;
-- a basic React/TypeScript/Vite/Tailwind status shell with browser/server
-  environment separation; and
+- an authenticated React/TypeScript/Vite/Tailwind shell plus connected Data &
+  settings and Location planning workflows; and
 - additive Supabase master/run/output, import/input/netting/daily-projection,
-  transaction/immutability migrations, a synthetic UI seed, and Render/Vercel
-  deployment configuration.
+  transaction/immutability and actionable-risk/MHD-v2 migrations, a synthetic
+  UI seed, and Render/Vercel deployment configuration.
 
-The three React domain pages and field-level master/menu editors are not yet
-implemented. Workbook upload plus validated draft activation is the first
-master-data workflow. The high-level Overview, Location planning, and Data &
-settings journey is defined in
+Overview, the v2 Location risk/MHD presentation correction, and field-level
+master/menu editors remain frontend work. Workbook upload plus validated draft
+activation is the first master-data workflow. The high-level journey is defined in
 `docs/descriptions/ui_maintainer_journey_and_page_plan.md`; detailed visual
 design and frontend implementation remain open.
 
@@ -173,10 +172,10 @@ design and frontend implementation remain open.
 
 1. Send the completed local V1 packet to the maintainer and collect approved or
    corrected template/policy/mapping rows. Rerun before operational use.
-2. Apply migration 003, configure the cloud/Auth environment, and verify one
-   safe backend workflow through FastAPI.
-3. Build Data & settings, Location planning, and Overview against the
-   implemented API; keep demo/unapproved values visibly labelled.
+2. Apply migration 004, then verify readiness and one safe v2 backend workflow
+   through FastAPI.
+3. Update Location planning to present the explicit v2 horizon/MHD fields and
+   build Overview; keep demo/unapproved values visibly labelled.
 4. Add field-level master/menu maintenance, then move each input/result repository
    to Snowflake when its accepted operational contract exists.
 5. Shadow-validate representative runs and then schedule/monitor the job.

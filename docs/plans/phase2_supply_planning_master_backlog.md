@@ -64,6 +64,11 @@ templates, one Apicbase stock export, and cumulative Transgourmet PDFs.
 - [x] **Work package 4 — recommendation engine:** finish protection horizons,
       explicit safety/yield, dated netting, fresh scheduling, shelf/max-cover,
       MOQ/case and order-unit logic, with visible derivations/exceptions.
+- [x] **Work package 4 correctness follow-up:** make shelf/max-cover caps
+      supply-position-aware, distinguish actionable protection-horizon risk
+      from full-forecast visibility, and persist explicit MHD basis/residual/
+      incomplete-forecast evidence. See
+      `docs/plans/planning_horizon_and_shelf_life_correction_plan.md`.
 - [x] **Work package 5 — acceptance run and outputs:** emit table-ready
       recommendation, derivation, exception and audit files, then validate the
       complete one-location demonstration.
@@ -183,12 +188,17 @@ the checkboxes below remain the milestone authority.
 - [x] Persist `planning_runs`, selected source imports, lines,
       recommendations, and exceptions atomically; add explicit run location and
       completion metadata.
-- [ ] Prove idempotent retry behavior for deterministic `run_id` values and
-      prevent duplicate browser submissions.
+- [x] Make deterministic `run_id` persistence retry-idempotent and reject a
+      reused ID with a different input hash; cover the RPC contract statically.
+- [ ] Prevent duplicate browser submissions while a synchronous run is in
+      flight.
 - [ ] Build the location selector, freshness/preflight strip, run action, and
       validating/running/completed/blocked/failed states.
 - [ ] Build risk/stock, open-PO, and recommendation tables with plain-language
       units, provenance, filters, and empty/error states.
+- [x] Correct the item risk/read-model contract so demand, receipts, coverage,
+      shortage, and shelf-life feasibility are explicit for the active
+      recommendation horizon; full-forecast shortage remains secondary context.
 - [ ] Build the recommendation derivation drawer and server-generated canonical
       CSV/JSON downloads; never reconstruct calculations in TypeScript.
 - [ ] Keep every recommendation visibly proposal-only; do not add placement,
@@ -211,11 +221,17 @@ the checkboxes below remain the milestone authority.
 - [x] Add the overview endpoint with data readiness, risk locations/items,
       recommendations due, blocker/warning counts, latest runs, freshness, and
       secondary observed PO activity.
+- [x] Correct `/overview` and run-summary `items_at_risk` so they count only
+      backend-classified actionable-horizon risk, not any stockout anywhere in
+      the uploaded forecast.
 - [ ] Build KPI cards, location-risk table, data-freshness panel, latest-run
       activity, and direct corrective/drill-down actions.
 - [ ] Keep actual waste, supplier service level, actual OOS, and mixed-unit
       total quantity out until authoritative definitions/data exist; label
       shelf/max-cover evidence only as attention or potential risk.
+- [ ] Apply forward migration
+      `202608300004_actionable_risk_and_shelf_life.sql` in the development
+      Supabase SQL Editor before the next connected v2 planning run.
 
 #### 2G — versioned maintained-data and menu editing
 
@@ -248,6 +264,14 @@ the checkboxes below remain the milestone authority.
       responsive side navigation, and status communication without colour.
 - [ ] Run representative cockpit/location/data tasks with the maintainer and
       correct information hierarchy and terminology before visual polish.
+- [ ] After the deterministic Overview and derivation experience is stable,
+      evaluate an optional grounded LLM assistance layer: a concise executive
+      Overview summary plus a plain-language **Explain this quantity** action.
+      It may summarize only persisted readiness, risk, demand, stock, open-PO,
+      lead/review, shelf/max-cover, MOQ/case, rounding and exception fields; it
+      must not calculate, override, approve, or place a recommendation. Keep
+      the normal source/derivation UI as the auditable fallback and define
+      privacy, retention, latency, cost and evaluation gates before enabling it.
 - [ ] Validate representative runs with the maintainer and require the existing
       operational gate before showing shadow/production-ready status.
 
@@ -336,9 +360,9 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
 | Live Snowflake input dependency for local V1 | None |
 | Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
-| Supabase prototype store | Tables plus transaction/immutability migration and server repository implemented; migrations 001/002 reported applied, while 003 and live credential-based verification remain external steps |
-| Maintainer UI | Authenticated backend contract complete; React/Tailwind status shell and three-page journey/component plan exist, but domain pages are not implemented |
-| Current repository check | 70 Python tests pass; focused new-backend Ruff/strict-mypy checks pass; frontend `pnpm check` passes with 82 tests |
+| Supabase prototype store | Migrations 001–003 and Auth are verified in development; additive actionable-risk/MHD migration 004 must be applied before the next v2 run |
+| Maintainer UI | Auth shell, Data & settings, and first Location planning slice implemented by Claude; v2 Location presentation, Overview, and hardening remain |
+| Current repository check | 83 Python tests pass; focused changed-engine/API Ruff/strict-mypy checks pass; frontend was not edited or rerun in the backend correction/explainability tranche |
 
 ## Source of truth for local V1
 
@@ -387,11 +411,14 @@ the short maintainer questions are:
    ordinary stocked, `0.5` day fresh), item-specific yield losses if any, and
    hard max-cover values.
 
-Already decided for the local demo: one selected location, the supplied menu
-remains effective until superseded and is repeated across six dated dummy
-weeks, stock export time as latest knowledge, 28-calendar-day pod lead,
-order-date-plus-365-day pod shelf-life approximation, Transgourmet for pod POs,
-and the four fresh service windows.
+The original local acceptance fixture uses one selected location. The separate
+2 September colleague-demo packet exercises two synthetic locations so Overview
+can show cross-location prioritisation; each run is still location-scoped. The
+supplied menu remains effective until superseded and is repeated across six
+dated dummy weeks, stock export time is latest knowledge, pod lead is 28
+calendar days, pod shelf life is approximated as order date plus 365 days,
+Transgourmet remains the pod ordering channel, and the four fresh service
+windows are unchanged.
 
 ## Cross-cutting verification
 
@@ -413,14 +440,12 @@ and the four fresh service windows.
 
 1. Send the two templates, assumptions brief, maintainer review summary, and
    recommendation/exception outputs to the maintainer.
-2. Apply `202608290003_ui_backend_transactions.sql` in the Supabase SQL Editor,
-   configure the API/browser values and an Auth user, then verify deployed
-   health/readiness/CORS and one safe workflow.
-3. Build the side-navigation shell and Data & settings upload/import slice; use
-   accepted persisted source versions rather than passing hidden files through
-   the run button.
-4. Build the per-location readiness/run/result slice, followed by the Overview
-   cockpit over persisted latest-current run and netting summaries.
+2. Apply `202608300004_actionable_risk_and_shelf_life.sql` in the Supabase SQL
+   Editor, then verify readiness and one safe v2 workflow.
+3. Have Claude update the existing Location view to present the explicit v2
+   risk/MHD fields without TypeScript calculation.
+4. Build the Overview cockpit over persisted latest-current actionable-risk
+   summaries, then complete frontend hardening.
 5. Add field-level master/menu editing only after the workbook draft/activation
    import and version semantics are proven; keep proposal status explicit.
 6. Receive corrected/approved templates and answers; resolve the four stock
@@ -476,3 +501,14 @@ and the four fresh service windows.
   Python tests plus focused backend Ruff and strict mypy checks pass. Live
   Supabase verification still requires migration 003 and environment/Auth
   configuration; the Claude handover is now frontend-only.
+- 2026-08-30: completed the protection-horizon/MHD correctness follow-up.
+  Python now persists explicit actionable-risk status and a tagged-candidate,
+  supply-position-aware shelf/max-cover derivation; unsafe pack/MOQ rounding is
+  reduced to a safe multiple or withheld. FastAPI run/Overview summaries use
+  the v2 status, and forward migration `004` adds only the required derivation
+  columns plus `persist_planning_run_v2`. Exact packet replay
+  `improved-ded5498f7198` remains a safe 6-pack proposal with zero current-
+  horizon stockouts and zero candidate residual at estimated expiry. All 81
+  Python tests and focused Ruff/mypy checks pass. Applying migration `004` is
+  the only remaining backend-environment action before Claude adopts the new
+  fields in React.

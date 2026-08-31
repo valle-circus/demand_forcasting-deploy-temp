@@ -15,6 +15,37 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-08-30: **The actionable-horizon and candidate-MHD backend v2 contract is
+  implemented; React adoption and Supabase migration 004 application remain.**
+  Full uploaded-forecast projection stays a data visibility window, while the
+  actionable horizon is item-specific lead plus review/delivery cadence.
+  Netting now persists `at_risk`, `covered`, or `not_evaluated` plus the exact
+  evaluated window, and FastAPI run/Overview summaries no longer count a later
+  full-forecast shortage as current risk. Candidate sizing cannot repair
+  pre-arrival shortage. Shelf-life/max-cover use a conservative tagged-candidate
+  projection that consumes projected stock, accepted POs, and earlier planned
+  receipts first; hard caps are never silently exceeded by MOQ/case rounding.
+  Planning lines persist expiry, approximation basis, forecast completeness,
+  residual at expiry, binding constraint, and safe rounding outcome. Exact
+  UI-packet replay `improved-ded5498f7198` remains a safe 6-pack proposal,
+  covered through 7 Sep with a future-context shortage on 10 Sep and zero
+  candidate residual at estimated expiry. Do not add one global run-horizon
+  slider; React only formats/filters the explicit v2 fields. Apply
+  `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` in the
+  SQL Editor before the next connected v2 run. The Overview read model also
+  carries location metadata, freshness, and earliest actionable risk without
+  browser-side recomputation. The run read model now exposes per-line item,
+  lead/review, shelf-life, safety, max-cover, pack/MOQ/case and delivery-rule
+  context from the exact immutable master version, plus field lineage and
+  explicit evidence limits for a frontend audit drawer. Verification: 83
+  Python tests plus focused Ruff/mypy. Evidence:
+  `docs/plans/planning_horizon_and_shelf_life_correction_plan.md`,
+  `src/supply_planning/application/run_improved.py`,
+  `src/supply_planning/engine/recommend.py`,
+  `apps/api/supply_planning_api/services.py`, and
+  `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql`.
+  Status: `active`.
+
 - 2026-08-29: **The authenticated maintainer backend contract and connected
   Data & settings page are implemented; Location planning and Overview remain.**
   A persistent side

@@ -20,12 +20,17 @@ from supply_planning.domain.models import (
     RunStatus,
 )
 from supply_planning.engine.explode import aggregate_item_demand, explode_bom
-from supply_planning.engine.netting import CandidateReceipt, NettingResult, project_inventory
+from supply_planning.engine.netting import (
+    CandidateReceipt,
+    NettingResult,
+    classify_actionable_risk,
+    project_inventory,
+)
 from supply_planning.engine.recommend import schedule_recommendations
 from supply_planning.validation.gates import evaluate_run_mode
 
 PROFILE = "improved_file/v1"
-POLICY_VERSION = "template-recommendation-v1-2026-08-27"
+POLICY_VERSION = "template-recommendation-v2-2026-08-30"
 
 
 def _normalize(value: Any) -> Any:
@@ -85,7 +90,7 @@ class ImprovedRunResult:
     def as_dict(self) -> dict[str, Any]:
         blocker_count = sum(issue.severity is Severity.BLOCKER for issue in self.issues)
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "profile": PROFILE,
             "policy_version": POLICY_VERSION,
             "run_id": self.run_id,
@@ -161,9 +166,7 @@ def _blocked_result(
     )
 
 
-def _netting_issues(
-    result: NettingResult, *, risk_horizon_end: date | None = None
-) -> tuple[PlanningIssue, ...]:
+def _netting_issues(result: NettingResult) -> tuple[PlanningIssue, ...]:
     record_ref = f"location_id={result.location_id},item_id={result.item_id}"
     issues: list[PlanningIssue] = []
     if result.overdue_open_po_g > 0:
@@ -222,15 +225,7 @@ def _netting_issues(
                 remedy="Escalate, expedite, substitute, or adjust the explicit receipt scenario.",
             )
         )
-    scoped_stockout_days = [
-        day
-        for day in result.days
-        if day.stockout_g > 0
-        and (risk_horizon_end is None or day.projection_date <= risk_horizon_end)
-    ]
-    if scoped_stockout_days:
-        first_stockout = scoped_stockout_days[0]
-        maximum_stockout_g = max(day.stockout_g for day in scoped_stockout_days)
+    if result.first_stockout_within_horizon_date is not None:
         issues.append(
             PlanningIssue(
                 code=ExceptionCode.PROJECTED_STOCKOUT,
@@ -239,8 +234,9 @@ def _netting_issues(
                 record_ref=record_ref,
                 message=(
                     f"Projected balance first falls below zero on "
-                    f"{first_stockout.projection_date.isoformat()} and reaches a "
-                    f"{maximum_stockout_g} g shortage within the active recommendation horizon."
+                    f"{result.first_stockout_within_horizon_date.isoformat()} and reaches a "
+                    f"{result.max_stockout_within_horizon_g} g shortage within the "
+                    "active recommendation horizon."
                 ),
                 remedy="Review dated demand, stock, open POs, and any explicit candidate receipt.",
             )
@@ -355,6 +351,11 @@ def run_improved_plan(
 
     items = {item.item_id: item for item in bundle.items}
     demand_provenance = bundle.source_status("forecast_daily").provenance
+    forecast_end_by_location: dict[str, date] = {}
+    for forecast in bundle.forecasts:
+        current = forecast_end_by_location.get(forecast.location_id)
+        if current is None or forecast.service_date > current:
+            forecast_end_by_location[forecast.location_id] = forecast.service_date
     results: list[NettingResult] = []
     for location_id, item_id in demand_keys:
         snapshot = selected_snapshots.get((location_id, item_id))
@@ -365,7 +366,7 @@ def run_improved_plan(
             for demand in daily_item_demand
             if demand.location_id == location_id and demand.item_id == item_id
         )
-        projection_end = max(demand.service_date for demand in demands)
+        projection_end = forecast_end_by_location[location_id]
         result = project_inventory(
             location_id=location_id,
             item_id=item_id,
@@ -463,15 +464,17 @@ def run_improved_plan(
         current = risk_horizon_by_key.get(key)
         if current is None or line.coverage_end_date > current:
             risk_horizon_by_key[key] = line.coverage_end_date
-    for result in results:
-        issues.extend(
-            _netting_issues(
-                result,
-                risk_horizon_end=risk_horizon_by_key.get(
-                    (result.location_id, result.item_id)
-                ),
-            )
+    results = [
+        classify_actionable_risk(
+            result,
+            risk_horizon_end_date=risk_horizon_by_key.get(
+                (result.location_id, result.item_id)
+            ),
         )
+        for result in results
+    ]
+    for result in results:
+        issues.extend(_netting_issues(result))
     return ImprovedRunResult(
         run_id=run_id,
         input_hash=input_hash,

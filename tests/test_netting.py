@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from supply_planning.domain.models import (
@@ -14,8 +14,10 @@ from supply_planning.domain.models import (
     StorageClass,
 )
 from supply_planning.engine.netting import (
+    ActionableRiskStatus,
     CandidateReceipt,
     InventoryEventKind,
+    classify_actionable_risk,
     project_inventory,
 )
 
@@ -148,6 +150,67 @@ class NettingTests(unittest.TestCase):
         self.assertEqual(result.days[0].open_po_receipts_g, Decimal("500"))
         self.assertEqual(result.days[0].closing_balance_g, Decimal("100"))
         self.assertIsNone(result.first_stockout_date)
+
+    def test_shortage_after_action_horizon_is_future_context_not_current_risk(self) -> None:
+        demands = tuple(
+            ItemDemandDaily(
+                "LOC_A",
+                date(2026, 8, 25) + timedelta(days=offset),
+                "ITEM_A",
+                Decimal("500"),
+                1,
+            )
+            for offset in range(5)
+        )
+        projected = project_inventory(
+            location_id="LOC_A",
+            item_id="ITEM_A",
+            projection_start_date=date(2026, 8, 25),
+            projection_end_date=date(2026, 8, 29),
+            demands=demands,
+            snapshot=self.snapshot,
+            item=self.item,
+            purchase_orders=(),
+            demand_provenance=Provenance.MANUAL,
+        )
+
+        result = classify_actionable_risk(
+            projected,
+            risk_horizon_end_date=date(2026, 8, 26),
+        )
+
+        self.assertEqual(result.first_stockout_date, date(2026, 8, 27))
+        self.assertIsNone(result.first_stockout_within_horizon_date)
+        self.assertEqual(result.actionable_risk_status, ActionableRiskStatus.COVERED)
+        self.assertEqual(
+            result.projected_balance_at_risk_horizon_end_g,
+            Decimal("0"),
+        )
+
+    def test_incomplete_action_horizon_is_not_reported_as_covered(self) -> None:
+        projected = project_inventory(
+            location_id="LOC_A",
+            item_id="ITEM_A",
+            projection_start_date=date(2026, 8, 25),
+            projection_end_date=date(2026, 8, 25),
+            demands=(),
+            snapshot=self.snapshot,
+            item=self.item,
+            purchase_orders=(),
+            demand_provenance=Provenance.MANUAL,
+        )
+
+        result = classify_actionable_risk(
+            projected,
+            risk_horizon_end_date=date(2026, 8, 27),
+        )
+
+        self.assertEqual(
+            result.actionable_risk_status,
+            ActionableRiskStatus.NOT_EVALUATED,
+        )
+        self.assertFalse(result.risk_horizon_fully_observed)
+        self.assertEqual(result.risk_evaluated_through_date, date(2026, 8, 25))
 
 
 if __name__ == "__main__":

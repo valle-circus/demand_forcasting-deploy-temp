@@ -48,6 +48,7 @@ from supply_planning.domain.models import (
     PurchaseOrderStatus,
     RunMode,
     ShelfLifeAnchor,
+    ShelfLifeCapBasis,
     StockQuantityUnit,
     StorageClass,
 )
@@ -1552,7 +1553,7 @@ class PlanningBackend:
         return {
             "run": {
                 "run_id": result.run_id,
-                "schema_version": 1,
+                "schema_version": 2,
                 "policy_profile": PROFILE,
                 "policy_version": POLICY_VERSION,
                 "run_mode": result.run_mode.value,
@@ -1601,6 +1602,17 @@ class PlanningBackend:
                     ),
                     "proposed_order_units": _value(line.proposed_order_units),
                     "rounding_delta_g": _value(line.rounding_delta_g),
+                    "rounding_direction": line.rounding_direction.value,
+                    "candidate_expiry_date": _value(line.candidate_expiry_date),
+                    "shelf_life_cap_basis": line.shelf_life_cap_basis.value,
+                    "forecast_through_expiry": line.forecast_through_expiry,
+                    "projected_candidate_residual_at_expiry_g": _value(
+                        line.projected_candidate_residual_at_expiry_g
+                    ),
+                    "max_cover_end_date": _value(line.max_cover_end_date),
+                    "forecast_through_max_cover": line.forecast_through_max_cover,
+                    "binding_constraint": line.binding_constraint.value,
+                    "constraint_status": line.constraint_status.value,
                     "data_status": line.data_status,
                 }
                 for line in result.planning_lines
@@ -1661,6 +1673,21 @@ class PlanningBackend:
                     "first_stockout_date": _value(row.first_stockout_date),
                     "unavoidable_pre_candidate_stockout_g": _value(
                         row.unavoidable_pre_candidate_stockout_g
+                    ),
+                    "risk_horizon_end_date": _value(row.risk_horizon_end_date),
+                    "risk_evaluated_through_date": _value(
+                        row.risk_evaluated_through_date
+                    ),
+                    "risk_horizon_fully_observed": row.risk_horizon_fully_observed,
+                    "actionable_risk_status": row.actionable_risk_status.value,
+                    "first_stockout_within_horizon_date": _value(
+                        row.first_stockout_within_horizon_date
+                    ),
+                    "projected_balance_at_risk_horizon_end_g": _value(
+                        row.projected_balance_at_risk_horizon_end_g
+                    ),
+                    "max_stockout_within_horizon_g": _value(
+                        row.max_stockout_within_horizon_g
                     ),
                 }
                 for row in result.netting_results
@@ -1724,6 +1751,10 @@ class PlanningBackend:
                 ),
             )
         )
+        planning_line_explanations = await self._planning_line_explanations(
+            run=run,
+            lines=lines,
+        )
         return {
             "run": run,
             "summary": {
@@ -1733,17 +1764,218 @@ class PlanningBackend:
                     row.get("severity") == "blocker" for row in exceptions
                 ),
                 "items_at_risk": sum(
-                    row.get("first_stockout_date") is not None for row in netting
+                    row.get("actionable_risk_status") == "at_risk"
+                    for row in netting
+                ),
+                "items_risk_not_evaluated": sum(
+                    row.get("actionable_risk_status") == "not_evaluated"
+                    for row in netting
+                ),
+                "future_stockout_items": sum(
+                    row.get("actionable_risk_status") == "covered"
+                    and row.get("first_stockout_date") is not None
+                    and row.get("first_stockout_within_horizon_date") is None
+                    for row in netting
                 ),
             },
             "inputs": inputs,
             "planning_lines": lines,
+            "planning_line_explanations": planning_line_explanations,
+            "explanation_context": {
+                "calculation_owner": "python_backend",
+                "master_data_version_id": run.get("master_data_version_id"),
+                "policy_version": run.get("policy_version"),
+                "code_version": run.get("code_version"),
+                "field_lineage": {
+                    "gross_requirement_g": [
+                        "forecast_daily",
+                        "menu_calendar",
+                        "bom_lines",
+                    ],
+                    "adjusted_requirement_g": [
+                        "gross_requirement_g",
+                        "yield_factor",
+                    ],
+                    "safety_stock_g": [
+                        "gross_requirement_g",
+                        "protection_days",
+                        "min_safety_days",
+                    ],
+                    "usable_on_hand_g": ["inventory_snapshots"],
+                    "open_po_due_g": ["purchase_orders"],
+                    "raw_order_g": [
+                        "adjusted_daily_demand",
+                        "safety_stock_g",
+                        "dated_projected_supply_position",
+                        "candidate_receipt_date",
+                    ],
+                    "candidate_expiry_date": [
+                        "order_date_or_expected_delivery_date",
+                        "shelf_life_days",
+                        "shelf_life_anchor",
+                    ],
+                    "shelf_life_cap_g": [
+                        "projected_supply_position",
+                        "shelf_life_days",
+                        "shelf_life_anchor",
+                        "forecast_daily",
+                    ],
+                    "max_cover_cap_g": [
+                        "projected_supply_position",
+                        "max_cover_days",
+                        "forecast_daily",
+                    ],
+                    "projected_candidate_residual_at_expiry_g": [
+                        "proposed_order_units",
+                        "candidate_expiry_date",
+                        "projected_competing_supply",
+                        "forecast_daily",
+                    ],
+                    "capped_order_g": [
+                        "raw_order_g",
+                        "shelf_life_cap_g",
+                        "max_cover_cap_g",
+                    ],
+                    "proposed_order_units": [
+                        "capped_order_g",
+                        "order_unit_size_g",
+                        "moq_order_units",
+                        "case_multiple_order_units",
+                    ],
+                },
+                "daily_projection_fields": [
+                    "demand_g",
+                    "open_po_receipts_g",
+                    "candidate_receipts_g",
+                    "closing_balance_g",
+                    "stockout_g",
+                ],
+            },
             "recommendations": recommendations,
             "exceptions": exceptions,
             "netting_results": netting,
             "projection_days": projections,
             "proposal_only": True,
         }
+
+    async def _planning_line_explanations(
+        self,
+        *,
+        run: JsonObject,
+        lines: list[JsonObject],
+    ) -> list[JsonObject]:
+        version_id = run.get("master_data_version_id")
+        if version_id is None:
+            return []
+        master = await self._load_master(str(version_id))
+        items = {item.item_id: item for item in master.items}
+        policies = {policy.item_id: policy for policy in master.policies}
+        rules = {rule.delivery_rule_id: rule for rule in master.rules}
+        explanations: list[JsonObject] = []
+        for line in lines:
+            item_id = str(line["item_id"])
+            item = items.get(item_id)
+            policy = policies.get(item_id)
+            schedule_rule_id = line.get("schedule_rule_id")
+            rule = (
+                rules.get(str(schedule_rule_id))
+                if schedule_rule_id is not None
+                else None
+            )
+            explanations.append(
+                {
+                    "planning_line_id": str(line["planning_line_id"]),
+                    "item": (
+                        {
+                            "item_id": item.item_id,
+                            "item_name": item.item_name,
+                            "storage_class": item.storage_class.value,
+                            "pack_size_g": _value(item.pack_size_g),
+                            "shelf_life_days": item.shelf_life_days,
+                            "min_safety_days": _value(item.min_safety_days),
+                            "max_cover_days": _value(item.max_cover_days),
+                        }
+                        if item is not None
+                        else None
+                    ),
+                    "planning_policy": (
+                        {
+                            "item_type": policy.item_type.value,
+                            "official_supplier": policy.official_supplier,
+                            "ordering_channel": policy.ordering_channel,
+                            "supplier_id": policy.supplier_id,
+                            "supplier_article_number": (
+                                policy.supplier_article_number
+                            ),
+                            "packs_per_order_unit": _value(
+                                policy.packs_per_order_unit
+                            ),
+                            "order_unit": policy.order_unit,
+                            "lead_time_calendar_days": (
+                                policy.lead_time_calendar_days
+                            ),
+                            "shelf_life_anchor": (
+                                policy.shelf_life_anchor.value
+                                if policy.shelf_life_anchor is not None
+                                else None
+                            ),
+                            "yield_factor": _value(policy.yield_factor),
+                            "moq_order_units": _value(
+                                policy.moq_order_units
+                            ),
+                            "case_multiple_order_units": _value(
+                                policy.case_multiple_order_units
+                            ),
+                            "data_status": policy.data_status,
+                            "provenance": policy.provenance.value,
+                        }
+                        if policy is not None
+                        else None
+                    ),
+                    "delivery_rule": (
+                        {
+                            "delivery_rule_id": rule.delivery_rule_id,
+                            "ordering_channel": rule.ordering_channel,
+                            "storage_class": rule.storage_class.value,
+                            "delivery_weekday": rule.delivery_weekday,
+                            "covered_service_weekdays": list(
+                                rule.covered_service_weekdays
+                            ),
+                            "order_weekday": rule.order_weekday,
+                            "review_period_days": rule.review_period_days,
+                            "effective_from": rule.effective_from.isoformat(),
+                            "effective_to": _value(rule.effective_to),
+                            "data_status": rule.data_status,
+                            "provenance": rule.provenance.value,
+                        }
+                        if rule is not None
+                        else None
+                    ),
+                    "protection_mode": (
+                        "fresh_delivery_service_window"
+                        if item is not None
+                        and item.storage_class is StorageClass.FRISCH
+                        else "lead_time_plus_review_period"
+                    ),
+                    "evidence_scope": {
+                        "candidate_expiry_basis": line.get(
+                            "shelf_life_cap_basis"
+                        ),
+                        "exact_candidate_lot_expiry": (
+                            line.get("shelf_life_cap_basis")
+                            == ShelfLifeCapBasis.EXACT_LOT_EXPIRY.value
+                        ),
+                        "existing_inventory_lot_expiry_available": False,
+                        "forecast_through_candidate_expiry": line.get(
+                            "forecast_through_expiry"
+                        ),
+                        "forecast_through_max_cover": line.get(
+                            "forecast_through_max_cover"
+                        ),
+                    },
+                }
+            )
+        return explanations
 
     async def list_locations(self) -> JsonObject:
         master = await self._load_master()
@@ -1884,11 +2116,15 @@ class PlanningBackend:
 
     async def overview(self) -> JsonObject:
         locations_payload = await self.list_locations()
+        location_metadata = {
+            str(row["location_id"]): row for row in locations_payload["locations"]
+        }
         statuses = [
             await self.planning_status(str(row["location_id"]))
             for row in locations_payload["locations"]
         ]
         items_at_risk = 0
+        items_risk_not_evaluated = 0
         recommendations_due = 0
         blocking_issues = 0
         open_pos = 0
@@ -1898,12 +2134,24 @@ class PlanningBackend:
             location_id = str(status_payload["location_id"])
             run = status_payload.get("latest_run")
             risk_count = 0
+            risk_not_evaluated_count = 0
+            earliest_risk_date: str | None = None
             if isinstance(run, dict) and status_payload["latest_run_is_current"]:
                 run_id = str(run["run_id"])
-                netting, recommendations, exceptions = await asyncio.gather(
+                netting, risk_not_evaluated, recommendations, exceptions = await asyncio.gather(
                     self._store.select_rows(
                         "planning_netting_results",
-                        filters={"run_id": f"eq.{run_id}", "first_stockout_date": "not.is.null"},
+                        filters={
+                            "run_id": f"eq.{run_id}",
+                            "actionable_risk_status": "eq.at_risk",
+                        },
+                    ),
+                    self._store.select_rows(
+                        "planning_netting_results",
+                        filters={
+                            "run_id": f"eq.{run_id}",
+                            "actionable_risk_status": "eq.not_evaluated",
+                        },
                     ),
                     self._store.select_rows(
                         "planning_recommendations",
@@ -1915,7 +2163,17 @@ class PlanningBackend:
                     ),
                 )
                 risk_count = len(netting)
+                earliest_risk_date = min(
+                    (
+                        str(row["first_stockout_within_horizon_date"])
+                        for row in netting
+                        if row.get("first_stockout_within_horizon_date") is not None
+                    ),
+                    default=None,
+                )
                 items_at_risk += risk_count
+                risk_not_evaluated_count = len(risk_not_evaluated)
+                items_risk_not_evaluated += risk_not_evaluated_count
                 recommendations_due += sum(
                     _date_value(row["order_date"]) <= today
                     and _decimal(row["proposed_qty_units"]) > 0
@@ -1936,8 +2194,13 @@ class PlanningBackend:
             location_rows.append(
                 {
                     "location_id": location_id,
+                    "location_name": location_metadata[location_id]["location_name"],
+                    "timezone": location_metadata[location_id]["timezone"],
                     "ready": status_payload["ready"],
                     "items_at_risk": risk_count,
+                    "items_risk_not_evaluated": risk_not_evaluated_count,
+                    "earliest_risk_date": earliest_risk_date,
+                    "sources": status_payload["sources"],
                     "latest_run": run,
                     "latest_run_is_current": status_payload["latest_run_is_current"],
                     "blockers": status_payload["blockers"],
@@ -1956,7 +2219,11 @@ class PlanningBackend:
             "kpis": {
                 "locations_ready": sum(row["ready"] for row in location_rows),
                 "locations_total": len(location_rows),
+                "locations_at_risk": sum(
+                    row["items_at_risk"] > 0 for row in location_rows
+                ),
                 "items_at_risk": items_at_risk,
+                "items_risk_not_evaluated": items_risk_not_evaluated,
                 "recommendations_due": recommendations_due,
                 "blocking_issues": blocking_issues,
                 "open_purchase_order_lines": open_pos,

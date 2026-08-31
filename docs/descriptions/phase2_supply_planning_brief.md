@@ -451,7 +451,14 @@ inventory_position_i = on_hand_i(t₀)
 raw_order_i = max(0, gross_protection_need_i + SS_i − inventory_position_i)
 ```
 
-Do **not** subtract pre-arrival demand from `inventory_position_i` and then subtract the full protection-period demand again; that double-counts demand. After calculating the candidate order, project inventory day by day with dated demand and receipts. If projected stock falls below zero before the candidate order can arrive, emit an `UNAVOIDABLE_PRE_ARRIVAL_STOCKOUT` exception — increasing today's order cannot fix that interval.
+The displayed equation is a compact inventory-position view. The implemented
+dated calculation projects to the candidate receipt first, floors unmet
+pre-arrival demand out of the controllable supply position, and sizes the
+candidate against the post-receipt minimum and end-of-horizon safety target.
+This prevents a later delivery from appearing to repair demand that was already
+unserved. If projected stock falls below zero before the candidate can arrive,
+emit `UNAVOIDABLE_PRE_ARRIVAL_STOCKOUT`; increasing today's ordinary order
+cannot fix that interval.
 
 Open POs are the fix for §5.2 and the dated generalisation of the spreadsheet
 bridge (§5.9). The current manual process uses pending-order PDFs from the
@@ -481,7 +488,25 @@ constraint and a hard cap cannot both be satisfied, do not silently violate
 either one: emit an `INFEASIBLE_ORDER_CONSTRAINTS` exception so the rule or
 recommendation can be reviewed outside the calculation.
 
-The first file-based implementation can approximate the shelf-life cap using configured days and projected demand. Once lot/expiry data is available, use remaining shelf life and FEFO inventory rather than assuming every on-hand unit is new. Every cap must state whether it used exact lot data or a policy approximation.
+The first file-based implementation can approximate the shelf-life cap using
+configured days, but it must apply that cap to the **incremental candidate lot**
+at the receipt-date projected inventory position. Gross demand through expiry
+is not a sufficient cap when on-hand stock or other receipts compete for the
+same demand. Under the no-lot-data approximation, project a tagged candidate
+day by day, consume other available supply first, and require zero candidate
+residual at expiry. If forecast coverage ends before expiry, report incomplete
+shelf-life evidence instead of treating the cap as absent. Once lot/expiry data
+is available, use remaining shelf life and FEFO inventory. Every cap must state
+whether it used exact lot data or a policy approximation.
+
+The v2 implementation now uses that tagged-candidate projection for shelf life
+and max cover. If upward pack/MOQ rounding would exceed the hard cap, it selects
+the largest feasible purchasable multiple below the cap or emits no normal
+proposal with `INFEASIBLE_ORDER_CONSTRAINTS`. It persists candidate expiry,
+basis, forecast completeness, residual at expiry, binding constraint, and
+rounding outcome. Exact FEFO/waste claims remain unavailable without lot-level
+MHD input. See
+`docs/plans/planning_horizon_and_shelf_life_correction_plan.md`.
 
 **Step 6 — Apply simple delivery rules where needed**
 

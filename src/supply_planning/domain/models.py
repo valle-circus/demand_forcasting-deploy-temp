@@ -51,6 +51,31 @@ class ShelfLifeAnchor(StrEnum):
     LOT_EXPIRY = "LOT_EXPIRY"
 
 
+class ShelfLifeCapBasis(StrEnum):
+    NOT_CONFIGURED = "not_configured"
+    POLICY_APPROXIMATION = "policy_approximation"
+    EXACT_LOT_EXPIRY = "exact_lot_expiry"
+
+
+class BindingConstraint(StrEnum):
+    NONE = "none"
+    SHELF_LIFE = "shelf_life"
+    MAX_COVER = "max_cover"
+    SHELF_LIFE_AND_MAX_COVER = "shelf_life_and_max_cover"
+
+
+class ConstraintStatus(StrEnum):
+    FEASIBLE = "feasible"
+    REDUCED_TO_SAFE_MULTIPLE = "reduced_to_safe_multiple"
+    NO_SAFE_POSITIVE_ORDER = "no_safe_positive_order"
+
+
+class RoundingDirection(StrEnum):
+    NONE = "none"
+    UP = "up"
+    DOWN = "down"
+
+
 class Provenance(StrEnum):
     OBSERVED = "observed"
     MANUAL = "manual"
@@ -487,6 +512,15 @@ class PlanningLine:
     moq_order_units: Decimal = Decimal("0")
     case_multiple_order_units: Decimal = Decimal("1")
     data_status: str = "UNSPECIFIED"
+    candidate_expiry_date: date | None = None
+    shelf_life_cap_basis: ShelfLifeCapBasis = ShelfLifeCapBasis.NOT_CONFIGURED
+    forecast_through_expiry: bool | None = None
+    projected_candidate_residual_at_expiry_g: Decimal | None = None
+    max_cover_end_date: date | None = None
+    forecast_through_max_cover: bool | None = None
+    binding_constraint: BindingConstraint = BindingConstraint.NONE
+    constraint_status: ConstraintStatus = ConstraintStatus.FEASIBLE
+    rounding_direction: RoundingDirection = RoundingDirection.NONE
 
     def __post_init__(self) -> None:
         for field_name in ("planning_line_id", "run_id", "location_id", "item_id"):
@@ -524,6 +558,24 @@ class PlanningLine:
             value = getattr(self, field_name)
             if value is not None:
                 _require_non_negative(value, field_name)
+        if self.projected_candidate_residual_at_expiry_g is not None:
+            _require_non_negative(
+                self.projected_candidate_residual_at_expiry_g,
+                "projected_candidate_residual_at_expiry_g",
+            )
+        if self.candidate_expiry_date is None:
+            if self.forecast_through_expiry is not None:
+                raise ValueError(
+                    "forecast_through_expiry requires candidate_expiry_date"
+                )
+            if self.projected_candidate_residual_at_expiry_g is not None:
+                raise ValueError(
+                    "projected_candidate_residual_at_expiry_g requires candidate_expiry_date"
+                )
+        if self.max_cover_end_date is None and self.forecast_through_max_cover is not None:
+            raise ValueError(
+                "forecast_through_max_cover requires max_cover_end_date"
+            )
         if self.expected_delivery_date < self.order_date:
             raise ValueError("expected_delivery_date must not be before order_date")
 
