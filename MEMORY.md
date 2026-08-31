@@ -15,7 +15,108 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
-- 2026-08-28: **The UI/API/Supabase monorepo foundation is implemented, while
+- 2026-08-31: **The three-page maintainer UI is built, connected and verified;
+  the frontend slice of Milestone 2 (2D/2E/2F) is complete.** A maintainer can
+  sign in, read Overview, import all four sources in order, activate a master
+  version, compute one location's run, inspect risk, the daily stock
+  projection and every proposal's full derivation, and download the
+  server-generated CSV/JSON. Three rules are enforced in code and pinned by
+  tests: no planning arithmetic in the browser (`planning.ts` reads fields, and
+  a test feeds a deliberately inconsistent line to prove the UI shows what the
+  engine stored); risk comes from `actionable_risk_status`, never from a
+  stockout date — the three helpers that derived meaning from
+  `first_stockout_date`, full-projection demand or date arithmetic were deleted
+  during v2 adoption; and a count with no current run behind it renders
+  **not known**, never `0`. Migration 004 is applied and readiness reports ready
+  on v2 code. Stack is React 19 + Vite + Tailwind v4 + shadcn/ui on Base UI,
+  lucide, Geist, motion and Recharts, following the `circus-ui` skill. Verified:
+  `pnpm check` passes with 128 tests, plus a live browser journey against real
+  Supabase Auth and a v2 run. **Not verified:** more than one ingredient or
+  location, and any deployed environment. Evidence:
+  `docs/plans/ui_slice_handover.md`,
+  `docs/plans/ui_implementation_backlog.md`,
+  `docs/scratchpads/ui_implementation.md`, and `apps/web/src`. Status: `active`.
+
+- 2026-08-30: **The actionable-horizon and candidate-MHD backend v2 contract is
+  implemented; React adoption and Supabase migration 004 application remain.**
+  Full uploaded-forecast projection stays a data visibility window, while the
+  actionable horizon is item-specific lead plus review/delivery cadence.
+  Netting now persists `at_risk`, `covered`, or `not_evaluated` plus the exact
+  evaluated window, and FastAPI run/Overview summaries no longer count a later
+  full-forecast shortage as current risk. Candidate sizing cannot repair
+  pre-arrival shortage. Shelf-life/max-cover use a conservative tagged-candidate
+  projection that consumes projected stock, accepted POs, and earlier planned
+  receipts first; hard caps are never silently exceeded by MOQ/case rounding.
+  Planning lines persist expiry, approximation basis, forecast completeness,
+  residual at expiry, binding constraint, and safe rounding outcome. Exact
+  UI-packet replay `improved-ded5498f7198` remains a safe 6-pack proposal,
+  covered through 7 Sep with a future-context shortage on 10 Sep and zero
+  candidate residual at estimated expiry. Do not add one global run-horizon
+  slider; React only formats/filters the explicit v2 fields. Apply
+  `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` in the
+  SQL Editor before the next connected v2 run. The Overview read model also
+  carries location metadata, freshness, and earliest actionable risk without
+  browser-side recomputation. The run read model now exposes per-line item,
+  lead/review, shelf-life, safety, max-cover, pack/MOQ/case and delivery-rule
+  context from the exact immutable master version, plus field lineage and
+  explicit evidence limits for a frontend audit drawer. Verification: 83
+  Python tests plus focused Ruff/mypy. Evidence:
+  `docs/plans/planning_horizon_and_shelf_life_correction_plan.md`,
+  `src/supply_planning/application/run_improved.py`,
+  `src/supply_planning/engine/recommend.py`,
+  `apps/api/supply_planning_api/services.py`, and
+  `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql`.
+  Status: `active`.
+
+- 2026-08-29: **The authenticated maintainer backend contract and connected
+  Data & settings page are implemented; Location planning and Overview remain.**
+  A persistent side
+  navigation links Overview (cross-location readiness/risk), Location planning
+  (stock/PO risk, visible input versions, compute, explanation, CSV/JSON), and
+  Data & settings (four controlled upload groups plus versioned master/menu
+  edits). Imports are separate from execution: FastAPI/Python normalizes files
+  into immutable visible source versions, and a run references those versions.
+  Two migrations now define the prototype tables: the initial master/run/output
+  foundation and an intentionally minimal workflow extension with one compact
+  `source_imports` table, normalized forecast/menu/BOM/stock/PO rows, run/input
+  references, item-level netting summaries, and daily projection rows. A third
+  forward migration adds finalized-input and active-master immutability plus
+  atomic import, activation, and full-run persistence RPCs. FastAPI now verifies
+  Supabase sessions, treats any valid project user as a prototype maintainer
+  (the first UI uses admin-created email/password accounts),
+  reuses the existing XLSX/PDF adapters and pure engine, and exposes all
+  Overview/location/import/run/read/download endpoints behind a portable
+  repository. Separate
+  file, issue, PO-header, and KPI/materialized-summary tables are deferred; a
+  synthetic seed supports UI development. The maintainer applied all three
+  migrations manually through the Supabase SQL Editor; live readiness verifies
+  all 18 required tables and all four transaction RPCs, and an admin-created
+  Auth user has completed the browser-to-FastAPI session boundary. Raw
+  XLSX/PDF bytes stay out of Postgres and dashboard
+  risk comes from typed Python results, not duplicated browser/SQL calculations.
+  Mixed item units are not combined into a misleading quantity KPI, and cap
+  evidence is not labelled actual waste. Evidence:
+  `docs/descriptions/ui_maintainer_journey_and_page_plan.md`,
+  `supabase/migrations/202608280002_ui_workflow_inputs.sql`,
+  `supabase/migrations/202608290003_ui_backend_transactions.sql`,
+  `apps/api/supply_planning_api/services.py`,
+  `supabase/seed.sql`,
+  `docs/plans/phase2_supply_planning_master_backlog.md`, and
+  `docs/scratchpads/ui_and_supabase_foundation.md`. A parser-verified synthetic
+  upload packet under
+  `outputs/01a043ce-e551-7492-b41a-bee3c09a1d99/ui_test_packet/` exercises all
+  four source groups and replays to one 6-pack scenario proposal; it is not
+  production seed data. Valid XLSX inputs without optional worksheet-dimension
+  metadata are accepted by both stock and API audit readers; Excel midnight
+  datetimes in date-only planning fields are normalized; and unexpected API
+  failures retain sanitized CORS-enabled error responses. The first connected
+  master upload and activation succeeded. Verification: 70 Python tests,
+  focused Ruff/mypy, and
+  the frontend `pnpm check` with 82 tests pass. The first remote write journey
+  with that packet remains a maintainer-run development smoke test. Status:
+  `active`.
+
+- 2026-08-28: **The UI/API/Supabase monorepo foundation was implemented, while
   domain workflows and cloud resources remain deliberately unconfigured.** The
   pure engine stays in `src/supply_planning`; `apps/api` provides FastAPI
   process health plus a sanitized optional Supabase readiness probe, and
@@ -27,7 +128,8 @@ not a task log or a replacement for the detailed engineering brief.
   repository root. During the prototype, Supabase may temporarily persist the
   canonical result contracts, but Snowflake remains the long-term result-store
   direction and the calculation contract must not fork. No Supabase project is
-  linked, no migration is applied, no elevated key is in browser code, and no
+  linked; for the connected-UI handoff both migrations are reported manually
+  applied through the Supabase SQL Editor. No elevated key is in browser code, and no
   upload/auth/master-edit/result-write endpoint exists yet. Verification: 48
   Python tests, focused Ruff/mypy, `pip check`, frontend lint/type/build and
   peer checks passed; live API/Vite/proxy HTTP checks passed. Evidence:
@@ -35,7 +137,7 @@ not a task log or a replacement for the detailed engineering brief.
   `docs/plans/phase2_supply_planning_master_backlog.md`,
   `docs/scratchpads/ui_and_supabase_foundation.md`, `apps/api`, `apps/web`,
   `supabase/migrations/202608280001_ui_foundation.sql`, and `render.yaml`.
-  Status: `active`.
+  Status: `superseded` by the 2026-08-29 backend-contract entry above.
 
 - 2026-08-27: **Repository history is classified before any cleanup move.**
   The active `v1-run` contract is the two project-owned templates, one raw

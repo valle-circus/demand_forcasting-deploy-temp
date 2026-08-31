@@ -25,4 +25,12 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Vendored shadcn/ui components. We own and edit these, but they follow
+    // the upstream file layout, which exports variants alongside components.
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 )

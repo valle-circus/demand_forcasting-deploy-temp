@@ -216,14 +216,19 @@ After the technical Milestone 1 exit, build only a thin UI over the same contrac
 No supplier dispatch, ERP write, approval workflow, statistical optimization,
 or complex calendar integration belongs in this milestone.
 
-**Foundation progress (2026-08-28):** the monorepo now contains the thin
-FastAPI system boundary, React/TypeScript/Vite/Tailwind status shell, initial
-Supabase master/run migration, and Render/Vercel configuration. This proves the
-deployment seams but does not yet implement upload/run, authentication,
-master-data editing, or result-review workflows. The granular checklist is in
+**Backend progress (updated 2026-08-30):** the monorepo now contains
+authenticated FastAPI imports, immutable Supabase versions, master activation,
+synchronous scenario runs, atomic result persistence, corrected actionable-
+horizon/MHD v2 derivations, and the Overview/location/read/download contracts.
+Migration 004 must be applied before the next connected v2 run. Claude has
+implemented the Auth shell, Data & settings, and first Location slice; v2
+presentation, Overview, and field-level editors remain open. The granular checklist is in
 `docs/plans/phase2_supply_planning_master_backlog.md`; architecture and
 environment rules are in
-`docs/descriptions/ui_api_and_persistence_foundation.md`.
+`docs/descriptions/ui_api_and_persistence_foundation.md`. The defined
+three-page maintainer journey, page/component plan, current-code integration
+map, and implemented minimal additive Supabase schema are in
+`docs/descriptions/ui_maintainer_journey_and_page_plan.md`.
 
 ### Maintainer-feedback gate inside Milestone 2
 

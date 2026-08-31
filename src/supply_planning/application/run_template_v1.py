@@ -18,12 +18,18 @@ from supply_planning.adapters.transgourmet_v1 import normalize_transgourmet_pos
 from supply_planning.adapters.v1_outputs import write_canonical_bundle, write_v1_results
 from supply_planning.application.run_improved import ImprovedRunResult, run_improved_plan
 from supply_planning.domain.issues import ExceptionCode, PlanningIssue, Severity
-from supply_planning.domain.models import InputSourceStatus, Provenance, RunMode
+from supply_planning.domain.models import (
+    BomLine,
+    ForecastDaily,
+    InputSourceStatus,
+    Provenance,
+    RunMode,
+)
 
 
-def _selected_required_items(
-    forecasts: tuple,
-    bom_lines: tuple,
+def selected_required_items(
+    forecasts: tuple[ForecastDaily, ...],
+    bom_lines: tuple[BomLine, ...],
 ) -> set[str]:
     required: set[str] = set()
     for forecast in forecasts:
@@ -66,7 +72,7 @@ def run_template_v1(
         raise InputFileError(
             f"planning template has no Demand_Plan rows for location_id={location_id!r}"
         )
-    required_item_ids = _selected_required_items(forecasts, planning.bom_lines)
+    required_item_ids = selected_required_items(forecasts, planning.bom_lines)
 
     stock = normalize_apicbase_stock(
         stock_workbook,
@@ -167,18 +173,18 @@ def run_template_v1(
                 remedy=review.remedy,
             )
         )
-    for review in po.reviews:
+    for po_review in po.reviews:
         mapping_issues.append(
             PlanningIssue(
                 code=ExceptionCode.PO_MAPPING_UNRESOLVED,
                 severity=Severity.WARNING,
                 dataset="purchase_orders",
-                record_ref=f"po_line_id={review.po_line_id}",
+                record_ref=f"po_line_id={po_review.po_line_id}",
                 message=(
-                    f"Transgourmet article {review.supplier_article_number} "
-                    f"({review.supplier_description}) was excluded: {review.reason}."
+                    f"Transgourmet article {po_review.supplier_article_number} "
+                    f"({po_review.supplier_description}) was excluded: {po_review.reason}."
                 ),
-                remedy=review.remedy,
+                remedy=po_review.remedy,
             )
         )
     result = replace(

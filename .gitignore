@@ -24,6 +24,14 @@ apps/web/node_modules/
 apps/web/dist/
 .pnpm-store/
 *.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+
+# Platform-local state
+.vercel/
+supabase/.temp/
+supabase/.branches/
 
 # Editors and operating systems
 .idea/

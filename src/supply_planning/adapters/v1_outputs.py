@@ -25,7 +25,6 @@ from supply_planning.adapters.transgourmet_v1 import PoMappingReview
 from supply_planning.application.run_improved import ImprovedRunResult
 from supply_planning.domain.issues import PlanningIssue
 
-
 RECOMMENDATION_FIELDS = (
     "recommendation_id",
     "planning_line_id",
@@ -68,6 +67,15 @@ DERIVATION_FIELDS = (
     "case_multiple_order_units",
     "proposed_order_units",
     "rounding_delta_g",
+    "rounding_direction",
+    "candidate_expiry_date",
+    "shelf_life_cap_basis",
+    "forecast_through_expiry",
+    "projected_candidate_residual_at_expiry_g",
+    "max_cover_end_date",
+    "forecast_through_max_cover",
+    "binding_constraint",
+    "constraint_status",
     "data_status",
 )
 EXCEPTION_FIELDS = (

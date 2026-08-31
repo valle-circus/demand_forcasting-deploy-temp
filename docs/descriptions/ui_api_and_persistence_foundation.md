@@ -1,7 +1,9 @@
 # UI, API and prototype persistence foundation
 
-**Status:** repository foundation implemented 2026-08-28; credentials, applied
-Supabase project, domain endpoints, authentication, and final UI/UX remain open
+**Status:** backend vertical slice implemented 2026-08-29; Supabase Auth
+verification, normalized imports, immutable version persistence, synchronous
+planning runs, result persistence, read models, and downloads are available
+behind FastAPI. The three React pages and live cloud configuration remain open.
 
 ## Purpose and decision
 
@@ -12,7 +14,7 @@ boundary, not a combined runtime:
 ```text
 React/TypeScript/Vite/Tailwind on Vercel
                     │
-                    │ HTTPS + future Supabase user JWT
+                    │ HTTPS + Supabase user access token
                     ▼
              FastAPI on Render
                     │
@@ -26,16 +28,20 @@ The engine under `src/supply_planning` remains independent from HTTP, browser,
 database, and deployment libraries. React never parses the operational files
 or calculates recommendations. The API is the adapter/orchestration boundary.
 
+The user journey, Overview cockpit, Location planning page, Data & settings
+page, component map, planned endpoints, and source-persistence gaps are defined
+in `docs/descriptions/ui_maintainer_journey_and_page_plan.md`.
+
 ## Implemented repository layout
 
 ```text
 ├── src/supply_planning/            # existing pure engine and adapters
 ├── apps/
-│   ├── api/supply_planning_api/    # FastAPI entrypoint and Supabase probe
+│   ├── api/supply_planning_api/    # Auth, routes, services and Supabase repository
 │   └── web/                        # React/TypeScript/Vite/Tailwind shell
 ├── supabase/
 │   └── migrations/                 # version-controlled prototype schema
-├── tests/test_api_foundation.py    # API system-boundary tests
+├── tests/test_api_*.py             # API/auth/repository/route tests
 ├── render.yaml                     # Render API Blueprint
 └── .python-version                 # deterministic Render Python line
 ```
@@ -43,35 +49,56 @@ or calculates recommendations. The API is the adapter/orchestration boundary.
 The Render service runs from the repository root because `apps/api` imports
 the root Python package. Vercel uses `apps/web` as its project root.
 
-## Implemented foundation contracts
+## Implemented backend contracts
 
 ### Python API
 
 - `GET /api/v1/health` checks only the API process and is safe for the Render
   health check.
 - `GET /api/v1/readiness` reports `ready`, `not_configured`, or `unavailable`
-  for Supabase. It performs a short server-side REST probe against
-  `master_data_versions` and never returns upstream error bodies or keys.
+  for Supabase. It verifies the required tables and transaction RPCs without
+  returning upstream error bodies or keys.
 - `GET /docs` exposes the generated OpenAPI documentation.
 - CORS origins are explicit environment configuration; no wildcard origin is
   used with credentials.
+- Unexpected HTTP failures are logged server-side and returned inside the CORS
+  boundary as a sanitized `internal_error` envelope. Browser clients therefore
+  do not misreport an escaped backend exception as a CORS configuration error.
+- Every other `/api/v1` route requires a Supabase access token. In this private
+  prototype, any valid project user is a maintainer; role tiers are deferred.
+- `routes.py` exposes the identity, location, Overview, imports, master-version
+  activation, planning-run, risks, recommendations, and CSV/JSON contracts.
+- `services.py` reuses the Python XLSX/PDF adapters, assembles canonical inputs,
+  calls the pure engine, and builds portable read models.
+- The Overview read model returns aggregate actionable-risk KPIs and one
+  self-contained row per location with its display metadata, source freshness,
+  current-run status, blockers, risk counts, and earliest actionable-risk date.
+  The browser does not need to reconstruct these semantics or make one status
+  request per location.
+- The planning-run read model enriches each persisted planning line with a
+  `planning_line_explanations` record loaded from the exact immutable master
+  version referenced by the run. Item, lead/review, shelf-life, safety,
+  max-cover, pack/MOQ/case, supplier and delivery-rule context is therefore
+  available to an audit drawer without duplicating it in another result table.
+  `explanation_context.field_lineage` names the authoritative dataset/policy
+  inputs for each calculated field.
+- `repository.py` keeps PostgREST persistence behind a protocol so Snowflake
+  can later replace result/input storage without changing the browser or engine.
 
-The readiness endpoint returning `degraded/not_configured` is expected until a
-Supabase project is selected, the migration is applied, and server environment
-variables are configured. Render health remains healthy during that setup.
+The readiness endpoint returning `degraded/not_configured` is expected until
+all four migrations are applied and server environment variables are
+configured. Render process health remains healthy during that setup, while
+authenticated domain actions fail closed.
 
 ### Browser application
 
-The initial page is intentionally only a foundation/status shell. It:
+The browser now has authenticated shell/navigation, the connected Data &
+settings workflow, and the first Location planning result view. Overview and
+the v2 risk/MHD presentation correction remain frontend work. The persistent
+side navigation has exactly three top-level destinations: Overview, Location
+planning, and Data & settings.
 
-- confirms the browser can reach the Python API;
-- shows the API's sanitized Supabase state;
-- shows whether browser-safe Supabase Auth configuration is present;
-- retains the demo/proposal warning; and
-- names upload, master maintenance, and recommendation review as later product
-  slices without fixing their page or component design prematurely.
-
-The frontend contains a lazy Supabase client initializer for future Auth. It
+The frontend contains a lazy Supabase client initializer for Auth. It
 does not query domain tables directly and receives no elevated credential.
 
 ## Environment boundary
@@ -82,8 +109,11 @@ does not query domain tables directly and receives no elevated credential.
 | Render/local API | `CORS_ORIGINS` | Comma-separated allowed web origins | No |
 | Render/local API | `SUPABASE_URL` | Supabase project API URL | No |
 | Render/local API | `SUPABASE_SECRET_KEY` | Elevated server-side REST access | **Yes** |
+| Render/local API | `SUPABASE_TIMEOUT_SECONDS` | Auth/PostgREST timeout | No |
+| Render/local API | `MAX_UPLOAD_BYTES` | Total request upload limit | No |
+| Render/local API | `MAX_PO_FILES` | Maximum PDFs in one PO import | No |
 | Vercel/local web | `VITE_API_BASE_URL` | Render API origin | No |
-| Vercel/local web | `VITE_SUPABASE_URL` | Browser-safe project URL for future Auth | No |
+| Vercel/local web | `VITE_SUPABASE_URL` | Browser-safe project URL for Auth | No |
 | Vercel/local web | `VITE_SUPABASE_PUBLISHABLE_KEY` | Browser-safe Auth/Data API key | No |
 
 `SUPABASE_SECRET_KEY` must never have a `VITE_` prefix, appear in browser
@@ -102,46 +132,73 @@ simplicity. The exception changes only persistence ownership:
 | Editable locations/items/rules | Supabase version tables | Supabase or Snowflake after ownership decision |
 | Run/input metadata | Supabase | Snowflake |
 | Derivations/recommendations/exceptions | Supabase | Snowflake |
-| Forecast/menu/BOM/stock/PO source files | Temporary API processing only | Accepted operational source tables |
+| Normalized forecast/menu/BOM/stock/PO versions | Supabase during the file-based prototype; raw files temporary by default | Accepted operational source tables |
 | Calculation logic | Python engine | Python engine |
 
-The initial migration creates typed tables for `master_data_versions`,
+The foundation migration creates typed tables for `master_data_versions`,
 `locations`, `items`, `item_policy_overrides`, `delivery_rules`,
 `planning_runs`, `planning_run_inputs`, `planning_lines`,
 `planning_recommendations`, and `planning_exceptions`. It enables Row Level
-Security and grants no `anon` or `authenticated` table access. Domain API
-writes must not be enabled until Supabase user JWT verification and maintainer
-authorization are implemented.
+Security and grants no `anon` or `authenticated` table access. The server-only
+repository uses the configured Supabase secret only after the request token is
+verified.
 
-Active-version immutability, activation transactions, change-history events,
-database-to-domain repositories, and result persistence are deliberately next
-steps; the schema alone is not presented as a working master-data workflow.
+The additive `202608280002_ui_workflow_inputs.sql` migration supplies the
+minimum data needed to exercise the three-page workflows: compact import
+metadata/issues, normalized forecast/menu/BOM/stock/PO rows, explicit run/input
+references, persisted item-level netting summaries, and the engine's daily
+inventory-projection rows. It deliberately avoids separate file, issue,
+PO-header, and KPI/materialized-summary tables until evidence requires them.
+`supabase/seed.sql` provides a small synthetic UI-only example.
+
+`202608290003_ui_backend_transactions.sql` adds finalized-source and active-
+master immutability guards plus narrow transaction RPCs for master imports,
+other source imports, master activation, and a complete planning result. A run
+is persisted atomically with its selected inputs, lines, recommendations,
+exceptions, netting summaries, and daily projection rows.
+
+`202608300004_actionable_risk_and_shelf_life.sql` adds only the v2 derivation
+columns required for item-specific actionable risk and tagged-candidate
+shelf/max-cover evidence. It also adds `persist_planning_run_v2`, which is the
+readiness marker and atomic RPC used by the corrected backend.
+
+The maintainer reports migrations 001–003 applied manually through the
+Supabase SQL Editor and has already verified Auth plus the earlier connected
+workflow. Migration 004 must now be pasted and run there as one additional
+forward migration before the next v2 planning run. Never rewrite the already-
+applied files.
 
 ## Upload and retention boundary
 
-The future upload endpoint will accept the two fixed workbook inputs, the
-current Apicbase stock workbook, cumulative Transgourmet PDFs, selected
-`location_id`, and deterministic cutoff. It will write files only to a
-per-request temporary directory, call the existing Python services directly,
-and delete temporary files afterward.
+The import endpoints accept the two fixed workbook inputs, the
+current Apicbase stock workbook, cumulative Transgourmet PDFs, and selected
+`location_id` where required. They will write raw files only to a per-request
+temporary directory, call the existing Python loaders/normalizers directly,
+persist accepted normalized source versions, and delete temporary files
+afterward. A later planning-run request references those visible accepted
+versions plus its deterministic cutoff; it does not carry a second hidden set
+of files.
+
+XLSX worksheet-dimension metadata is treated as optional. Both validation and
+the post-validation audit-row reader stream worksheet rows, so valid workbooks
+from producers that omit the dimension hint remain importable. Excel midnight
+`datetime` values in date-only planning fields are normalized to calendar dates
+before canonical rows are assembled.
 
 Raw upload retention is off by default. If audit/replay requirements later
 justify retention, add an approved retention period and private object-storage
 policy. Do not store raw files as Postgres binary columns or on Render's
 ephemeral local filesystem.
 
-## Deferred product and security work
+## Deferred work
 
-- Define the actual upload, validation/mapping review, master-data, run-history,
-  and recommendation pages before building their UI components.
-- Add multipart limits, file allowlists, archive/PDF count limits, temporary
-  cleanup tests, and one synchronous planning-run endpoint.
-- Verify Supabase Auth JWTs in FastAPI and define the maintainer role model.
-- Implement draft edit, validation, activation, immutability, and change
-  history for master-data versions.
-- Implement repository adapters that map existing domain records to the
-  Supabase tables in one transaction per run.
-- Add API integration and frontend component/E2E tests for domain workflows.
+- Apply migration 004 and verify readiness plus one representative v2 run.
+- Complete Overview and update Location planning to render the explicit v2
+  risk/MHD fields without browser-side calculation.
+- Add field-level draft editing and change-event history after the upload/
+  activation workflow proves useful; workbook import remains the V1 write path.
+- Add frontend component/E2E tests and live API smoke coverage in a safe dev
+  project.
 - Configure actual Vercel, Render, and Supabase projects and verify deployed
   CORS, Auth, readiness, migrations, logs, and failure behavior.
 
