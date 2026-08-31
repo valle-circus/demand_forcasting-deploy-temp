@@ -700,3 +700,60 @@ them.
 directly and must not fan out one `planning-status` call per location**, which
 was the earlier workaround. The contract observation asking for those fields is
 now resolved.
+
+## Deferred: cross-ingredient coverage chart (2026-08-31)
+
+Maintainer proposed an executive bar chart — ingredients on one axis, days of
+coverage on the other, stacked to show what stock already on order adds.
+
+**Deferred until a location has realistic ingredient counts.** The demo packet
+has one ingredient, so sorting, colour, label crowding and the top-N question
+cannot be judged. Revisit at roughly 20+ ingredients.
+
+Two findings worth keeping:
+
+- **Do not compute days of cover as `stock / average daily demand`.** It is
+  planning logic in React, and it is wrong: it assumes flat demand while the
+  engine projects day by day through the dated forecast. The two would disagree
+  precisely on lumpy, menu-driven items — the ones that matter — and the
+  browser's smoother number would look more reassuring than the truth.
+- **The stacked split is not available from persisted data.** `NettingResult`
+  has no days-of-cover field and no breakdown of cover contributed by usable
+  stock, by open POs, and by the proposed receipt.
+
+When it is built:
+
+- Horizontal bars. Ingredient names are long and rotated axis labels are a
+  dataviz anti-pattern.
+- Sorted worst-first, coloured by `actionable_risk_status` disposition.
+- A reference line at the decision horizon, so a bar that falls short of what
+  this order must cover is obvious.
+
+## WP5 done — Overview (2026-08-31)
+
+Built directly on the v2 read model. Verified on the wire that the page issues
+exactly **one** `GET /api/v1/overview` — the earlier 1+N fan-out plan is dead
+and must not come back.
+
+Decisions:
+
+- **The alert is one thing, not a list.** `topAlert` picks the single most
+  urgent location and gives it somewhere to go. Blocked outranks at-risk,
+  because a blocked kitchen cannot be assessed at all; stale outranks never-run,
+  because a stale number actively misleads while an absent one merely misses.
+- **"not known" is not zero.** Counts derived from planning results render
+  `not known` when no current run backs them anywhere, and a stale location's
+  risk cell shows a dash. Rendering `0` would claim an all-clear nobody
+  established — the same class of lie as the old first_stockout_date risk.
+- **All clear is stated, not implied.** With nothing wrong the strip says so
+  rather than rendering an empty alert box.
+- Two KPIs carry `InfoHint` definitions, because "ingredients needing an order"
+  and "not fully checked" both depend on which window they mean.
+
+Remaining from the journey doc §5.2 and deliberately not built: the data
+freshness panel and observed-PO activity as separate blocks. Source freshness is
+already a column in the location table, and the secondary PO summary adds a
+block nobody asked for on a page whose job is "what needs attention now". Flag
+if that call is wrong.
+
+Next: WP6 — states sweep, accessibility, responsive, and honest handoff notes.

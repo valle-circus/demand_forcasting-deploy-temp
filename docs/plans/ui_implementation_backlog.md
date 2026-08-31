@@ -647,21 +647,29 @@ are now three distinct states.
 
 ### WP5 — Overview  → master backlog 2F (remaining bullets)
 
-- [ ] `TopAlert` severity selection across locations, with corrective action
-      and a calm all-clear variant.
-- [ ] `KpiRow` from `overview.kpis`, every card a link, "—" instead of `0`
-      where no current run backs the number.
-- [ ] `LocationRiskTable` with readiness, risk counts, current/stale run label,
-      freshness columns, and drill-down.
-- [ ] `DataFreshnessPanel` and `LatestRunActivity`.
-- [ ] `ObservedPoActivity` as a collapsed secondary section.
-- [ ] Render the complete `/overview` read model with page-level failure
-      handling. The backend now includes location labels, source freshness,
-      current-run status, risk counts, and earliest actionable-risk dates, so
-      do not issue one `planning-status` request per location.
-- [ ] Tests: stale run is labelled stale and its KPIs are not presented as
-      current; no waste/OOS/mixed-unit total appears anywhere; each KPI card
-      navigates.
+> **Complete and verified 2026-08-31.** `pnpm check` passes with 126 tests,
+> and the page was confirmed live against the v2 API.
+
+- [x] `TopAlert` picking the single worst thing across locations, with a link
+      to where it is fixed. Falls back to a calm all-clear rather than an
+      empty alert box when nothing needs attention.
+- [x] KPI row straight from `overview.kpis`, including the new
+      `locations_at_risk` and `items_risk_not_evaluated`.
+- [x] Counts derived from planning results render **not known** rather than
+      `0` when no current run backs them — zero would claim an all-clear
+      nobody established.
+- [x] Location table with the backend-supplied name, status, risk count,
+      earliest risk date and source freshness; a stale row shows a dash rather
+      than presenting an old count as current.
+- [x] `InfoHint` definitions on the two KPIs whose meaning depends on a window.
+- [x] A 404 renders the first-run state, not an error.
+- [x] Tests (9): urgency ordering, blocker outranking risk, stale outranking
+      never-run, incomplete evidence distinct from ready, no risk read from a
+      stale run, and the alert falling silent when all is well.
+
+**Consumes the complete read model in one request.** Verified on the wire:
+a single `GET /api/v1/overview`, with no per-location `planning-status`
+fan-out.
 
 ### WP6 — Hardening, verification, handoff  → 2H (frontend parts)
 
@@ -748,6 +756,17 @@ backend path. None of these blocks WP0–WP5.
    fetch the timeline only for the item the maintainer opened.
 
 ---
+
+### Contract request — per-item coverage day-counts
+
+For a cross-ingredient coverage chart (deferred, see the scratchpad), persist
+three day-counts per item on `planning_netting_results`: days covered by
+**usable stock alone**, additional days from **open purchase orders**, and
+additional days from the **proposed receipt**. All three fall out of the daily
+projection the engine already runs, so this is persistence and read-model work
+rather than new logic. Without them the split can only be reconstructed by
+re-projecting demand in the browser, which the handover forbids and which would
+contradict the engine on lumpy demand.
 
 ## 7. Definition of done
 

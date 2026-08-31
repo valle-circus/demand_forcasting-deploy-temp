@@ -37,11 +37,50 @@ function renderApp(initialPath = '/overview') {
   )
 }
 
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+const EMPTY_OVERVIEW = {
+  as_of_date: '2026-08-31',
+  kpis: {
+    locations_ready: 0,
+    locations_total: 0,
+    locations_at_risk: 0,
+    items_at_risk: 0,
+    items_risk_not_evaluated: 0,
+    recommendations_due: 0,
+    blocking_issues: 0,
+    open_purchase_order_lines: 0,
+  },
+  latest_run_at: null,
+  locations: [],
+  proposal_only: true,
+}
+
+/**
+ * Each endpoint needs its own shape. A single catch-all body would hand a page
+ * the wrong thing and fail these shell tests for an unrelated reason.
+ */
+function routedFetch(input: RequestInfo | URL): Promise<Response> {
+  const url = String(input)
+  if (url.includes('/readiness')) {
+    // A Response body can only be read once, so every call needs a fresh one.
+    return Promise.resolve(readinessResponse())
+  }
+  if (url.includes('/overview')) {
+    return Promise.resolve(jsonResponse(EMPTY_OVERVIEW))
+  }
+  return Promise.resolve(jsonResponse({ master_data_version_id: 'v1', locations: [] }))
+}
+
 beforeEach(() => {
   fake = createFakeSupabase(TEST_SESSION)
   fetchMock.mockReset()
-  // A Response body can only be read once, so every call needs a fresh one.
-  fetchMock.mockImplementation(() => Promise.resolve(readinessResponse()))
+  fetchMock.mockImplementation(routedFetch)
   vi.stubGlobal('fetch', fetchMock)
   window.sessionStorage.clear()
 })
@@ -177,8 +216,11 @@ describe('the small-screen drawer', () => {
 
 describe('the dependency indicator', () => {
   it('distinguishes an unconfigured database from a healthy one', async () => {
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(readinessResponse('not_configured')),
+    // Only readiness changes; the other endpoints still need their own shapes.
+    fetchMock.mockImplementation((input) =>
+      String(input).includes('/readiness')
+        ? Promise.resolve(readinessResponse('not_configured'))
+        : routedFetch(input),
     )
     renderApp()
 
@@ -189,7 +231,11 @@ describe('the dependency indicator', () => {
   })
 
   it('reports an unreachable API rather than showing nothing', async () => {
-    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+    fetchMock.mockImplementation((input) =>
+      String(input).includes('/readiness')
+        ? Promise.reject(new TypeError('Failed to fetch'))
+        : routedFetch(input),
+    )
     renderApp()
 
     expect(await screen.findAllByText(/api unreachable/i)).not.toHaveLength(0)
