@@ -26,17 +26,28 @@ import { StockProjectionChart } from './StockProjectionChart'
 import { byRisk, needsAttention, riskDisposition } from './planning'
 import type { RiskDisposition } from './planning'
 
+/**
+ * What the status column says.
+ *
+ * The backend classifies risk from the projection **including the proposed
+ * receipt**, so it answers "does this plan work?", not "what happens if you do
+ * nothing?". The labels have to reflect that or they mislead: an item whose
+ * proposal is the very thing that saves it must not read as needing no action.
+ */
 const DISPOSITION: Record<
   RiskDisposition,
   { tone: 'blocked' | 'warning' | 'ready' | 'neutral'; label: string }
 > = {
-  // Ordering now cannot fix this: the shortfall lands before anything arrives.
+  // The shortfall lands before any delivery could arrive, so ordering cannot
+  // fix it however large the order.
   unavoidable: { tone: 'blocked', label: 'Too late to fix' },
-  at_risk: { tone: 'warning', label: 'Needs an order' },
-  // Incomplete evidence. Never shown as covered, never counted as safe.
+  // Short even with the proposal applied — the proposal is not enough.
+  at_risk: { tone: 'warning', label: 'Still short' },
+  // Evidence did not reach the end of the window. Not the same as safe.
   not_evaluated: { tone: 'neutral', label: 'Not enough data' },
-  // Short later in the forecast, but after this decision's horizon.
-  future_replan: { tone: 'neutral', label: 'Replan later' },
+  // Covered through this window; the forecast dips again afterwards, which a
+  // later review handles.
+  future_replan: { tone: 'ready', label: 'Covered' },
   covered: { tone: 'ready', label: 'Covered' },
 }
 
@@ -123,7 +134,16 @@ export function RiskStockTab({
                   </InfoHint>
                 </span>
               </TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>
+                <span className="inline-flex items-center gap-1">
+                  With this order
+                  <InfoHint label="What does the status mean?">
+                    Whether this item is covered through its protection window
+                    once the proposed order is placed. It is not what happens
+                    if you order nothing.
+                  </InfoHint>
+                </span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -186,6 +206,12 @@ export function RiskStockTab({
                     </TableCell>
                     <TableCell>
                       <StatusBadge {...DISPOSITION[disposition]} />
+                      {disposition === 'future_replan' &&
+                        row.first_stockout_date !== null && (
+                          <span className="mt-0.5 block text-xs text-faint">
+                            dips again {formatDate(row.first_stockout_date)}
+                          </span>
+                        )}
                     </TableCell>
                   </TableRow>
 

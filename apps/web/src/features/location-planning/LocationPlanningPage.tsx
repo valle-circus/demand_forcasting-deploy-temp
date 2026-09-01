@@ -92,7 +92,6 @@ export function LocationPlanningPage() {
   const run = useMutation(async (id: string) => {
     const result = await createPlanningRun({
       location_id: id,
-      // The API rejects a naive timestamp.
       // The API rejects a naive timestamp; the input carries no offset.
       planning_as_of_at: fromLocalInputValue(cutoff) ?? nowWithOffset(),
       run_mode: 'scenario',
@@ -214,7 +213,7 @@ export function LocationPlanningPage() {
         </p>
       ) : (
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
+          <TabsList className="mx-auto flex">
             <TabsTrigger value="risk">
               Risk &amp; stock
               {result.summary.items_at_risk > 0 &&

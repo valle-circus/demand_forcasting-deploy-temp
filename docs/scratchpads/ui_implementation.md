@@ -922,3 +922,58 @@ Twice now the cause of a "looks broken" report has been a shadcn default
 resolving to `--muted`, which this theme maps to `#fafafa`. Anything relying on
 `bg-muted` to signal state is invisible here. Check that first when a control
 looks stateless.
+
+## Status semantics corrected (2026-09-01)
+
+The maintainer asked why an item with 4 days of cover, a 10-day target and an
+8-day proposal showed **Replan later** rather than **at risk**. The question
+exposed a real labelling defect.
+
+`actionable_risk_status` is computed in `netting.py` from `result.days`, the
+projection **including the candidate receipt**. So it answers *"does this plan
+work?"*, not *"what happens if you do nothing?"*:
+
+- `at_risk` — short **even with the proposal applied**; the proposal is not
+  enough
+- `covered` — no shortage inside the protection window **once the proposal is
+  placed**
+- `not_evaluated` — the projection did not reach the window's end
+
+My labels contradicted that. "Replan later" implied no action was needed on an
+item whose proposal is the very thing saving it, and "Needs an order" for
+`at_risk` was wrong because *every* row with a proposal needs an order — the
+distinction is whether it suffices.
+
+Now:
+
+| Disposition | Label | Meaning |
+|---|---|---|
+| `unavoidable` | Too late to fix | Shortfall lands before any delivery could arrive |
+| `at_risk` | Still short | Short even with the proposal |
+| `not_evaluated` | Not enough data | Evidence stopped early |
+| `covered` / `future_replan` | Covered | Covered once the proposal is placed |
+
+The column is renamed **With this order**, with a hint saying it assumes the
+order is placed. A later forecast dip is secondary text under the badge
+("dips again 12 Sept"), not the status itself.
+
+## InfoHint fixed and portalled
+
+The popover was unreadable in table headers for two compounding reasons:
+
+1. It inherited `whitespace-nowrap` from `TableHead`, forcing the whole
+   explanation onto one line.
+2. The table sits in an `overflow-x-auto` wrapper. Overflow on one axis
+   computes to `auto` on the other, so the popover was clipped by the scroll
+   container.
+
+It now renders through `createPortal` to `document.body`, positioned from the
+trigger's rect and clamped to the viewport. Verified: 256×98px, wrapped,
+`white-space: normal`, no right-edge overflow.
+
+## Tabs centred
+
+Asked twice, so centred. Recorded reasoning for the left-aligned alternative:
+tabs control the panel beneath them and left alignment keeps them on the same
+scan line as the title and the table's first column. Reversible by removing
+`mx-auto` from the `TabsList` in `LocationPlanningPage`.

@@ -447,11 +447,27 @@ describe('what counts as risk after the v2 engine correction', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Replan later')).toBeInTheDocument()
+    // Covered by this plan, with the later dip as secondary context rather
+    // than as the status itself.
+    expect(await screen.findByText('Covered')).toBeInTheDocument()
+    expect(screen.getByText(/dips again/i)).toBeInTheDocument()
     expect(
       screen.getByText(/1 ingredient covered for this decision/i),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Needs an order')).not.toBeInTheDocument()
+    expect(screen.queryByText('Still short')).not.toBeInTheDocument()
+  })
+
+  it('says "still short" when the proposal does not close the gap', async () => {
+    // The status reports risk *after* this plan, so at_risk means the proposed
+    // order is not enough — not merely that an order is needed.
+    withNetting({
+      actionable_risk_status: 'at_risk',
+      first_stockout_within_horizon_date: '2026-09-05',
+    })
+
+    renderPage()
+
+    expect(await screen.findByText('Still short')).toBeInTheDocument()
   })
 
   it('keeps incomplete evidence distinct from covered', async () => {
