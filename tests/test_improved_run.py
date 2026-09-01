@@ -31,6 +31,21 @@ class ImprovedRunTests(unittest.TestCase):
         self.assertEqual(first.as_dict(), second.as_dict())
         self.assertEqual(first.status, RunStatus.COMPLETED)
         self.assertEqual(len(first.netting_results), 3)
+        self.assertEqual(first.as_dict()["schema_version"], 3)
+        self.assertTrue(
+            all(
+                result.coverage_contract_version == 1
+                for result in first.netting_results
+            )
+        )
+        shared_a = next(
+            result
+            for result in first.netting_results
+            if result.location_id == "LOC_A" and result.item_id == "ITEM_SHARED"
+        )
+        self.assertEqual(shared_a.on_hand_coverage_days, 1)
+        self.assertEqual(shared_a.with_open_po_coverage_days, 2)
+        self.assertEqual(shared_a.open_po_coverage_extension_days, 1)
         self.assertEqual(
             sum((result.net_requirement_g for result in first.netting_results), Decimal("0")),
             Decimal("2600"),
@@ -108,6 +123,7 @@ class ImprovedRunTests(unittest.TestCase):
             self.assertEqual(second_code, 0)
             self.assertEqual(first_path.read_bytes(), second_path.read_bytes())
             payload = json.loads(first_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["schema_version"], 3)
             self.assertEqual(payload["profile"], "improved_file/v1")
             self.assertEqual(payload["status"], "completed")
             self.assertEqual(payload["summary"]["netting_line_count"], 3)

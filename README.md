@@ -159,23 +159,25 @@ write in this project.
 - an authenticated React/TypeScript/Vite/Tailwind shell plus connected Data &
   settings and Location planning workflows; and
 - additive Supabase master/run/output, import/input/netting/daily-projection,
-  transaction/immutability and actionable-risk/MHD-v2 migrations, a synthetic
-  UI seed, and Render/Vercel deployment configuration.
+  transaction/immutability, actionable-risk/MHD-v2, and event-aware-coverage-v3
+  migrations, a synthetic UI seed, and Render/Vercel deployment configuration.
 
-Overview, the v2 Location risk/MHD presentation correction, and field-level
-master/menu editors remain frontend work. Workbook upload plus validated draft
-activation is the first master-data workflow. The high-level journey is defined in
-`docs/descriptions/ui_maintainer_journey_and_page_plan.md`; detailed visual
-design and frontend implementation remain open.
+The connected three-page maintainer UI, including Overview and the corrected
+v2 Location risk/MHD presentation, is implemented. The next frontend slice is
+the cross-ingredient coverage chart over the explicit v3 API fields; field-
+level master/menu editors remain deferred. Workbook upload plus validated draft
+activation remains the first master-data workflow. The high-level journey is
+defined in `docs/descriptions/ui_maintainer_journey_and_page_plan.md`.
 
 ## Delivery order
 
 1. Send the completed local V1 packet to the maintainer and collect approved or
    corrected template/policy/mapping rows. Rerun before operational use.
-2. Apply migration 004, then verify readiness and one safe v2 backend workflow
-   through FastAPI.
-3. Update Location planning to present the explicit v2 horizon/MHD fields and
-   build Overview; keep demo/unapproved values visibly labelled.
+2. Apply migration 005, then verify readiness and one fresh v3 backend workflow
+   through FastAPI; old v2 runs have no retroactive coverage values.
+3. Have Claude render the cross-ingredient coverage chart from the explicit v3
+   run fields; keep proposals, incomplete forecast coverage, and unapproved
+   policy values visibly labelled.
 4. Add field-level master/menu maintenance, then move each input/result repository
    to Snowflake when its accepted operational contract exists.
 5. Shadow-validate representative runs and then schedule/monitor the job.

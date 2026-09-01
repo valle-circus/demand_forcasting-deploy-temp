@@ -27,6 +27,7 @@ from supply_planning.adapters.transgourmet_v1 import normalize_transgourmet_pos
 from supply_planning.application.run_improved import (
     POLICY_VERSION,
     PROFILE,
+    SCHEMA_VERSION,
     ImprovedRunResult,
     run_improved_plan,
 )
@@ -1553,7 +1554,7 @@ class PlanningBackend:
         return {
             "run": {
                 "run_id": result.run_id,
-                "schema_version": 2,
+                "schema_version": SCHEMA_VERSION,
                 "policy_profile": PROFILE,
                 "policy_version": POLICY_VERSION,
                 "run_mode": result.run_mode.value,
@@ -1689,6 +1690,58 @@ class PlanningBackend:
                     "max_stockout_within_horizon_g": _value(
                         row.max_stockout_within_horizon_g
                     ),
+                    "coverage_contract_version": row.coverage_contract_version,
+                    "on_hand_coverage_days": row.on_hand_coverage_days,
+                    "on_hand_coverage_through_date": _value(
+                        row.on_hand_coverage_through_date
+                    ),
+                    "on_hand_first_uncovered_date": _value(
+                        row.on_hand_first_uncovered_date
+                    ),
+                    "on_hand_coverage_forecast_limited": (
+                        row.on_hand_coverage_forecast_limited
+                    ),
+                    "with_open_po_coverage_days": row.with_open_po_coverage_days,
+                    "with_open_po_coverage_through_date": _value(
+                        row.with_open_po_coverage_through_date
+                    ),
+                    "with_open_po_first_uncovered_date": _value(
+                        row.with_open_po_first_uncovered_date
+                    ),
+                    "with_open_po_coverage_forecast_limited": (
+                        row.with_open_po_coverage_forecast_limited
+                    ),
+                    "with_proposal_coverage_days": (
+                        row.with_proposal_coverage_days
+                    ),
+                    "with_proposal_coverage_through_date": _value(
+                        row.with_proposal_coverage_through_date
+                    ),
+                    "with_proposal_first_uncovered_date": _value(
+                        row.with_proposal_first_uncovered_date
+                    ),
+                    "with_proposal_coverage_forecast_limited": (
+                        row.with_proposal_coverage_forecast_limited
+                    ),
+                    "open_po_coverage_extension_days": (
+                        row.open_po_coverage_extension_days
+                    ),
+                    "open_po_coverage_extension_status": _value(
+                        row.open_po_coverage_extension_status
+                    ),
+                    "proposal_coverage_extension_days": (
+                        row.proposal_coverage_extension_days
+                    ),
+                    "proposal_coverage_extension_status": _value(
+                        row.proposal_coverage_extension_status
+                    ),
+                    "open_po_receipts_at_or_after_gap": (
+                        row.open_po_receipts_at_or_after_gap
+                    ),
+                    "proposal_receipts_at_or_after_gap": (
+                        row.proposal_receipts_at_or_after_gap
+                    ),
+                    "protection_horizon_days": row.protection_horizon_days,
                 }
                 for row in result.netting_results
             ],
@@ -1842,6 +1895,26 @@ class PlanningBackend:
                         "moq_order_units",
                         "case_multiple_order_units",
                     ],
+                    "on_hand_coverage_days": [
+                        "inventory_snapshots",
+                        "forecast_daily",
+                        "menu_calendar",
+                        "bom_lines",
+                    ],
+                    "with_open_po_coverage_days": [
+                        "on_hand_coverage_days",
+                        "purchase_orders",
+                        "expected_receipt_at",
+                    ],
+                    "with_proposal_coverage_days": [
+                        "with_open_po_coverage_days",
+                        "planning_recommendations",
+                        "expected_delivery_date",
+                    ],
+                    "protection_horizon_days": [
+                        "planning_as_of_at",
+                        "planning_lines.coverage_end_date",
+                    ],
                 },
                 "daily_projection_fields": [
                     "demand_g",
@@ -1850,6 +1923,28 @@ class PlanningBackend:
                     "closing_balance_g",
                     "stockout_g",
                 ],
+            },
+            "coverage_context": {
+                "contract_version": 1,
+                "available_for_all_items": bool(netting)
+                and all(row.get("coverage_contract_version") == 1 for row in netting),
+                "requires_fresh_schema_v3_run": not bool(netting)
+                or any(row.get("coverage_contract_version") != 1 for row in netting),
+                "calculation_owner": "python_backend",
+                "unit": "continuous_calendar_days",
+                "starts_on": "projection_start_date",
+                "first_uncovered_day_is_excluded": True,
+                "zero_closing_balance_is_covered": True,
+                "same_day_receipts_arrive_before_demand": True,
+                "forecast_limited_values_are_lower_bounds": True,
+                "scenario_order": [
+                    "usable_stock_only",
+                    "usable_stock_plus_accepted_open_pos",
+                    "usable_stock_plus_open_pos_plus_proposed_receipts",
+                ],
+                "proposal_is_not_an_order": True,
+                "existing_inventory_lot_expiry_available": False,
+                "open_po_lot_expiry_available": False,
             },
             "recommendations": recommendations,
             "exceptions": exceptions,

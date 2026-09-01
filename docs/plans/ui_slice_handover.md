@@ -5,7 +5,9 @@
 `pnpm check` passes from `apps/web`: lint, typecheck, **128 tests**, production
 build.
 
-**Branch:** `ui_implementation`. Not merged to `main`.
+**Repository state:** the UI branch was merged to `main` as `c1f0643`. The
+2026-09-01 coverage-v3 backend changes are the next uncommitted backend/docs
+slice; `apps/web` is intentionally unchanged by Codex.
 
 This document is the status quo, what is deliberately not built, what is worth
 improving, and what someone picking this up next should know.
@@ -74,7 +76,7 @@ Each of these is a decision, not an omission. Reverse any of them freely.
 | Demo/preview fixture mode | Proposed while the backend looked unverified. Once readiness came back green it would only add a second code path that could show fake data. Fixtures live in Vitest only. |
 | Field-level master, menu and BOM editors | The brief defers them. They render as visibly disabled *planned* features rather than controls backed by no API. |
 | Data-freshness panel and observed-PO blocks on Overview | Journey doc §5.2 lists them as separate sections. Source freshness is already a column in the location table, and a secondary PO summary adds weight to a page whose job is "what needs attention now". **Worth a second opinion.** |
-| Cross-ingredient coverage chart | Requested, then deferred: the demo has one ingredient, so sorting, colour and label crowding cannot be judged. See §5. |
+| Cross-ingredient coverage chart | Backend v3 is now ready; migration 005, a fresh connected run, and Claude's React presentation remain. Realistic multi-item visual QA is still required. See §5. |
 | Dark mode | The `circus-ui` skill says only if asked. A half-done dark mode is worse than none. |
 
 ---
@@ -107,13 +109,15 @@ Each of these is a decision, not an omission. Reverse any of them freely.
    locations. Almost every remaining UI question — column widths, sorting,
    pagination, whether the coverage chart works — is unanswerable without it,
    and guessing produces exactly the kind of rework this slice has already had.
-2. **The cross-ingredient coverage chart.** Ingredients against days of cover,
-   sorted worst-first, horizontal bars. Needs the backend to persist three
-   day-counts per item: cover from usable stock, added by open POs, added by the
-   proposed receipt. **Do not compute it as `stock / average daily demand`** —
-   that assumes flat demand while the engine projects day by day through the
-   dated forecast, and the two would disagree precisely on the lumpy items that
-   matter most.
+2. **The cross-ingredient coverage chart.** The backend requirement is complete
+   in schema/run contract v3. After migration 005 and a fresh run, render the
+   persisted on-hand, accepted-PO extension, and proposal extension days as
+   worst-first horizontal bars. **Do not compute `stock / average daily
+   demand` or subtract scenarios in React.** Show forecast-limited values as
+   lower bounds, respect exact/lower-bound/not-observable extension status, use
+   item-specific protection targets, and label the proposal segment as not
+   ordered. Full field semantics are in
+   `docs/claude_code_first_ui_pages_brief.md`.
 3. **Idempotent runs**, so a retry after a dropped connection is safe.
 4. **Code-split the chart** to get the initial bundle down.
 5. **German**, if the kitchen staff need it. Strings run ~30% longer; the
@@ -158,7 +162,23 @@ its tools directly so it does not depend on one.
 
 ---
 
-## 8. Before this ships to anyone real
+## 8. Coverage-v3 handoff to Claude
+
+Codex now owns and has completed the Python calculation, schema payload, API
+read model, migration, and backend tests for the coverage chart. Claude owns
+only the React adoption:
+
+1. Wait until Valentin has applied
+   `supabase/migrations/202609010005_event_aware_supply_coverage.sql` in the
+   Supabase SQL Editor.
+2. Create a fresh run; old v2 rows intentionally have `null` coverage fields.
+3. Gate the chart on `coverage_context.available_for_all_items` and consume the
+   explicit `netting_results` coverage/extension fields.
+4. Keep proposal, forecast-limit, late-receipt, not-evaluated, and no-lot-MHD
+   boundaries visible. Do no planning arithmetic in TypeScript.
+5. Test with realistic multi-item data before finalising density and scrolling.
+
+## 9. Before this ships to anyone real
 
 - Apply the migrations and configure environment values in the target Supabase,
   Render and Vercel projects, then verify readiness, CORS and Auth there.

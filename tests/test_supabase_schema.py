@@ -197,6 +197,53 @@ class SupabaseSchemaTests(unittest.TestCase):
             }.issubset(columns["planning_netting_results"])
         )
 
+    def test_event_aware_supply_coverage_columns_exist(self) -> None:
+        columns = _table_columns(_schema_sql())
+        self.assertTrue(
+            {
+                "coverage_contract_version",
+                "on_hand_coverage_days",
+                "on_hand_coverage_through_date",
+                "on_hand_first_uncovered_date",
+                "on_hand_coverage_forecast_limited",
+                "with_open_po_coverage_days",
+                "with_open_po_coverage_through_date",
+                "with_open_po_first_uncovered_date",
+                "with_open_po_coverage_forecast_limited",
+                "with_proposal_coverage_days",
+                "with_proposal_coverage_through_date",
+                "with_proposal_first_uncovered_date",
+                "with_proposal_coverage_forecast_limited",
+                "open_po_coverage_extension_days",
+                "open_po_coverage_extension_status",
+                "proposal_coverage_extension_days",
+                "proposal_coverage_extension_status",
+                "open_po_receipts_at_or_after_gap",
+                "proposal_receipts_at_or_after_gap",
+                "protection_horizon_days",
+            }.issubset(columns["planning_netting_results"])
+        )
+        schema = _schema_sql().lower()
+        self.assertIn(
+            "with_open_po_coverage_days\n"
+            "                = on_hand_coverage_days + open_po_coverage_extension_days",
+            schema,
+        )
+        self.assertIn(
+            "with_proposal_coverage_days\n"
+            "                = with_open_po_coverage_days + proposal_coverage_extension_days",
+            schema,
+        )
+        self.assertIn("planning persistence v3 requires run.schema_version = 3", schema)
+        self.assertIn(
+            "planning persistence v3 requires coverage_contract_version = 1",
+            schema,
+        )
+        self.assertIn(
+            "when on_hand_coverage_forecast_limited then 'not_observable'",
+            schema,
+        )
+
     def test_backend_transaction_and_immutability_functions_exist(self) -> None:
         schema = _schema_sql().lower()
         for function in (
@@ -205,6 +252,7 @@ class SupabaseSchemaTests(unittest.TestCase):
             "persist_source_import_v1",
             "persist_planning_run_v1",
             "persist_planning_run_v2",
+            "persist_planning_run_v3",
         ):
             self.assertIn(f"create function public.{function}", schema)
             self.assertIn(f"grant execute on function public.{function}", schema)

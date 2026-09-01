@@ -1,6 +1,6 @@
 # Supabase prototype persistence
 
-The four migrations establish the temporary prototype store for:
+The five migrations establish the temporary prototype store for:
 
 - versioned application-maintained master data and planning rules; and
 - canonical source imports/inputs, planning runs, netting summaries,
@@ -26,6 +26,9 @@ authority.
 - `202608300004_actionable_risk_and_shelf_life.sql`: additive v2 derivation
   fields for actionable item horizons and candidate MHD/max-cover evidence,
   plus `persist_planning_run_v2`.
+- `202609010005_event_aware_supply_coverage.sql`: additive v3 event-aware
+  coverage runways for usable stock, accepted open POs, and proposed receipts,
+  plus `persist_planning_run_v3`.
 
 This is intentionally smaller than the original schema plan. File metadata and
 small validation issue lists live on `source_imports`; `po_id` stays on each PO
@@ -43,6 +46,12 @@ and must not be included in production.
 RLS/revokes, transaction/immutability functions, run/import traceability, and
 seed column references. A real
 `supabase db reset` remains the authoritative syntax/application check.
+
+When applying migrations manually in the Supabase SQL Editor, paste and run
+each unapplied file in filename order. Do not edit or rerun older applied
+migrations to introduce the v3 fields. Existing v2 runs remain readable after
+005, but their new coverage columns are intentionally `null`; create a fresh
+v3 run before testing the coverage chart.
 
 ## Validate locally
 

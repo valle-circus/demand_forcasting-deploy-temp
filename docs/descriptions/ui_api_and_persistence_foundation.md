@@ -1,9 +1,10 @@
 # UI, API and prototype persistence foundation
 
-**Status:** backend vertical slice implemented 2026-08-29; Supabase Auth
-verification, normalized imports, immutable version persistence, synchronous
-planning runs, result persistence, read models, and downloads are available
-behind FastAPI. The three React pages and live cloud configuration remain open.
+**Status:** backend vertical slice and connected three-page React UI are
+implemented. The 2026-09-01 backend v3 adds event-aware per-item coverage for
+the next Location chart. Migration 005 and a fresh connected v3 run remain to
+be applied/verified in the development Supabase project; deployed-environment
+configuration remains open.
 
 ## Purpose and decision
 
@@ -82,21 +83,28 @@ the root Python package. Vercel uses `apps/web` as its project root.
   available to an audit drawer without duplicating it in another result table.
   `explanation_context.field_lineage` names the authoritative dataset/policy
   inputs for each calculated field.
+- Each v3 netting row carries three event-aware coverage runways: usable stock
+  alone, stock plus accepted open POs, and stock plus the proposed receipt.
+  Each scenario includes covered calendar days, covered-through date, first
+  uncovered date, and whether forecast length makes the result a lower bound.
+  Incremental PO/proposal days, exact/lower-bound/not-observable evidence
+  status, and late-receipt flags are persisted explicitly.
+  `coverage_context` defines these semantics and identifies legacy rows that
+  require a fresh v3 run.
 - `repository.py` keeps PostgREST persistence behind a protocol so Snowflake
   can later replace result/input storage without changing the browser or engine.
 
 The readiness endpoint returning `degraded/not_configured` is expected until
-all four migrations are applied and server environment variables are
+all five migrations are applied and server environment variables are
 configured. Render process health remains healthy during that setup, while
 authenticated domain actions fail closed.
 
 ### Browser application
 
-The browser now has authenticated shell/navigation, the connected Data &
-settings workflow, and the first Location planning result view. Overview and
-the v2 risk/MHD presentation correction remain frontend work. The persistent
-side navigation has exactly three top-level destinations: Overview, Location
-planning, and Data & settings.
+The browser now has authenticated shell/navigation and the connected Overview,
+Location planning, and Data & settings workflows. The v2 risk/MHD presentation
+is adopted. The v3 cross-ingredient coverage chart is the next frontend-only
+slice after migration 005 and a fresh run are available.
 
 The frontend contains a lazy Supabase client initializer for Auth. It
 does not query domain tables directly and receives no elevated credential.
@@ -162,10 +170,16 @@ columns required for item-specific actionable risk and tagged-candidate
 shelf/max-cover evidence. It also adds `persist_planning_run_v2`, which is the
 readiness marker and atomic RPC used by the corrected backend.
 
-The maintainer reports migrations 001–003 applied manually through the
+`202609010005_event_aware_supply_coverage.sql` adds nullable v3 runway columns
+to `planning_netting_results` plus the service-role-only
+`persist_planning_run_v3` RPC. The engine calculates the three scenarios from
+the dated demand and receipt events; neither SQL nor React reconstructs them.
+The v3 schema leaves old v2 rows readable with `null` coverage fields.
+
+The maintainer reports migrations 001–004 applied manually through the
 Supabase SQL Editor and has already verified Auth plus the earlier connected
-workflow. Migration 004 must now be pasted and run there as one additional
-forward migration before the next v2 planning run. Never rewrite the already-
+workflow. Migration 005 must now be pasted and run there as one additional
+forward migration before the next v3 planning run. Never rewrite the already-
 applied files.
 
 ## Upload and retention boundary
@@ -192,9 +206,11 @@ ephemeral local filesystem.
 
 ## Deferred work
 
-- Apply migration 004 and verify readiness plus one representative v2 run.
-- Complete Overview and update Location planning to render the explicit v2
-  risk/MHD fields without browser-side calculation.
+- Apply migration 005 and verify readiness plus one fresh representative v3
+  run; old v2 rows cannot populate the new calculated fields retroactively.
+- Render the cross-ingredient coverage chart from the explicit v3 fields,
+  including forecast-limited and not-evaluated states, without browser-side
+  planning calculation.
 - Add field-level draft editing and change-event history after the upload/
   activation workflow proves useful; workbook import remains the V1 write path.
 - Add frontend component/E2E tests and live API smoke coverage in a safe dev

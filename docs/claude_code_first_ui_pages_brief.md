@@ -1,15 +1,18 @@
-# Claude Code brief — build the connected maintainer UI
+# Claude Code brief — continue the connected maintainer UI
 
 Copy the instruction below into Claude Code from the repository root.
 
 ---
 
-You are working in the `demand_forcasting` repository. Build the first
-connected React/Tailwind maintainer interface for Phase 2 supply planning.
-This handover is deliberately **frontend-only**: the FastAPI/Auth/Supabase
-backend vertical slice is already owned and implemented by Codex. Do not
-rebuild Python repositories, parsers, authentication verification, migrations,
-planning orchestration, or KPI calculations in React.
+You are working in the `demand_forcasting` repository. The connected
+React/Tailwind maintainer interface for Phase 2 supply planning is already
+implemented and merged. Continue it with the cross-ingredient coverage view
+described below; preserve the existing three-page journey and v2 risk/MHD
+semantics. This handover is deliberately **frontend-only**: the
+FastAPI/Auth/Supabase backend and the new event-aware coverage v3 contract are
+owned and implemented by Codex. Do not rebuild Python repositories, parsers,
+authentication verification, migrations, planning orchestration, or KPI
+calculations in React.
 
 ## Read before editing
 
@@ -30,7 +33,11 @@ Read these files in order:
    current React/TypeScript/Vite/Tailwind status shell and lazy Supabase client.
 8. `docs/plans/phase2_supply_planning_master_backlog.md` — Milestone 2D UI
    scope and frontend follow-ups.
-9. `docs/scratchpads/ui_and_supabase_foundation.md` — recent facts and known
+9. `docs/plans/ui_slice_handover.md` and
+   `docs/plans/ui_implementation_backlog.md` — implemented UI state and the
+   resolved coverage contract request.
+10. `docs/scratchpads/ui_implementation.md` and
+    `docs/scratchpads/ui_and_supabase_foundation.md` — recent facts and known
    external setup gaps; it is supporting context, not a product spec.
 
 Inspect the working tree before editing and preserve unrelated changes.
@@ -52,15 +59,16 @@ The backend now provides:
 - Overview, location/readiness, inventory, PO, import, run, risk,
   recommendation, and CSV/JSON download endpoints.
 
-Migrations 001–003 are applied in the selected development Supabase project.
+Migrations 001–004 are applied in the selected development Supabase project.
 Before the next connected planning run, Valentin must apply the new forward
 migration
-`supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` through
-the Supabase SQL Editor. It adds derivation columns only—no replacement tables—
-and the `persist_planning_run_v2` RPC. Until it is applied, readiness will
-honestly report the v2 persistence dependency as missing. Claude must not add
-tables or work around that state. On 2026-08-29, Codex verified the earlier
-18-table/four-RPC contract. Claude also
+`supabase/migrations/202609010005_event_aware_supply_coverage.sql` through the
+Supabase SQL Editor. It adds nullable derivation columns only—no replacement
+tables—and the `persist_planning_run_v3` RPC. Until it is applied, readiness
+will honestly report the v3 persistence dependency as missing. Claude must not
+add tables or work around that state. Existing v2 runs stay readable but have
+`null` coverage fields; they are not valid chart fixtures. Run one fresh v3
+calculation after migration 005. Claude already
 verified the authenticated browser-to-FastAPI journey with the maintainer's
 admin-created user. Continue to treat `/api/v1/readiness` as the runtime truth:
 if it later reports a missing dependency, show that non-secret blocker; do not
@@ -87,7 +95,10 @@ and the corrected pure scenario engine as `improved-ded5498f7198`; it completed
 with one safe 6-pack proposal, `actionable_risk_status = covered` through
 7 September, a future-context shortage on 10 September, and zero projected
 candidate residual at estimated expiry. Do not hard-code that output in React:
-it is only a connected smoke-test oracle.
+it is only a connected smoke-test oracle. That ID is the v2 replay ID. Schema
+v3 is intentionally included in the deterministic run hash, so the first fresh
+coverage run has a different ID even when its business recommendation is
+unchanged.
 
 The test also confirmed two UX rules that must remain explicit:
 
@@ -99,8 +110,8 @@ The test also confirmed two UX rules that must remain explicit:
 
 ## Goal
 
-Implement a cohesive, responsive internal workspace with persistent desktop
-side navigation and a small-screen drawer:
+Preserve the implemented cohesive, responsive internal workspace and its
+persistent desktop side navigation/small-screen drawer:
 
 - `/overview` — **Overview**
 - `/locations/:locationId` — **Location planning**
@@ -120,7 +131,9 @@ The normal journey is:
    older inputs must be shown as stale.
 
 Every recommendation remains visibly **proposal-only**. Nothing in this UI
-places, approves, sends, or tracks a supplier order.
+places, approves, sends, or tracks a supplier order. The immediate new scope is
+the cross-ingredient supply-coverage chart on Location planning; do not reopen
+completed pages or restyle unrelated components without a concrete reason.
 
 ## Auth and API client
 
@@ -240,9 +253,74 @@ Location planning or Overview work.
   geometry instead of smoothing, and distinguish usable stock from cumulative
   uncovered demand.
 
-The corrected backend contract is supplied and tested. Claude can now finish
-the Location horizon/MHD slice and WP5 Overview, provided it only formats and
-filters the explicit fields above.
+The corrected v2 backend contract is supplied, tested, and adopted by the
+existing Location and Overview UI. Preserve those semantics while adding v3.
+
+#### Event-aware coverage v3 contract — backend complete, UI adoption next
+
+Codex has completed the backend request for the cross-ingredient stock-health
+view. Do not calculate days of cover from quantity or average demand and do not
+re-run a projection in TypeScript. After migration 005 and a fresh run,
+`GET /api/v1/planning-runs/{run_id}` returns these fields on every
+`netting_results[]` row:
+
+| Field | Meaning |
+|---|---|
+| `coverage_contract_version` | `1` for a v3 row with this contract |
+| `on_hand_coverage_days` | Consecutive calendar days served by usable opening stock only |
+| `on_hand_coverage_through_date` | Last fully served date in that scenario, or `null` for zero days |
+| `on_hand_first_uncovered_date` | First date with unmet demand, or `null` if forecast ended first |
+| `on_hand_coverage_forecast_limited` | `true` means the displayed day count is a lower bound |
+| `with_open_po_coverage_*` | Same four values after adding accepted open POs |
+| `with_proposal_coverage_*` | Same four values after also adding this run's proposed receipt |
+| `open_po_coverage_extension_days` | Incremental accepted-PO segment; use directly for stacking |
+| `open_po_coverage_extension_status` | Whether that segment is `exact`, a `lower_bound`, or `not_observable` within the forecast |
+| `proposal_coverage_extension_days` | Incremental proposal segment; use directly for stacking |
+| `proposal_coverage_extension_status` | Whether that segment is `exact`, a `lower_bound`, or `not_observable` within the forecast |
+| `open_po_receipts_at_or_after_gap` | A PO exists on/after an earlier uncovered day and cannot bridge it |
+| `proposal_receipts_at_or_after_gap` | A proposal exists on/after an earlier uncovered day and cannot bridge it |
+| `protection_horizon_days` | Item-specific target span, nullable when policy/risk is not evaluable |
+
+The response-level `coverage_context` is the semantic contract. Gate the chart
+on `available_for_all_items = true`. If
+`requires_fresh_schema_v3_run = true`, show a concise **Compute a fresh
+recommendation to see supply coverage** state; never coerce legacy `null`
+values to zero. Relevant context also states that values are continuous
+calendar days from `projection_start_date`; zero-demand days advance the
+runway; same-day receipts arrive before demand; the first uncovered day is
+excluded; and forecast-limited values are lower bounds.
+
+Build a horizontal, worst-first chart at the top of **Risk & stock**:
+
+- solid base segment: usable stock only;
+- lighter second segment: additional days from accepted open POs;
+- patterned, outlined, or clearly translucent third segment: additional days
+  from the proposal, labelled **Proposal—not ordered**;
+- item-specific protection target from `protection_horizon_days`, not one
+  global target line; and
+- accessible text/tooltip containing each scenario's day count,
+  covered-through/first-uncovered date, forecast-limited qualifier, risk
+  status, and late-receipt warning when present.
+
+Render a forecast-limited `N` as **at least N days** or `≥ N`, not exactly N.
+If a PO or proposal adds zero continuous coverage because it arrives after an
+earlier gap, keep the zero-width segment honest and surface the backend's late-
+receipt flag in details. If an extension status is `not_observable`, say the
+preceding supply already covers the uploaded forecast; do not label its stored
+zero as “adds nothing.” A `lower_bound` segment is **at least N additional
+days**. Colour must not be the only status cue. At realistic
+item counts, use the existing item search/filtering and a deliberate visible
+subset or scroll treatment; do not silently hide ingredients.
+
+This chart describes demand coverage, not lot usability. Exact MHD for existing
+inventory and open POs remains unavailable, as stated by
+`coverage_context.existing_inventory_lot_expiry_available` and
+`open_po_lot_expiry_available`. Preserve the separate candidate shelf-life
+evidence already shown in the detail drawer.
+
+Update `apps/web/src/lib/types.ts`, API fixtures, chart/component tests, and the
+Location page only as needed for this contract. The Python engine, API,
+migration, and planning tests are complete and remain out of scope for Claude.
 
 #### Mandatory UI impact pass after the v2 logic correction
 
@@ -370,7 +448,7 @@ in configuration and code.
 - Run `pnpm check` from `apps/web` plus the relevant frontend test command.
 - Exercise the three routes at desktop and small-screen widths.
 - When safe environment values are present, test sign-in and one representative
-  connected journey. Do not claim live success if migration 004, Auth, or
+  connected journey. Do not claim live v3 success if migration 005, Auth, or
   credentials are absent.
 - Update the UI sections of the backlog and scratchpad, but do not mark backend
   or live-cloud work complete without evidence.

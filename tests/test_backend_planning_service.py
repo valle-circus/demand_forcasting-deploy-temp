@@ -348,6 +348,30 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("actionable_risk_status", persisted_netting)
         self.assertIn("risk_horizon_end_date", persisted_netting)
         self.assertIn("first_stockout_within_horizon_date", persisted_netting)
+        self.assertEqual(persisted_netting["coverage_contract_version"], 1)
+        self.assertIn("on_hand_coverage_days", persisted_netting)
+        self.assertIn("with_open_po_coverage_days", persisted_netting)
+        self.assertIn("with_proposal_coverage_days", persisted_netting)
+        self.assertIn("protection_horizon_days", persisted_netting)
+        self.assertEqual(
+            persisted_netting["with_open_po_coverage_days"],
+            persisted_netting["on_hand_coverage_days"]
+            + persisted_netting["open_po_coverage_extension_days"],
+        )
+        self.assertEqual(
+            persisted_netting["with_proposal_coverage_days"],
+            persisted_netting["with_open_po_coverage_days"]
+            + persisted_netting["proposal_coverage_extension_days"],
+        )
+        self.assertIn(
+            persisted_netting["open_po_coverage_extension_status"],
+            {"exact", "lower_bound", "not_observable"},
+        )
+        self.assertIn(
+            persisted_netting["proposal_coverage_extension_status"],
+            {"exact", "lower_bound", "not_observable"},
+        )
+        self.assertEqual(store.persisted_payload["run"]["schema_version"], 3)
         self.assertEqual(
             result["explanation_context"]["calculation_owner"],
             "python_backend",
@@ -355,6 +379,16 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             result["explanation_context"]["field_lineage"]["gross_requirement_g"],
             ["forecast_daily", "menu_calendar", "bom_lines"],
+        )
+        self.assertEqual(result["coverage_context"]["contract_version"], 1)
+        self.assertTrue(result["coverage_context"]["available_for_all_items"])
+        self.assertFalse(result["coverage_context"]["requires_fresh_schema_v3_run"])
+        self.assertEqual(
+            result["coverage_context"]["unit"],
+            "continuous_calendar_days",
+        )
+        self.assertTrue(
+            result["coverage_context"]["forecast_limited_values_are_lower_bounds"]
         )
         self.assertTrue(result["proposal_only"])
 
@@ -542,6 +576,8 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["summary"]["items_at_risk"], 1)
         self.assertEqual(result["summary"]["items_risk_not_evaluated"], 1)
         self.assertEqual(result["summary"]["future_stockout_items"], 1)
+        self.assertFalse(result["coverage_context"]["available_for_all_items"])
+        self.assertTrue(result["coverage_context"]["requires_fresh_schema_v3_run"])
 
     async def test_overview_uses_persisted_actionable_risk_status(self) -> None:
         settings = Settings.model_validate(

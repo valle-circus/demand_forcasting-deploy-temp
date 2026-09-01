@@ -767,37 +767,66 @@ backend path. None of these blocks WP0–WP5.
 
 ---
 
-### Contract request — per-item coverage day-counts
+### Resolved contract — event-aware per-item coverage v3
 
-For a cross-ingredient coverage chart (deferred, see the scratchpad), persist
-three day-counts per item on `planning_netting_results`: days covered by
-**usable stock alone**, additional days from **open purchase orders**, and
-additional days from the **proposed receipt**. All three fall out of the daily
-projection the engine already runs, so this is persistence and read-model work
-rather than new logic. Without them the split can only be reconstructed by
-re-projecting demand in the browser, which the handover forbids and which would
-contradict the engine on lumpy demand.
+- [x] Calculate continuous calendar-day coverage in Python for three nested
+      scenarios: usable stock; stock plus accepted open POs; stock plus POs plus
+      the proposal.
+- [x] Persist total scenario days/dates/lower-bound flags, incremental PO and
+      proposal extension days with exact/lower-bound/not-observable evidence,
+      late-receipt-after-gap flags, and item-specific protection-horizon days
+      on `planning_netting_results`.
+- [x] Version the run payload as schema v3 and persist atomically through
+      service-role-only `persist_planning_run_v3`.
+- [x] Expose the fields plus response-level `coverage_context` from
+      `GET /planning-runs/{run_id}`; identify legacy v2 runs that need a fresh
+      calculation.
+- [x] Add migration
+      `202609010005_event_aware_supply_coverage.sql` without replacing tables or
+      backfilling derived values onto old runs.
+- [ ] Apply migration 005 in the development Supabase SQL Editor and verify a
+      fresh connected v3 run.
+- [ ] Have Claude render the horizontal worst-first chart from these fields,
+      with no TypeScript planning arithmetic, and verify realistic multi-item
+      density.
+
+The implementation deliberately required two additional pure projections, not
+only persistence: one with on-hand stock alone and one with accepted POs. That
+is the only honest way to isolate continuous coverage under lumpy dated demand.
+A late receipt cannot bridge an earlier uncovered day. Forecast-limited values
+are lower bounds, and the proposal segment is not an order.
 
 ## 7. Definition of done
 
 The slice is complete when a maintainer can, without the frontend duplicating
 backend logic:
 
-- [ ] sign in, and see honest state when Auth or the API is not configured;
-- [ ] understand system state from Overview in seconds, including what is stale;
-- [ ] upload each of the four source groups and read actionable validation
+- [x] sign in, and see honest state when Auth or the API is not configured;
+- [x] understand system state from Overview in seconds, including what is stale;
+- [x] upload each of the four source groups and read actionable validation
       results;
-- [ ] activate a master draft explicitly;
-- [ ] run one location, with blockers explained and duplicates prevented;
-- [ ] reopen the persisted result after a refresh;
-- [ ] inspect risks, open POs, recommendations and the full derivation of any
+- [x] activate a master draft explicitly;
+- [x] run one location, with blockers explained and duplicates prevented;
+- [x] reopen the persisted result after a refresh;
+- [x] inspect risks, open POs, recommendations and the full derivation of any
       proposed quantity;
-- [ ] download the server-generated CSV and JSON;
-- [ ] and see, on every screen, that nothing here places an order.
+- [x] download the server-generated CSV and JSON;
+- [x] and see, on every screen, that nothing here places an order.
 
 ---
 
 ## 8. Dated progress
+
+- 2026-09-01 — **Coverage-v3 backend contract complete.** The pure engine now
+  calculates event-aware continuous runways for on-hand, on-hand plus accepted
+  POs, and on-hand/POs plus the proposal. Run schema v3 persists totals,
+  extension days, exact dates, lower-bound state, late-receipt flags, and the
+  item-specific protection target through the new v3 RPC/migration. FastAPI
+  exposes the fields and an availability/semantics context. Migration 005 and
+  a fresh live run are the only backend-environment prerequisites before Claude
+  builds the chart. All 87 Python tests plus focused Ruff/strict mypy pass;
+  `apps/web` was not edited by Codex. The SQL was statically checked in tests,
+  but no local PostgreSQL/Supabase CLI was available for an application test.
 
 - 2026-08-31 — **Adopted the v2 backend contract** (Codex `b5c819d`). Treated as
   a semantic change, not a type upgrade. Deleted three TypeScript helpers whose

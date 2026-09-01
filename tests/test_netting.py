@@ -16,8 +16,11 @@ from supply_planning.domain.models import (
 from supply_planning.engine.netting import (
     ActionableRiskStatus,
     CandidateReceipt,
+    CoverageExtensionStatus,
     InventoryEventKind,
+    attach_supply_coverage,
     classify_actionable_risk,
+    continuous_coverage_runway,
     project_inventory,
 )
 
@@ -211,6 +214,188 @@ class NettingTests(unittest.TestCase):
         )
         self.assertFalse(result.risk_horizon_fully_observed)
         self.assertEqual(result.risk_evaluated_through_date, date(2026, 8, 25))
+
+    def test_supply_coverage_uses_lumpy_dated_demand_and_nested_scenarios(
+        self,
+    ) -> None:
+        start = date(2026, 8, 25)
+        end = date(2026, 8, 30)
+        demands = tuple(
+            ItemDemandDaily(
+                "LOC_A",
+                start + timedelta(days=offset),
+                "ITEM_A",
+                quantity,
+                1,
+            )
+            for offset, quantity in enumerate(
+                (
+                    Decimal("100"),
+                    Decimal("0"),
+                    Decimal("900"),
+                    Decimal("100"),
+                    Decimal("300"),
+                    Decimal("200"),
+                )
+            )
+        )
+        on_hand_only = project_inventory(
+            location_id="LOC_A",
+            item_id="ITEM_A",
+            projection_start_date=start,
+            projection_end_date=end,
+            demands=demands,
+            snapshot=self.snapshot,
+            item=self.item,
+            purchase_orders=(),
+            demand_provenance=Provenance.MANUAL,
+        )
+        with_open_pos = project_inventory(
+            location_id="LOC_A",
+            item_id="ITEM_A",
+            projection_start_date=start,
+            projection_end_date=end,
+            demands=demands,
+            snapshot=self.snapshot,
+            item=self.item,
+            purchase_orders=(self._po("DUE", 28),),
+            demand_provenance=Provenance.MANUAL,
+        )
+        projected = classify_actionable_risk(
+            project_inventory(
+                location_id="LOC_A",
+                item_id="ITEM_A",
+                projection_start_date=start,
+                projection_end_date=end,
+                demands=demands,
+                snapshot=self.snapshot,
+                item=self.item,
+                purchase_orders=(self._po("DUE", 28),),
+                demand_provenance=Provenance.MANUAL,
+                candidate_receipts=(
+                    CandidateReceipt(
+                        candidate_receipt_id="PROPOSAL",
+                        location_id="LOC_A",
+                        item_id="ITEM_A",
+                        receipt_date=end,
+                        quantity_g=Decimal("500"),
+                    ),
+                ),
+            ),
+            risk_horizon_end_date=date(2026, 8, 29),
+        )
+
+        result = attach_supply_coverage(
+            projected,
+            on_hand_only=on_hand_only,
+            with_open_pos=with_open_pos,
+        )
+
+        self.assertEqual(result.coverage_contract_version, 1)
+        self.assertEqual(result.on_hand_coverage_days, 3)
+        self.assertEqual(result.on_hand_coverage_through_date, date(2026, 8, 27))
+        self.assertEqual(result.on_hand_first_uncovered_date, date(2026, 8, 28))
+        self.assertFalse(result.on_hand_coverage_forecast_limited)
+        self.assertEqual(result.with_open_po_coverage_days, 5)
+        self.assertEqual(result.open_po_coverage_extension_days, 2)
+        self.assertEqual(
+            result.open_po_coverage_extension_status,
+            CoverageExtensionStatus.EXACT,
+        )
+        self.assertEqual(result.with_proposal_coverage_days, 6)
+        self.assertEqual(result.proposal_coverage_extension_days, 1)
+        self.assertEqual(
+            result.proposal_coverage_extension_status,
+            CoverageExtensionStatus.LOWER_BOUND,
+        )
+        self.assertTrue(result.with_proposal_coverage_forecast_limited)
+        self.assertEqual(result.protection_horizon_days, 5)
+
+    def test_late_receipt_does_not_bridge_an_earlier_supply_gap(self) -> None:
+        start = date(2026, 8, 25)
+        end = date(2026, 8, 27)
+        demands = tuple(
+            ItemDemandDaily(
+                "LOC_A",
+                start + timedelta(days=offset),
+                "ITEM_A",
+                Decimal("600"),
+                1,
+            )
+            for offset in range(3)
+        )
+        on_hand_only = project_inventory(
+            location_id="LOC_A",
+            item_id="ITEM_A",
+            projection_start_date=start,
+            projection_end_date=end,
+            demands=demands,
+            snapshot=self.snapshot,
+            item=self.item,
+            purchase_orders=(),
+            demand_provenance=Provenance.MANUAL,
+        )
+        with_open_pos = project_inventory(
+            location_id="LOC_A",
+            item_id="ITEM_A",
+            projection_start_date=start,
+            projection_end_date=end,
+            demands=demands,
+            snapshot=self.snapshot,
+            item=self.item,
+            purchase_orders=(self._po("TOO_LATE", 27),),
+            demand_provenance=Provenance.MANUAL,
+        )
+
+        result = attach_supply_coverage(
+            with_open_pos,
+            on_hand_only=on_hand_only,
+            with_open_pos=with_open_pos,
+        )
+
+        self.assertEqual(result.on_hand_coverage_days, 1)
+        self.assertEqual(result.with_open_po_coverage_days, 1)
+        self.assertEqual(result.open_po_coverage_extension_days, 0)
+        self.assertEqual(
+            result.open_po_coverage_extension_status,
+            CoverageExtensionStatus.EXACT,
+        )
+        self.assertEqual(result.with_open_po_first_uncovered_date, date(2026, 8, 26))
+        self.assertTrue(result.open_po_receipts_at_or_after_gap)
+
+    def test_no_shortage_is_an_explicit_forecast_limited_lower_bound(self) -> None:
+        projected = project_inventory(
+            location_id="LOC_A",
+            item_id="ITEM_A",
+            projection_start_date=date(2026, 8, 25),
+            projection_end_date=date(2026, 8, 27),
+            demands=(),
+            snapshot=self.snapshot,
+            item=self.item,
+            purchase_orders=(),
+            demand_provenance=Provenance.MANUAL,
+        )
+
+        runway = continuous_coverage_runway(projected.days)
+        result = attach_supply_coverage(
+            projected,
+            on_hand_only=projected,
+            with_open_pos=projected,
+        )
+
+        self.assertEqual(runway.coverage_days, 3)
+        self.assertEqual(runway.coverage_through_date, date(2026, 8, 27))
+        self.assertIsNone(runway.first_uncovered_date)
+        self.assertTrue(runway.forecast_limited)
+        self.assertEqual(result.open_po_coverage_extension_days, 0)
+        self.assertEqual(
+            result.open_po_coverage_extension_status,
+            CoverageExtensionStatus.NOT_OBSERVABLE,
+        )
+        self.assertEqual(
+            result.proposal_coverage_extension_status,
+            CoverageExtensionStatus.NOT_OBSERVABLE,
+        )
 
 
 if __name__ == "__main__":

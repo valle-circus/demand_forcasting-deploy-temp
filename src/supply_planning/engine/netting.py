@@ -30,6 +30,12 @@ class ActionableRiskStatus(StrEnum):
     NOT_EVALUATED = "not_evaluated"
 
 
+class CoverageExtensionStatus(StrEnum):
+    EXACT = "exact"
+    LOWER_BOUND = "lower_bound"
+    NOT_OBSERVABLE = "not_observable"
+
+
 @dataclass(frozen=True, slots=True)
 class CandidateReceipt:
     candidate_receipt_id: str
@@ -100,6 +106,21 @@ class InventoryProjectionDay:
 
 
 @dataclass(frozen=True, slots=True)
+class CoverageRunway:
+    """Continuous calendar-day coverage before the first unmet-demand day.
+
+    ``forecast_limited`` means the projection ended before a shortage was
+    observed, so ``coverage_days`` is a lower bound rather than an exact
+    depletion estimate.
+    """
+
+    coverage_days: int
+    coverage_through_date: date | None
+    first_uncovered_date: date | None
+    forecast_limited: bool
+
+
+@dataclass(frozen=True, slots=True)
 class NettingResult:
     location_id: str
     item_id: str
@@ -126,6 +147,26 @@ class NettingResult:
     first_stockout_within_horizon_date: date | None = None
     projected_balance_at_risk_horizon_end_g: Decimal | None = None
     max_stockout_within_horizon_g: Decimal = Decimal("0")
+    coverage_contract_version: int | None = None
+    on_hand_coverage_days: int | None = None
+    on_hand_coverage_through_date: date | None = None
+    on_hand_first_uncovered_date: date | None = None
+    on_hand_coverage_forecast_limited: bool | None = None
+    with_open_po_coverage_days: int | None = None
+    with_open_po_coverage_through_date: date | None = None
+    with_open_po_first_uncovered_date: date | None = None
+    with_open_po_coverage_forecast_limited: bool | None = None
+    with_proposal_coverage_days: int | None = None
+    with_proposal_coverage_through_date: date | None = None
+    with_proposal_first_uncovered_date: date | None = None
+    with_proposal_coverage_forecast_limited: bool | None = None
+    open_po_coverage_extension_days: int | None = None
+    open_po_coverage_extension_status: CoverageExtensionStatus | None = None
+    proposal_coverage_extension_days: int | None = None
+    proposal_coverage_extension_status: CoverageExtensionStatus | None = None
+    open_po_receipts_at_or_after_gap: bool | None = None
+    proposal_receipts_at_or_after_gap: bool | None = None
+    protection_horizon_days: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -174,6 +215,68 @@ class NettingResult:
             "max_stockout_within_horizon_g": str(
                 self.max_stockout_within_horizon_g
             ),
+            "coverage_contract_version": self.coverage_contract_version,
+            "on_hand_coverage_days": self.on_hand_coverage_days,
+            "on_hand_coverage_through_date": (
+                self.on_hand_coverage_through_date.isoformat()
+                if self.on_hand_coverage_through_date
+                else None
+            ),
+            "on_hand_first_uncovered_date": (
+                self.on_hand_first_uncovered_date.isoformat()
+                if self.on_hand_first_uncovered_date
+                else None
+            ),
+            "on_hand_coverage_forecast_limited": (
+                self.on_hand_coverage_forecast_limited
+            ),
+            "with_open_po_coverage_days": self.with_open_po_coverage_days,
+            "with_open_po_coverage_through_date": (
+                self.with_open_po_coverage_through_date.isoformat()
+                if self.with_open_po_coverage_through_date
+                else None
+            ),
+            "with_open_po_first_uncovered_date": (
+                self.with_open_po_first_uncovered_date.isoformat()
+                if self.with_open_po_first_uncovered_date
+                else None
+            ),
+            "with_open_po_coverage_forecast_limited": (
+                self.with_open_po_coverage_forecast_limited
+            ),
+            "with_proposal_coverage_days": self.with_proposal_coverage_days,
+            "with_proposal_coverage_through_date": (
+                self.with_proposal_coverage_through_date.isoformat()
+                if self.with_proposal_coverage_through_date
+                else None
+            ),
+            "with_proposal_first_uncovered_date": (
+                self.with_proposal_first_uncovered_date.isoformat()
+                if self.with_proposal_first_uncovered_date
+                else None
+            ),
+            "with_proposal_coverage_forecast_limited": (
+                self.with_proposal_coverage_forecast_limited
+            ),
+            "open_po_coverage_extension_days": self.open_po_coverage_extension_days,
+            "open_po_coverage_extension_status": (
+                self.open_po_coverage_extension_status.value
+                if self.open_po_coverage_extension_status
+                else None
+            ),
+            "proposal_coverage_extension_days": self.proposal_coverage_extension_days,
+            "proposal_coverage_extension_status": (
+                self.proposal_coverage_extension_status.value
+                if self.proposal_coverage_extension_status
+                else None
+            ),
+            "open_po_receipts_at_or_after_gap": (
+                self.open_po_receipts_at_or_after_gap
+            ),
+            "proposal_receipts_at_or_after_gap": (
+                self.proposal_receipts_at_or_after_gap
+            ),
+            "protection_horizon_days": self.protection_horizon_days,
             "events": [event.as_dict() for event in self.events],
             "days": [day.as_dict() for day in self.days],
         }
@@ -244,6 +347,153 @@ def classify_actionable_risk(
             (day.stockout_g for day in stockout_days),
             default=Decimal("0"),
         ),
+    )
+
+
+def continuous_coverage_runway(
+    days: Iterable[InventoryProjectionDay],
+) -> CoverageRunway:
+    """Summarize event-aware continuous coverage without averaging demand.
+
+    The first day with ``stockout_g > 0`` is not covered. A zero closing balance
+    remains covered when all demand on that day was served. Projection rows must
+    be one contiguous, ascending calendar-day series.
+    """
+
+    scoped_days = tuple(days)
+    if not scoped_days:
+        raise ValueError("coverage runway requires at least one projection day")
+    for previous, current in zip(scoped_days, scoped_days[1:], strict=False):
+        if current.projection_date != previous.projection_date + timedelta(days=1):
+            raise ValueError("coverage runway requires contiguous ascending days")
+
+    for index, day in enumerate(scoped_days):
+        if day.stockout_g <= 0:
+            continue
+        return CoverageRunway(
+            coverage_days=index,
+            coverage_through_date=(
+                scoped_days[index - 1].projection_date if index > 0 else None
+            ),
+            first_uncovered_date=day.projection_date,
+            forecast_limited=False,
+        )
+
+    return CoverageRunway(
+        coverage_days=len(scoped_days),
+        coverage_through_date=scoped_days[-1].projection_date,
+        first_uncovered_date=None,
+        forecast_limited=True,
+    )
+
+
+def attach_supply_coverage(
+    projected: NettingResult,
+    *,
+    on_hand_only: NettingResult,
+    with_open_pos: NettingResult,
+) -> NettingResult:
+    """Attach three comparable runways to the final projected result.
+
+    The scenarios are nested: usable stock only, stock plus accepted open POs,
+    and the final projection including proposed receipts. Extensions are based
+    on continuous service from the run date; a receipt after an earlier gap
+    therefore cannot inflate the displayed runway.
+    """
+
+    scenarios = (on_hand_only, with_open_pos, projected)
+    scope = (
+        projected.location_id,
+        projected.item_id,
+        projected.projection_start_date,
+        projected.projection_end_date,
+    )
+    for scenario in scenarios:
+        if (
+            scenario.location_id,
+            scenario.item_id,
+            scenario.projection_start_date,
+            scenario.projection_end_date,
+        ) != scope:
+            raise ValueError("coverage scenarios must have the same scope")
+        if tuple(day.demand_g for day in scenario.days) != tuple(
+            day.demand_g for day in projected.days
+        ):
+            raise ValueError("coverage scenarios must use the same dated demand")
+    if on_hand_only.open_po_due_g != 0 or on_hand_only.candidate_receipt_g != 0:
+        raise ValueError("on-hand coverage scenario must not include receipts")
+    if with_open_pos.candidate_receipt_g != 0:
+        raise ValueError("open-PO coverage scenario must not include proposals")
+
+    on_hand = continuous_coverage_runway(on_hand_only.days)
+    open_po = continuous_coverage_runway(with_open_pos.days)
+    proposal = continuous_coverage_runway(projected.days)
+    if not (
+        on_hand.coverage_days
+        <= open_po.coverage_days
+        <= proposal.coverage_days
+    ):
+        raise ValueError("non-negative receipts must not reduce continuous coverage")
+
+    open_po_after_gap = (
+        open_po.first_uncovered_date is not None
+        and any(
+            day.projection_date >= open_po.first_uncovered_date
+            and day.open_po_receipts_g > 0
+            for day in with_open_pos.days
+        )
+    )
+    proposal_after_gap = (
+        proposal.first_uncovered_date is not None
+        and any(
+            day.projection_date >= proposal.first_uncovered_date
+            and day.candidate_receipts_g > 0
+            for day in projected.days
+        )
+    )
+    protection_horizon_days = (
+        (projected.risk_horizon_end_date - projected.projection_start_date).days
+        + 1
+        if projected.risk_horizon_end_date is not None
+        else None
+    )
+
+    def extension_status(
+        baseline: CoverageRunway,
+        augmented: CoverageRunway,
+    ) -> CoverageExtensionStatus:
+        if baseline.forecast_limited:
+            return CoverageExtensionStatus.NOT_OBSERVABLE
+        if augmented.forecast_limited:
+            return CoverageExtensionStatus.LOWER_BOUND
+        return CoverageExtensionStatus.EXACT
+
+    return replace(
+        projected,
+        coverage_contract_version=1,
+        on_hand_coverage_days=on_hand.coverage_days,
+        on_hand_coverage_through_date=on_hand.coverage_through_date,
+        on_hand_first_uncovered_date=on_hand.first_uncovered_date,
+        on_hand_coverage_forecast_limited=on_hand.forecast_limited,
+        with_open_po_coverage_days=open_po.coverage_days,
+        with_open_po_coverage_through_date=open_po.coverage_through_date,
+        with_open_po_first_uncovered_date=open_po.first_uncovered_date,
+        with_open_po_coverage_forecast_limited=open_po.forecast_limited,
+        with_proposal_coverage_days=proposal.coverage_days,
+        with_proposal_coverage_through_date=proposal.coverage_through_date,
+        with_proposal_first_uncovered_date=proposal.first_uncovered_date,
+        with_proposal_coverage_forecast_limited=proposal.forecast_limited,
+        open_po_coverage_extension_days=(
+            open_po.coverage_days - on_hand.coverage_days
+        ),
+        open_po_coverage_extension_status=extension_status(on_hand, open_po),
+        proposal_coverage_extension_days=(
+            proposal.coverage_days - open_po.coverage_days
+        ),
+        proposal_coverage_extension_status=extension_status(open_po, proposal),
+        open_po_receipts_at_or_after_gap=open_po_after_gap,
+        proposal_receipts_at_or_after_gap=proposal_after_gap,
+        protection_horizon_days=protection_horizon_days,
     )
 
 

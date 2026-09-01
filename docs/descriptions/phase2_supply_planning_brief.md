@@ -508,6 +508,30 @@ rounding outcome. Exact FEFO/waste claims remain unavailable without lot-level
 MHD input. See
 `docs/plans/planning_horizon_and_shelf_life_correction_plan.md`.
 
+**Event-aware continuous coverage (v3).** For the location-level supply-health
+view, the engine also runs the same dated demand through three nested supply
+scenarios: usable on-hand only; on-hand plus accepted open POs; and on-hand plus
+accepted open POs plus this run's proposed receipts. This is not
+`stock / average daily demand`. Coverage is the count of consecutive calendar
+days from `projection_start_date` whose demand is fully served. Zero-demand
+days count, a zero closing balance after serving the day is still covered, and
+the first day with positive unmet demand is excluded. A receipt after that
+first gap remains visible but cannot repair the continuous runway.
+
+For every scenario, persist the covered-day count, covered-through date, first
+uncovered date, and whether the value is only a lower bound because forecast
+coverage ended first. Persist the incremental days contributed by accepted POs
+and by the proposal plus an explicit `exact`, `lower_bound`, or
+`not_observable` extension status. `not_observable` prevents a zero extension
+from being misread when the previous scenario already covers all supplied
+forecast. Also persist item-specific protection-horizon days where the active
+policy is evaluable. The third scenario is planning evidence only: a
+proposed receipt is not an ordered receipt. Existing stock/open-PO lot expiry
+is not available, so these runway values do not establish exact MHD usability
+for existing supply. Migration
+`202609010005_event_aware_supply_coverage.sql` and the v3 planning-run contract
+carry these fields to the API; old v2 rows require a fresh run.
+
 **Step 6 — Apply simple delivery rules where needed**
 
 If the output must contain an order/delivery date, use configured lead time and

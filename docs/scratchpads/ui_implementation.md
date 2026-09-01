@@ -701,14 +701,15 @@ directly and must not fan out one `planning-status` call per location**, which
 was the earlier workaround. The contract observation asking for those fields is
 now resolved.
 
-## Deferred: cross-ingredient coverage chart (2026-08-31)
+## Cross-ingredient coverage chart — backend ready (updated 2026-09-01)
 
 Maintainer proposed an executive bar chart — ingredients on one axis, days of
 coverage on the other, stacked to show what stock already on order adds.
 
-**Deferred until a location has realistic ingredient counts.** The demo packet
-has one ingredient, so sorting, colour, label crowding and the top-N question
-cannot be judged. Revisit at roughly 20+ ingredients.
+The React view remains deferred until migration 005 is applied and a fresh v3
+run exists. The demo packet has one ingredient, so sorting, colour, label
+crowding and the top-N question still need roughly 20+ ingredients for honest
+visual QA.
 
 Two findings worth keeping:
 
@@ -717,9 +718,12 @@ Two findings worth keeping:
   engine projects day by day through the dated forecast. The two would disagree
   precisely on lumpy, menu-driven items — the ones that matter — and the
   browser's smoother number would look more reassuring than the truth.
-- **The stacked split is not available from persisted data.** `NettingResult`
-  has no days-of-cover field and no breakdown of cover contributed by usable
-  stock, by open POs, and by the proposed receipt.
+- **Resolved in backend v3:** `NettingResult` and persisted rows now carry
+  scenario totals plus explicit incremental open-PO/proposal days, dates,
+  lower-bound flags, extension evidence status, late-receipt flags, and item
+  protection-horizon days.
+  The API response includes availability/semantics context so legacy v2 rows
+  cannot silently look like zero coverage.
 
 When it is built:
 
@@ -727,7 +731,16 @@ When it is built:
   dataviz anti-pattern.
 - Sorted worst-first, coloured by `actionable_risk_status` disposition.
 - A reference line at the decision horizon, so a bar that falls short of what
-  this order must cover is obvious.
+  this order must cover is obvious. The horizon is item-specific, so use a
+  per-row marker rather than one global line.
+- Solid stock segment, lighter accepted-PO extension, and visibly
+  proposal-only final extension. Render forecast-limited values as `at least N`
+  and explain late receipts that cannot bridge an earlier gap.
+
+Backend evidence: schema version 3 in `run_improved.py`, coverage fields in
+`engine/netting.py`, API context in `services.py`, and migration
+`202609010005_event_aware_supply_coverage.sql`. Claude should edit only React
+types/components/tests for this slice.
 
 ## WP5 done — Overview (2026-08-31)
 

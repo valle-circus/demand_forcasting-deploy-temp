@@ -1,10 +1,10 @@
 # Maintainer UI journey and three-page plan
 
-**Status:** product/UX direction and authenticated FastAPI/Supabase backend are
-implemented. Claude has built the connected Data & settings and first Location
-planning slices. Codex completed the v2 horizon/MHD backend on 2026-08-30;
-migration 004, frontend adoption of its explicit fields, Overview, and final
-hardening remain.
+**Status:** product/UX direction, authenticated FastAPI/Supabase backend, and
+the connected three-page UI are implemented. The v2 horizon/MHD fields are
+adopted in React. Codex completed the v3 event-aware coverage backend on
+2026-09-01; migration 005, a fresh connected run, and Claude's coverage-chart
+presentation remain.
 
 ## 1. Product outcome and primary user
 
@@ -283,6 +283,53 @@ as negative physical stock.
   are persisted; and
 - filters for risk only, storage class, supplier/channel, and item search.
 
+##### Cross-ingredient supply-coverage summary
+
+Place a compact horizontal bar chart above the item table when a fresh v3 run
+has coverage data. Its purpose is to answer “how far does each ingredient's
+current supply position carry this location?” without assuming flat demand.
+The chart consumes the three backend scenarios on each
+`planning_netting_results` row:
+
+- usable stock only: `on_hand_coverage_days`;
+- usable stock plus accepted open POs: `with_open_po_coverage_days`; and
+- usable stock plus accepted open POs plus this run's proposal:
+  `with_proposal_coverage_days`.
+
+Use `open_po_coverage_extension_days` and
+`proposal_coverage_extension_days` as the incremental stacked segments; do not
+subtract scenarios or divide stock by average demand in React. A day counts as
+covered only when all dated demand on that calendar day is served. Zero-demand
+days advance the runway, the first day with unmet demand is excluded, same-day
+receipts arrive before demand, and a receipt after an earlier gap does not heal
+the continuous runway.
+
+Each incremental segment also has an explicit `*_extension_status`: `exact`,
+`lower_bound`, or `not_observable`. `not_observable` means the preceding supply
+scenario already covers the complete uploaded forecast, so a stored zero-day
+extension must not be labelled “adds nothing.” `lower_bound` means the added
+segment reaches the forecast end and may extend farther.
+
+Sort ingredients worst-first. Use a solid segment for on-hand coverage, a
+second visually lighter segment for accepted open-PO coverage, and an outline
+or patterned/translucent segment for proposed coverage. The last segment must
+say **proposal—not ordered** in the legend and accessible text. Do not use a
+single global target line: the relevant `protection_horizon_days` is item-
+specific and may be `null` when policy is not evaluable. Show the item marker
+or target in its row/tooltip and preserve `actionable_risk_status` as the risk
+classification.
+
+When a scenario has `*_coverage_forecast_limited = true`, render its value as
+“at least N days”/`≥ N`, because the uploaded forecast ends before a shortage.
+When `open_po_receipts_at_or_after_gap` or
+`proposal_receipts_at_or_after_gap` is true, explain that a late receipt is
+visible but cannot bridge the earlier unmet-demand day. The API's
+`coverage_context.available_for_all_items` must be true before showing the
+chart; otherwise prompt for a fresh v3 run rather than presenting zeros.
+Exact expiry attribution for existing stock and open POs remains unavailable
+without lot-level MHD data, so this chart is a demand-coverage view, not proof
+that every existing lot will remain usable.
+
 “Overstock” remains a planning proxy based on cover/cap evidence. “Waste” is
 not claimed without expiry or disposal data.
 
@@ -508,13 +555,15 @@ engine remains unaware of HTTP and Supabase.
 
 ## 10. Supabase schema assessment and minimal workflow model
 
-### 10.1 What the four migrations now provide
+### 10.1 What the five migrations now provide
 
 Migrations 001 and 002 define the tables. Migration 003 adds immutable-version
 guards and narrow transaction RPCs used by the FastAPI repository. Migration
 004 adds the corrected actionable-risk and shelf-life derivation contract plus
-the v2 planning persistence RPC. The maintainer reports 001–003 applied through
-the SQL Editor; 004 must be applied before the next connected planning run:
+the v2 planning persistence RPC. Migration 005 adds event-aware scenario
+coverage plus the v3 planning persistence RPC. The maintainer reports 001–004
+applied through the SQL Editor; 005 must be applied before the next connected
+v3 planning run:
 
 | Tables | Implemented backend capability |
 |---|---|
@@ -523,7 +572,7 @@ the SQL Editor; 004 must be applied before the next connected planning run:
 | `planning_lines`, `planning_recommendations`, `planning_exceptions` | Recommendation table, derivation drawer, candidate expiry/cap/residual/rounding evidence, run issues and exports. |
 | `source_imports` | Data & settings cards, freshness, compact validation issues, file metadata, and immutable import history. |
 | `forecast_daily`, `menu_calendar`, `bom_lines`, `inventory_snapshots`, `purchase_order_lines` | Normalized accepted inputs for readiness, location views, and run assembly. |
-| `planning_netting_results` | Explicit actionable-risk status/window, full-forecast context, projected balance, and Overview/location summaries. |
+| `planning_netting_results` | Explicit actionable-risk status/window, full-forecast context, projected balance, event-aware stock/PO/proposal coverage runways, and Overview/location summaries. |
 | `planning_projection_days` | Daily stock, demand, PO receipt, candidate receipt, and stockout timeline for location-level explanation and charts. |
 
 RLS is enabled and browser roles currently have no table access. Keep domain
@@ -541,7 +590,9 @@ The schema files are:
   finalized inputs/active master rows, atomic import/activation/run functions,
   and service-role-only execution grants; and
 - `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` —
-  additive v2 risk/MHD derivation columns and `persist_planning_run_v2`.
+  additive v2 risk/MHD derivation columns and `persist_planning_run_v2`; and
+- `supabase/migrations/202609010005_event_aware_supply_coverage.sql` —
+  additive v3 coverage columns and `persist_planning_run_v3`.
 
 `supabase/seed.sql` contains one clearly synthetic location/item/import/run/risk
 example for UI development. It is not operational evidence and must never be
@@ -659,15 +710,14 @@ them before polishing screens:
 
 ## 13. Suggested implementation order
 
-1. Apply migration 004; Supabase/Auth and migrations 001–003 are already
+1. Apply migration 005; Supabase/Auth and migrations 001–004 are already
    configured in the development environment.
-2. Keep the implemented three-route React shell, sign-in/session handling, and shared
-   status/empty/error components.
-3. Keep the implemented **Data & settings** workflow and finish the inline
-   master-activation UX.
-4. Update **Location planning** to consume the v2 risk/MHD fields and correct
-   chart/label semantics.
-5. Build **Overview** against the implemented current-run summary.
+2. Create one fresh v3 planning run and verify `coverage_context` plus the
+   per-item coverage fields through FastAPI.
+3. Keep the implemented three-route React shell, completed Overview, Data &
+   settings workflow, Location view, and v2 risk/MHD semantics.
+4. Add the cross-ingredient coverage chart from the v3 fields above; do not
+   introduce TypeScript planning arithmetic.
 6. Add field-level master/menu editing only as a separately scoped follow-up;
    workbook draft import and activation are sufficient for the first UI slice.
 7. Run representative maintainer usability sessions, component/E2E tests,

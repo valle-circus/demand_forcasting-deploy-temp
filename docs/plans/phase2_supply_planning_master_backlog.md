@@ -363,9 +363,9 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
 | Live Snowflake input dependency for local V1 | None |
 | Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
-| Supabase prototype store | Migrations 001–003 and Auth are verified in development; additive actionable-risk/MHD migration 004 must be applied before the next v2 run |
-| Maintainer UI | Auth shell, Data & settings, and first Location planning slice implemented by Claude; v2 Location presentation, Overview, and hardening remain |
-| Current repository check | 83 Python tests pass; focused changed-engine/API Ruff/strict-mypy checks pass; frontend was not edited or rerun in the backend correction/explainability tranche |
+| Supabase prototype store | Migrations 001–004 and Auth are verified in development; additive event-aware-coverage migration 005 must be applied before the next v3 run |
+| Maintainer UI | Connected Auth shell, Overview, Location planning, and Data & settings implemented by Claude; coverage-v3 chart adoption and realistic multi-item QA remain |
+| Current repository check | Coverage-v3 focused engine/API/schema tests, Ruff, and strict mypy pass; full-suite result is recorded in dated progress; `apps/web` was not edited by Codex |
 
 ## Source of truth for local V1
 
@@ -437,18 +437,21 @@ windows are unchanged.
       pre-arrival stockout tests.
 - [x] Fresh unequal-day coverage tests.
 - [x] Shelf-life/max-cover/MOQ/case/order-unit boundary tests.
+- [x] Lumpy-demand continuous coverage tests for stock, accepted POs, proposal,
+      late receipts after a gap, and forecast-limited lower bounds.
 - [x] Full local template → normalized inputs → recommendation acceptance run.
 
 ## Immediate next slice
 
 1. Send the two templates, assumptions brief, maintainer review summary, and
    recommendation/exception outputs to the maintainer.
-2. Apply `202608300004_actionable_risk_and_shelf_life.sql` in the Supabase SQL
-   Editor, then verify readiness and one safe v2 workflow.
-3. Have Claude update the existing Location view to present the explicit v2
-   risk/MHD fields without TypeScript calculation.
-4. Build the Overview cockpit over persisted latest-current actionable-risk
-   summaries, then complete frontend hardening.
+2. Apply `202609010005_event_aware_supply_coverage.sql` in the Supabase SQL
+   Editor, then verify readiness and one fresh v3 workflow. Existing v2 rows do
+   not gain coverage values retroactively.
+3. Have Claude render the cross-ingredient coverage chart from the explicit v3
+   fields without TypeScript calculation, then QA it with 20+ ingredients.
+4. Keep the completed Overview and v2 Location risk/MHD semantics intact while
+   completing frontend hardening.
 5. Add field-level master/menu editing only after the workbook draft/activation
    import and version semantics are proven; keep proposal status explicit.
 6. Receive corrected/approved templates and answers; resolve the four stock
@@ -460,6 +463,15 @@ windows are unchanged.
    preserve the future Snowflake cutover boundary.
 
 ## Dated progress
+
+- 2026-09-01: completed event-aware coverage schema/run contract v3. Python now
+  projects usable stock, accepted open POs, and proposed receipts as distinct
+  nested supply scenarios against dated lumpy demand, persists exact runway
+  dates/lower-bound/extension/late-gap fields, and exposes them through FastAPI
+  with an explicit semantic and legacy-run availability context. Added forward
+  migration 005 and kept React unchanged for Claude's presentation-only slice.
+  All 87 Python tests plus focused Ruff/strict mypy pass. SQL schema tests are
+  static; the migration still needs its real SQL-Editor application check.
 
 - 2026-08-22 to 2026-08-25: legacy reconstruction, canonical contracts,
   validation, BOM explosion, dated projection/netting, and Snowflake source

@@ -23,6 +23,7 @@ from supply_planning.engine.explode import aggregate_item_demand, explode_bom
 from supply_planning.engine.netting import (
     CandidateReceipt,
     NettingResult,
+    attach_supply_coverage,
     classify_actionable_risk,
     project_inventory,
 )
@@ -31,6 +32,7 @@ from supply_planning.validation.gates import evaluate_run_mode
 
 PROFILE = "improved_file/v1"
 POLICY_VERSION = "template-recommendation-v2-2026-08-30"
+SCHEMA_VERSION = 3
 
 
 def _normalize(value: Any) -> Any:
@@ -56,6 +58,7 @@ def _run_hash_payload(
     candidate_receipts: tuple[CandidateReceipt, ...],
 ) -> dict[str, Any]:
     return {
+        "schema_version": SCHEMA_VERSION,
         "profile": PROFILE,
         "policy_version": POLICY_VERSION,
         "planning_as_of_at": planning_as_of_at.isoformat(),
@@ -90,7 +93,7 @@ class ImprovedRunResult:
     def as_dict(self) -> dict[str, Any]:
         blocker_count = sum(issue.severity is Severity.BLOCKER for issue in self.issues)
         return {
-            "schema_version": 2,
+            "schema_version": SCHEMA_VERSION,
             "profile": PROFILE,
             "policy_version": POLICY_VERSION,
             "run_id": self.run_id,
@@ -356,42 +359,54 @@ def run_improved_plan(
         current = forecast_end_by_location.get(forecast.location_id)
         if current is None or forecast.service_date > current:
             forecast_end_by_location[forecast.location_id] = forecast.service_date
-    results: list[NettingResult] = []
-    for location_id, item_id in demand_keys:
-        snapshot = selected_snapshots.get((location_id, item_id))
-        if snapshot is None:
-            continue
-        demands = tuple(
-            demand
-            for demand in daily_item_demand
-            if demand.location_id == location_id and demand.item_id == item_id
-        )
-        projection_end = forecast_end_by_location[location_id]
-        result = project_inventory(
-            location_id=location_id,
-            item_id=item_id,
-            projection_start_date=projection_start,
-            projection_end_date=projection_end,
-            demands=demands,
-            snapshot=snapshot,
-            item=items[item_id],
-            purchase_orders=(
-                po
-                for po in bundle.purchase_orders
-                if po.location_id == location_id and po.item_id == item_id
-            ),
-            demand_provenance=demand_provenance,
-            candidate_receipts=(
-                receipt
-                for receipt in candidate_receipts
-                if receipt.location_id == location_id and receipt.item_id == item_id
-            ),
-        )
-        results.append(result)
+    def project_results(
+        *,
+        include_open_pos: bool,
+        receipts: tuple[CandidateReceipt, ...] = (),
+    ) -> list[NettingResult]:
+        projected: list[NettingResult] = []
+        for location_id, item_id in demand_keys:
+            snapshot = selected_snapshots.get((location_id, item_id))
+            if snapshot is None:
+                continue
+            demands = tuple(
+                demand
+                for demand in daily_item_demand
+                if demand.location_id == location_id and demand.item_id == item_id
+            )
+            projected.append(
+                project_inventory(
+                    location_id=location_id,
+                    item_id=item_id,
+                    projection_start_date=projection_start,
+                    projection_end_date=forecast_end_by_location[location_id],
+                    demands=demands,
+                    snapshot=snapshot,
+                    item=items[item_id],
+                    purchase_orders=(
+                        po
+                        for po in bundle.purchase_orders
+                        if include_open_pos
+                        and po.location_id == location_id
+                        and po.item_id == item_id
+                    ),
+                    demand_provenance=demand_provenance,
+                    candidate_receipts=(
+                        receipt
+                        for receipt in receipts
+                        if receipt.location_id == location_id
+                        and receipt.item_id == item_id
+                    ),
+                )
+            )
+        projected.sort(key=lambda result: (result.location_id, result.item_id))
+        return projected
 
-    results.sort(key=lambda result: (result.location_id, result.item_id))
+    on_hand_results = project_results(include_open_pos=False)
+    open_po_results = project_results(include_open_pos=True)
     planning_lines: tuple[PlanningLine, ...] = ()
     recommendations: tuple[PlanningRecommendation, ...] = ()
+    planned_receipts: tuple[CandidateReceipt, ...] = ()
     if bundle.item_policies and bundle.delivery_rules:
         recommendation_result = schedule_recommendations(
             run_id=run_id,
@@ -421,41 +436,12 @@ def run_improved_plan(
             )
             for recommendation in recommendations
         )
-        if planned_receipts:
-            projected_results: list[NettingResult] = []
-            for baseline in results:
-                snapshot = selected_snapshots[(baseline.location_id, baseline.item_id)]
-                demands = tuple(
-                    demand
-                    for demand in daily_item_demand
-                    if demand.location_id == baseline.location_id
-                    and demand.item_id == baseline.item_id
-                )
-                projected_results.append(
-                    project_inventory(
-                        location_id=baseline.location_id,
-                        item_id=baseline.item_id,
-                        projection_start_date=baseline.projection_start_date,
-                        projection_end_date=baseline.projection_end_date,
-                        demands=demands,
-                        snapshot=snapshot,
-                        item=items[baseline.item_id],
-                        purchase_orders=(
-                            po
-                            for po in bundle.purchase_orders
-                            if po.location_id == baseline.location_id
-                            and po.item_id == baseline.item_id
-                        ),
-                        demand_provenance=demand_provenance,
-                        candidate_receipts=(
-                            receipt
-                            for receipt in (*candidate_receipts, *planned_receipts)
-                            if receipt.location_id == baseline.location_id
-                            and receipt.item_id == baseline.item_id
-                        ),
-                    )
-                )
-            results = projected_results
+    proposed_receipts = (*candidate_receipts, *planned_receipts)
+    results = (
+        project_results(include_open_pos=True, receipts=proposed_receipts)
+        if proposed_receipts
+        else open_po_results
+    )
     risk_horizon_by_key: dict[tuple[str, str], date] = {}
     for line in planning_lines:
         if line.coverage_end_date is None:
@@ -464,12 +450,22 @@ def run_improved_plan(
         current = risk_horizon_by_key.get(key)
         if current is None or line.coverage_end_date > current:
             risk_horizon_by_key[key] = line.coverage_end_date
+    on_hand_by_key = {
+        (result.location_id, result.item_id): result for result in on_hand_results
+    }
+    open_po_by_key = {
+        (result.location_id, result.item_id): result for result in open_po_results
+    }
     results = [
-        classify_actionable_risk(
-            result,
-            risk_horizon_end_date=risk_horizon_by_key.get(
-                (result.location_id, result.item_id)
+        attach_supply_coverage(
+            classify_actionable_risk(
+                result,
+                risk_horizon_end_date=risk_horizon_by_key.get(
+                    (result.location_id, result.item_id)
+                ),
             ),
+            on_hand_only=on_hand_by_key[(result.location_id, result.item_id)],
+            with_open_pos=open_po_by_key[(result.location_id, result.item_id)],
         )
         for result in results
     ]

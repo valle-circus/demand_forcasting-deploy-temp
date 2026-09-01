@@ -29,11 +29,20 @@
 - [x] Apply migration 003 and configure Auth/API values to verify the backend
   against the real Supabase project.
 - [x] Build Data & settings and the first Location planning slice.
-- [ ] Apply migration 004 and verify one v2 planning persistence/read journey.
-- [ ] Finish the v2 Location presentation, Overview, and then versioned
-  master/menu editing in that dependency order.
+- [x] Apply migration 004 and verify the v2 planning persistence/read journey.
+- [x] Finish the v2 Location presentation and Overview.
+- [ ] Apply migration 005 and verify one fresh v3 coverage persistence/read
+  journey, then have Claude render the coverage chart.
+- [ ] Add versioned master/menu editing after the existing workbook workflow is
+  proven with maintainer feedback.
 
 ## Key decisions (and why)
+
+- 2026-09-01: Coverage v3 is calculated in Python as three nested event-aware
+  scenarios, not in React as stock divided by average demand. Migration 005 is
+  forward-only; legacy v2 rows remain readable with null coverage and require a
+  fresh run. Accepted POs and proposals are separate segments, and the proposal
+  is never presented as ordered supply.
 
 - 2026-08-28: Keep one repository with separate deployables under `apps/api`
   and `apps/web`; the engine stays under `src/supply_planning` so HTTP and UI

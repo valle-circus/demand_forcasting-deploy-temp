@@ -134,24 +134,24 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("sb_secret_server-test", seen[0].headers["apikey"])
         self.assertNotIn("authorization", seen[0].headers)
 
-    async def test_planning_persistence_uses_v2_contract_rpc(self) -> None:
+    async def test_planning_persistence_uses_v3_contract_rpc(self) -> None:
         seen: list[httpx.Request] = []
 
         async def handler(request: httpx.Request) -> httpx.Response:
             seen.append(request)
-            return httpx.Response(200, json="run-v2")
+            return httpx.Response(200, json="run-v3")
 
         store = SupabaseCanonicalStore(
             _settings(),
             transport=httpx.MockTransport(handler),
         )
 
-        run_id = await store.persist_planning_run({"run": {"run_id": "run-v2"}})
+        run_id = await store.persist_planning_run({"run": {"run_id": "run-v3"}})
 
-        self.assertEqual(run_id, "run-v2")
+        self.assertEqual(run_id, "run-v3")
         self.assertEqual(
             seen[0].url.path,
-            "/rest/v1/rpc/persist_planning_run_v2",
+            "/rest/v1/rpc/persist_planning_run_v3",
         )
 
 
