@@ -797,3 +797,57 @@ run, risk table, projection chart, derivation drawer, Overview.
 **Not exercised:** more than one ingredient, more than one location, the
 download save dialog, and any deployed environment. That last gap is the main
 reason the handover's first recommendation is to get realistic data in.
+
+## Coverage chart built on the v3 contract (2026-09-01)
+
+Codex's event-aware coverage backend is adopted. The chart sits at the top of
+Risk & stock: horizontal, worst-first, three stacked segments per ingredient.
+
+Every segment is a persisted day count. `open_po_coverage_extension_days` and
+`proposal_coverage_extension_days` are stacked **directly** — scenarios are
+never subtracted, and stock is never divided by demand.
+
+Verified live on a fresh v3 run: 2 days on hand + 2 from open POs + 8 from the
+proposal = 12, against a 10-day target. Rendered widths measured in the DOM at
+125/125/502 px, matching 2:2:8 exactly.
+
+States handled:
+
+- **Legacy v2 run** — gated on `coverage_context`, showing "Compute a fresh
+  recommendation to see supply coverage" and stating the values are absent, not
+  zero. Confirmed live against the pre-migration run.
+- **`forecast_limited`** — "at least N days", never a bare N.
+- **`not_observable`** — "not measurable, supply before it already covers the
+  whole forecast". Never "adds nothing".
+- **Receipt after a gap** — explained rather than shown as a silent zero.
+- Item-specific `protection_horizon_days` marker per row, never one global line.
+
+Two bugs found by inspecting the DOM rather than the screenshot:
+
+- Segments rendered **0 px wide**. The flex container was `absolute left-0`
+  with no right edge, so it shrank to fit and the percentage children resolved
+  against zero. `inset-0` fixes it. The screenshot only looked "faint", which is
+  why the measurement mattered.
+- The proposal stripe used `--circus-accent-soft` on a near-white track and was
+  effectively invisible. Now the accent at 45% through `color-mix`.
+
+### Planning cutoff control added
+
+The demo packet aged out: today is 2026-09-01 and its forecast starts
+2026-08-31, so `run_improved.py` correctly refuses with "forecast_daily
+contains service dates before planning_as_of_at". The run button previously
+always sent "now" with no way to plan as of an earlier instant.
+
+Added the advanced cutoff disclosure that was in the original WP4 blueprint but
+never built. It is a **cutoff**, not a horizon slider — the correction plan
+forbids the latter because it would let a user hide risk; choosing the instant a
+run is made is a different and legitimate thing.
+
+### Contract observation for Codex
+
+That `ValueError` reaches the browser as a generic 500 "The planning service
+could not complete the request", because it is caught by the sanitized
+`internal_error` handler. But its message is planner-facing and actionable —
+"provide a forward snapshot or move planning_as_of_at". It should be a 422 with
+the message so the maintainer can act on it, rather than a log line only a
+developer sees.

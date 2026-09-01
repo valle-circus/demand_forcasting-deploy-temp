@@ -169,9 +169,45 @@ function runResponse(): PlanningRunResponse {
         first_stockout_within_horizon_date: '2026-09-05',
         max_stockout_within_horizon_g: 400,
         projected_balance_at_risk_horizon_end_g: -400,
+        coverage_contract_version: 1,
+        on_hand_coverage_days: 2,
+        on_hand_coverage_through_date: '2026-08-31',
+        on_hand_first_uncovered_date: '2026-09-01',
+        on_hand_coverage_forecast_limited: false,
+        with_open_po_coverage_days: 4,
+        with_open_po_coverage_through_date: '2026-09-02',
+        with_open_po_first_uncovered_date: '2026-09-03',
+        with_open_po_coverage_forecast_limited: false,
+        with_proposal_coverage_days: 10,
+        with_proposal_coverage_through_date: '2026-09-08',
+        with_proposal_first_uncovered_date: '2026-09-09',
+        with_proposal_coverage_forecast_limited: false,
+        open_po_coverage_extension_days: 2,
+        open_po_coverage_extension_status: 'exact',
+        proposal_coverage_extension_days: 6,
+        proposal_coverage_extension_status: 'exact',
+        open_po_receipts_at_or_after_gap: false,
+        proposal_receipts_at_or_after_gap: false,
+        protection_horizon_days: 10,
       },
     ],
     projection_days: [],
+    coverage_context: {
+      contract_version: 1,
+      available_for_all_items: true,
+      requires_fresh_schema_v3_run: false,
+      calculation_owner: 'python_backend',
+      unit: 'continuous_calendar_days',
+      starts_on: 'projection_start_date',
+      first_uncovered_day_is_excluded: true,
+      zero_closing_balance_is_covered: true,
+      same_day_receipts_arrive_before_demand: true,
+      forecast_limited_values_are_lower_bounds: true,
+      scenario_order: [],
+      proposal_is_not_an_order: true,
+      existing_inventory_lot_expiry_available: false,
+      open_po_lot_expiry_available: false,
+    },
     planning_line_explanations: [
       {
         planning_line_id: 'line-1',
@@ -413,7 +449,7 @@ describe('what counts as risk after the v2 engine correction', () => {
 
     expect(await screen.findByText('Replan later')).toBeInTheDocument()
     expect(
-      screen.getByText(/all 1 ingredients are covered for this decision/i),
+      screen.getByText(/1 ingredient covered for this decision/i),
     ).toBeInTheDocument()
     expect(screen.queryByText('Needs an order')).not.toBeInTheDocument()
   })

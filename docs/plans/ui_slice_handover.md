@@ -76,7 +76,7 @@ Each of these is a decision, not an omission. Reverse any of them freely.
 | Demo/preview fixture mode | Proposed while the backend looked unverified. Once readiness came back green it would only add a second code path that could show fake data. Fixtures live in Vitest only. |
 | Field-level master, menu and BOM editors | The brief defers them. They render as visibly disabled *planned* features rather than controls backed by no API. |
 | Data-freshness panel and observed-PO blocks on Overview | Journey doc §5.2 lists them as separate sections. Source freshness is already a column in the location table, and a secondary PO summary adds weight to a page whose job is "what needs attention now". **Worth a second opinion.** |
-| Cross-ingredient coverage chart | Backend v3 is now ready; migration 005, a fresh connected run, and Claude's React presentation remain. Realistic multi-item visual QA is still required. See §5. |
+| Cross-ingredient coverage chart | **Built 2026-09-01** on the v3 contract. Verified on a fresh run. Still needs visual QA at realistic item counts. |
 | Dark mode | The `circus-ui` skill says only if asked. A half-done dark mode is worse than none. |
 
 ---

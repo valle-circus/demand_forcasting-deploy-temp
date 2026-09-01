@@ -22,7 +22,11 @@ import {
   getPlanningRun,
 } from '@/lib/apiClient'
 import { isNotFound } from '@/lib/errors'
-import { nowWithOffset } from '@/lib/formatting'
+import {
+  fromLocalInputValue,
+  nowWithOffset,
+  toLocalInputValue,
+} from '@/lib/formatting'
 import type { PlanningRunResponse } from '@/lib/types'
 import { useApiResource } from '@/lib/useApiResource'
 import { useMutation } from '@/lib/useMutation'
@@ -43,6 +47,7 @@ export function LocationPlanningPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const [freshRun, setFreshRun] = useState<PlanningRunResponse | null>(null)
+  const [cutoff, setCutoff] = useState(() => toLocalInputValue())
 
   const rawTab = searchParams.get('tab')
   const tab: TabKey = TABS.includes(rawTab as TabKey) ? (rawTab as TabKey) : 'risk'
@@ -88,7 +93,8 @@ export function LocationPlanningPage() {
     const result = await createPlanningRun({
       location_id: id,
       // The API rejects a naive timestamp.
-      planning_as_of_at: nowWithOffset(),
+      // The API rejects a naive timestamp; the input carries no offset.
+      planning_as_of_at: fromLocalInputValue(cutoff) ?? nowWithOffset(),
       run_mode: 'scenario',
     })
     setFreshRun(result)
@@ -172,6 +178,8 @@ export function LocationPlanningPage() {
           running={run.isPending}
           error={run.state.status === 'error' ? run.state.error : null}
           onRun={() => void run.mutate(locationId)}
+          cutoff={cutoff}
+          onCutoffChange={setCutoff}
         />
       </header>
 
@@ -221,6 +229,7 @@ export function LocationPlanningPage() {
           <TabsContent value="risk" className="mt-4">
             <RiskStockTab
               netting={result.netting_results}
+              coverageContext={result.coverage_context}
               projections={result.projection_days}
               lines={result.planning_lines}
               inventory={inventoryData}

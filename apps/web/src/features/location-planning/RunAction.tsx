@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,9 @@ interface RunActionProps {
   running: boolean
   error: Error | null
   onRun: () => void
+  /** datetime-local value; the page converts it to a tz-aware instant. */
+  cutoff: string
+  onCutoffChange: (value: string) => void
 }
 
 /**
@@ -20,14 +24,52 @@ interface RunActionProps {
  * disabled attribute alone, because a fast second click lands before React
  * re-renders the button.
  */
-export function RunAction({ status, running, error, onRun }: RunActionProps) {
+export function RunAction({
+  status,
+  running,
+  error,
+  onRun,
+  cutoff,
+  onCutoffChange,
+}: RunActionProps) {
   const blocked = !status.ready
+  const [showCutoff, setShowCutoff] = useState(false)
 
   return (
     <div className="flex flex-col items-end gap-1">
       <Button size="lg" disabled={blocked || running} onClick={onRun}>
         {running ? 'Calculating' : 'Compute recommendation'}
       </Button>
+
+      {/* Behind a disclosure: the cutoff is almost always "now", but
+          reproducing an earlier run needs the exact instant it used. */}
+      <button
+        type="button"
+        onClick={() => {
+          setShowCutoff((open) => !open)
+        }}
+        aria-expanded={showCutoff}
+        className="rounded-md px-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      >
+        {showCutoff ? 'Use the current time' : 'Plan as of a different time'}
+      </button>
+
+      {showCutoff && (
+        <div className="flex flex-col items-end gap-1">
+          <input
+            type="datetime-local"
+            value={cutoff}
+            aria-label="Plan as of"
+            onChange={(event) => {
+              onCutoffChange(event.target.value)
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs tabular focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          />
+          <p className="max-w-xs text-right text-xs text-muted-foreground">
+            The forecast must start on or after this time.
+          </p>
+        </div>
+      )}
 
       {running && (
         <p className="text-xs text-muted-foreground">

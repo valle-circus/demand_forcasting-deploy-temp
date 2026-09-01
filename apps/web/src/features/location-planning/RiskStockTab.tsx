@@ -13,13 +13,15 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Toggle } from '@/components/ui/toggle'
-import { formatDate, formatGrams } from '@/lib/formatting'
+import { formatCount, formatDate, formatGrams } from '@/lib/formatting'
 import type {
+  CoverageContext,
   InventoryResponse,
   NettingResult,
   PlanningLine,
   ProjectionDay,
 } from '@/lib/types'
+import { CoverageChart } from './CoverageChart'
 import { StockProjectionChart } from './StockProjectionChart'
 import {
   byRisk,
@@ -48,6 +50,7 @@ interface RiskStockTabProps {
   projections: ProjectionDay[]
   lines: PlanningLine[]
   inventory: InventoryResponse | null
+  coverageContext: CoverageContext
 }
 
 export function RiskStockTab({
@@ -55,6 +58,7 @@ export function RiskStockTab({
   projections,
   lines,
   inventory,
+  coverageContext,
 }: RiskStockTabProps) {
   const [attentionOnly, setAttentionOnly] = useState(false)
   const [openItemId, setOpenItemId] = useState<string | null>(null)
@@ -75,11 +79,17 @@ export function RiskStockTab({
   const attention = netting.filter(needsAttention).length
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
+      <CoverageChart
+        netting={netting}
+        names={names}
+        context={coverageContext}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           {attention === 0
-            ? `All ${String(netting.length)} ingredients are covered for this decision.`
+            ? `${formatCount(netting.length, 'ingredient')} covered for this decision.`
             : `${String(attention)} of ${String(netting.length)} ingredients need attention now.`}
         </p>
         <Toggle

@@ -359,6 +359,84 @@ export interface NettingResult {
   first_stockout_within_horizon_date: IsoDate | null
   max_stockout_within_horizon_g: Numeric | null
   projected_balance_at_risk_horizon_end_g: Numeric | null
+
+  // --- v3 event-aware supply coverage --------------------------------------
+  //
+  // Continuous calendar days from `projection_start_date`, counted against the
+  // real dated forecast rather than an average. A day counts as covered only
+  // when all of that day's demand is served; zero-demand days advance the
+  // runway; same-day receipts arrive before demand; the first uncovered day is
+  // excluded; and a receipt after an earlier gap does not heal the runway.
+  //
+  // Every field is null on a legacy v2 run. Null must never be coerced to zero.
+
+  /** `1` for a row carrying this contract. Null or other means legacy. */
+  coverage_contract_version: number | null
+
+  /** Days served by usable opening stock alone. */
+  on_hand_coverage_days: number | null
+  on_hand_coverage_through_date: IsoDate | null
+  on_hand_first_uncovered_date: IsoDate | null
+  /** True means the day count is a lower bound: the forecast ended first. */
+  on_hand_coverage_forecast_limited: boolean | null
+
+  /** Same, after adding accepted open purchase orders. */
+  with_open_po_coverage_days: number | null
+  with_open_po_coverage_through_date: IsoDate | null
+  with_open_po_first_uncovered_date: IsoDate | null
+  with_open_po_coverage_forecast_limited: boolean | null
+
+  /** Same, after also adding this run's proposed receipt. */
+  with_proposal_coverage_days: number | null
+  with_proposal_coverage_through_date: IsoDate | null
+  with_proposal_first_uncovered_date: IsoDate | null
+  with_proposal_coverage_forecast_limited: boolean | null
+
+  /** Incremental segments — stack these directly, never subtract scenarios. */
+  open_po_coverage_extension_days: number | null
+  open_po_coverage_extension_status: CoverageExtensionStatus | null
+  proposal_coverage_extension_days: number | null
+  proposal_coverage_extension_status: CoverageExtensionStatus | null
+
+  /** A receipt lands on or after an earlier gap, so it cannot bridge it. */
+  open_po_receipts_at_or_after_gap: boolean | null
+  proposal_receipts_at_or_after_gap: boolean | null
+
+  /** Item-specific target span. Null when policy is not evaluable. */
+  protection_horizon_days: number | null
+}
+
+/**
+ * How far an incremental coverage segment can be trusted.
+ *
+ * `not_observable` means the preceding scenario already covers the whole
+ * uploaded forecast, so a stored zero must **not** be read as "adds nothing".
+ */
+export type CoverageExtensionStatus = 'exact' | 'lower_bound' | 'not_observable'
+
+/**
+ * The semantic contract for the coverage fields, returned once per run.
+ *
+ * The chart is gated on `available_for_all_items`; when
+ * `requires_fresh_schema_v3_run` is true the run predates the contract and its
+ * nulls are not zeroes.
+ */
+export interface CoverageContext {
+  contract_version: number
+  available_for_all_items: boolean
+  requires_fresh_schema_v3_run: boolean
+  calculation_owner: 'python_backend'
+  unit: 'continuous_calendar_days'
+  starts_on: string
+  first_uncovered_day_is_excluded: boolean
+  zero_closing_balance_is_covered: boolean
+  same_day_receipts_arrive_before_demand: boolean
+  forecast_limited_values_are_lower_bounds: boolean
+  scenario_order: string[]
+  proposal_is_not_an_order: boolean
+  /** Both false today: lot-level MHD is not available for stock or open POs. */
+  existing_inventory_lot_expiry_available: boolean
+  open_po_lot_expiry_available: boolean
 }
 
 export interface ProjectionDay {
@@ -457,6 +535,7 @@ export interface PlanningRunResponse {
   projection_days: ProjectionDay[]
   planning_line_explanations: PlanningLineExplanation[]
   explanation_context: ExplanationContext
+  coverage_context: CoverageContext
   proposal_only: true
 }
 
