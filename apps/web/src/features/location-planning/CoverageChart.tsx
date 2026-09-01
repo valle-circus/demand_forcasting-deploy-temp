@@ -74,7 +74,7 @@ export function CoverageChart({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3
           id="coverage-heading"
-          className="flex items-center gap-1 text-sm font-medium"
+          className="flex items-center gap-1 text-base font-semibold"
         >
           How long supply lasts
           <InfoHint label="How long supply lasts">

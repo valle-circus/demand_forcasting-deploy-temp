@@ -879,3 +879,46 @@ first is short and the second is fine. The per-item target marker and the amber
 total are what resolve it. Normalising each bar to its own target would fix the
 "is it enough" read but destroy cross-ingredient comparison, which is the thing
 that was actually asked for. Revisit only with real multi-item data.
+
+## Location page density and hierarchy pass (2026-09-01)
+
+Maintainer review found the page flat and text-heavy. Six fixes:
+
+1. **Freshness strip condensed.** Only the three facts that change a decision
+   stay visible — stock age, order age, result currency — with master version
+   and forecast end behind a **More** disclosure. It was a full-width row of
+   five labelled values before.
+2. **Tabs given a visible track.** They read as squeezed because the shadcn
+   default track is `bg-muted` (`#fafafa`) with a **white** active tab: white on
+   near-white. The vendored component now has a bordered track, a lifted active
+   tab with a ring and semibold label, and `h-9`. Left alignment kept — see
+   below.
+3. **Hierarchy separated.** Section headings are `text-base font-semibold`;
+   summaries dropped to `text-xs` muted so they stop competing with headings.
+4. **Three full-forecast stat lines removed** from the expanded row. Nobody was
+   acting on them.
+5. **Sentences cut.** The expanded row no longer opens with "X is covered
+   through … The forecast runs short on …, which a later review handles" — the
+   table row already says both. Only genuinely additional facts remain, as
+   short lines: unfixable shortfalls and incomplete evidence. The chart footer
+   is now "Reaches zero 12 Sept · whole days only" instead of two sentences.
+6. **Toggle selected state made visible.** `aria-pressed:bg-muted` resolved to
+   `#fafafa` — indistinguishable from the page. Now accent-soft fill, accent
+   border and accent text. Verified: pressed `rgb(230,246,239)` on
+   `rgb(11,132,89)`, unpressed `rgb(250,250,250)` on `rgb(231,231,233)`.
+
+### Why the tabs stay left-aligned
+
+Asked whether they should be centred. They should not. Tabs are a navigation
+control for the content directly beneath them, and left alignment keeps them on
+the same scan line as everything else on the page — the title, the freshness
+facts, the table's first column. Centring would float them away from the panel
+they control and break that column. The real problem was contrast, not
+position, and fixing the track solved it.
+
+### Note on the vendored shadcn defaults
+
+Twice now the cause of a "looks broken" report has been a shadcn default
+resolving to `--muted`, which this theme maps to `#fafafa`. Anything relying on
+`bg-muted` to signal state is invisible here. Check that first when a control
+looks stateless.

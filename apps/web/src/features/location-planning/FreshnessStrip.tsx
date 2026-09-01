@@ -1,47 +1,35 @@
+import { ChevronDown } from 'lucide-react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { formatDate, formatRelativeAge } from '@/lib/formatting'
 import type { PlanningStatusResponse } from '@/lib/types'
 import { runCurrency } from './planning'
 
-interface Item {
+interface Fact {
   label: string
   value: string
-  /** Set when the value deserves attention rather than plain reading. */
+  /** Worth reading twice: the value is missing or out of date. */
   attention?: boolean
 }
 
 /**
- * The five things that decide whether a run can be trusted, on one line.
+ * How trustworthy this location's inputs are.
  *
- * Each source shows how old it is, because "imported" is not "true": a stock
- * export counted on Friday and imported today describes Friday.
+ * Only the three facts that change a decision are shown: how old the stock
+ * count is, how old the supplier documents are, and whether the last result
+ * still matches its inputs. Version labels and the forecast end date matter
+ * when something looks wrong, so they sit behind a disclosure rather than
+ * spending a line of the page every time.
  */
-export function FreshnessStrip({
-  status,
-}: {
-  status: PlanningStatusResponse
-}) {
+export function FreshnessStrip({ status }: { status: PlanningStatusResponse }) {
+  const [showAll, setShowAll] = useState(false)
   const { sources } = status
   const currency = runCurrency(status)
 
-  const items: Item[] = [
+  const primary: Fact[] = [
     {
-      label: 'Master',
-      value: sources.master_data_version?.version_label ?? 'none',
-      attention: sources.master_data_version === null,
-    },
-    {
-      label: 'Forecast to',
-      value:
-        sources.planning_input?.coverage_end_date === undefined ||
-        sources.planning_input?.coverage_end_date === null
-          ? 'none'
-          : formatDate(sources.planning_input.coverage_end_date),
-      attention: sources.planning_input === null,
-    },
-    {
-      label: 'Stock counted',
+      label: 'Stock',
       value:
         sources.stock === null
           ? 'none'
@@ -51,7 +39,7 @@ export function FreshnessStrip({
       attention: sources.stock === null,
     },
     {
-      label: 'Orders imported',
+      label: 'Orders',
       value:
         sources.purchase_orders === null
           ? 'none'
@@ -59,35 +47,85 @@ export function FreshnessStrip({
       attention: sources.purchase_orders === null,
     },
     {
-      label: 'Run',
+      label: 'Result',
       value:
         currency === 'none'
           ? 'none yet'
           : currency === 'stale'
             ? 'out of date'
             : 'up to date',
-      attention: currency === 'stale',
+      attention: currency !== 'current',
+    },
+  ]
+
+  const secondary: Fact[] = [
+    {
+      label: 'Master data',
+      value: sources.master_data_version?.version_label ?? 'none',
+      attention: sources.master_data_version === null,
+    },
+    {
+      label: 'Forecast to',
+      value:
+        sources.planning_input?.coverage_end_date == null
+          ? 'none'
+          : formatDate(sources.planning_input.coverage_end_date),
+      attention: sources.planning_input === null,
     },
   ]
 
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border px-4 py-2.5 text-xs">
-      {items.map((item) => (
-        <span key={item.label} className="flex items-baseline gap-1.5">
-          <span className="text-muted-foreground">{item.label}</span>
-          <span
-            className={`tabular ${item.attention ? 'text-warning' : 'text-foreground'}`}
-          >
-            {item.value}
-          </span>
-        </span>
-      ))}
-      <Link
-        to="/data"
-        className="ml-auto text-accent-text underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-      >
-        Update sources
-      </Link>
+    <div className="text-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {primary.map((fact) => (
+          <FactValue key={fact.label} fact={fact} />
+        ))}
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowAll((open) => !open)
+          }}
+          aria-expanded={showAll}
+          className="inline-flex items-center gap-0.5 rounded-md text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <ChevronDown
+            aria-hidden="true"
+            className={`size-3 transition-transform duration-150 ${
+              showAll ? 'rotate-180' : ''
+            }`}
+          />
+          {showAll ? 'Less' : 'More'}
+        </button>
+
+        <Link
+          to="/data"
+          className="ml-auto rounded-md text-accent-text underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          Update sources
+        </Link>
+      </div>
+
+      {showAll && (
+        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+          {secondary.map((fact) => (
+            <FactValue key={fact.label} fact={fact} />
+          ))}
+        </div>
+      )}
     </div>
+  )
+}
+
+function FactValue({ fact }: { fact: Fact }) {
+  return (
+    <span className="flex items-baseline gap-1">
+      <span className="text-muted-foreground">{fact.label}</span>
+      <span
+        className={`tabular ${fact.attention === true ? 'text-warning' : ''}`}
+      >
+        {fact.value}
+      </span>
+    </span>
   )
 }

@@ -228,9 +228,11 @@ export function StockProjectionChart({
       </ChartContainer>
 
       {shortageDate !== null && (
+        // Metadata, not prose. The daily-grain caveat is worth keeping — the
+        // engine cannot say what time of day — but not worth a sentence.
         <p className="mt-1 text-xs text-muted-foreground">
-          Stock reaches zero on {formatDateShort(shortageDate)}. The projection
-          works in whole days, so it cannot say what time of day.
+          Reaches zero {formatDateShort(shortageDate)}
+          <span className="text-faint"> · whole days only</span>
         </p>
       )}
     </div>

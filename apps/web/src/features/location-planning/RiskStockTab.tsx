@@ -23,12 +23,7 @@ import type {
 } from '@/lib/types'
 import { CoverageChart } from './CoverageChart'
 import { StockProjectionChart } from './StockProjectionChart'
-import {
-  byRisk,
-  needsAttention,
-  riskDisposition,
-  uncoveredDemandG,
-} from './planning'
+import { byRisk, needsAttention, riskDisposition } from './planning'
 import type { RiskDisposition } from './planning'
 
 const DISPOSITION: Record<
@@ -87,7 +82,7 @@ export function RiskStockTab({
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {attention === 0
             ? `${formatCount(netting.length, 'ingredient')} covered for this decision.`
             : `${String(attention)} of ${String(netting.length)} ingredients need attention now.`}
@@ -207,7 +202,6 @@ export function RiskStockTab({
                           <ItemDetail
                             row={row}
                             line={line}
-                            name={name}
                             disposition={disposition}
                             days={projections.filter(
                               (day) => day.item_id === row.item_id,
@@ -227,104 +221,50 @@ export function RiskStockTab({
   )
 }
 
+/**
+ * The expanded row: a short status line and the chart.
+ *
+ * Deliberately terse. The table row already states covered-through and the
+ * status badge, so a full sentence repeating them costs a line of visual
+ * weight for nothing. Full-forecast totals were removed for the same reason:
+ * they were three numbers nobody was acting on.
+ */
 function ItemDetail({
   row,
   line,
-  name,
   disposition,
   days,
 }: {
   row: NettingResult
   line: PlanningLine | null
-  name: string
   disposition: RiskDisposition
   days: ProjectionDay[]
 }) {
   const horizonEnd = row.risk_horizon_end_date ?? line?.coverage_end_date ?? null
-  const uncovered = uncoveredDemandG(row)
+  const shortage =
+    row.first_stockout_within_horizon_date ?? row.first_stockout_date
 
   return (
     <div>
-      <p className="text-sm">
-        {disposition === 'covered' && (
-          <>
-            <span className="font-medium">{name}</span> is covered through{' '}
-            {formatDate(horizonEnd)}.
-          </>
-        )}
-        {disposition === 'future_replan' && (
-          <>
-            <span className="font-medium">{name}</span> is covered through{' '}
-            {formatDate(horizonEnd)}. The forecast runs short on{' '}
-            {formatDate(row.first_stockout_date)}, which a later review handles.
-          </>
-        )}
-        {disposition === 'not_evaluated' && (
-          <>
-            <span className="font-medium">{name}</span> could not be assessed —
-            the evidence does not reach{' '}
-            {formatDate(horizonEnd)}
-            {row.risk_evaluated_through_date !== null && (
-              <> (it stops at {formatDate(row.risk_evaluated_through_date)})</>
-            )}
-            .
-          </>
-        )}
-        {(disposition === 'at_risk' || disposition === 'unavoidable') && (
-          <>
-            <span className="font-medium">{name}</span> runs short on{' '}
-            <span className="text-warning">
-              {formatDate(row.first_stockout_within_horizon_date)}
-            </span>
-            , inside the window this decision has to cover.
-            {disposition === 'unavoidable' &&
-              ' Ordering now cannot fix it — the shortfall lands before any delivery could arrive.'}
-          </>
-        )}
-      </p>
+      {disposition === 'not_evaluated' && (
+        <p className="mb-2 text-xs text-warning">
+          Evidence stops at{' '}
+          {formatDate(row.risk_evaluated_through_date ?? horizonEnd)}, before
+          this window ends.
+        </p>
+      )}
+      {disposition === 'unavoidable' && (
+        <p className="mb-2 text-xs text-danger">
+          Ordering now cannot fix this — the shortfall lands before any
+          delivery could arrive.
+        </p>
+      )}
 
       <StockProjectionChart
         days={days}
         horizonEndDate={horizonEnd}
-        shortageDate={
-          row.first_stockout_within_horizon_date ?? row.first_stockout_date
-        }
+        shortageDate={shortage}
       />
-
-      {/* Full-forecast context, kept clearly secondary and clearly labelled. */}
-      <dl className="mt-3 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-        <Detail label="Demand across the whole forecast">
-          {formatGrams(row.gross_requirement_g)}
-        </Detail>
-        <Detail label="Balance at the end of this window">
-          {formatGrams(row.projected_balance_at_risk_horizon_end_g)}
-        </Detail>
-        {uncovered !== null && (
-          <Detail
-            label={`Uncovered demand by ${formatDate(row.projection_end_date)}`}
-          >
-            {formatGrams(uncovered)}{' '}
-            <span className="text-muted-foreground">
-              if no further orders are placed
-            </span>
-          </Detail>
-        )}
-      </dl>
-    </div>
-  )
-}
-
-function Detail({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="tabular">{children}</dd>
     </div>
   )
 }
