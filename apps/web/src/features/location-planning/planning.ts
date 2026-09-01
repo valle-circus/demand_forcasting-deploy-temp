@@ -102,6 +102,29 @@ export function uncoveredDemandG(row: NettingResult): number | null {
   return balance === null || balance >= 0 ? null : Math.abs(balance)
 }
 
+/**
+ * Whether supply runs out inside the decision window **if nothing is ordered**.
+ *
+ * `actionable_risk_status` alone is nearly always `covered`, because the engine
+ * proposes exactly enough to cover the window — so on its own it tells the
+ * maintainer nothing. The decision-useful fact is what happens without acting,
+ * and the engine already stores both dates needed to say it:
+ * `with_open_po_first_uncovered_date` is the earliest day stock plus accepted
+ * orders cannot serve, and `risk_horizon_end_date` is where the window closes.
+ *
+ * This compares two engine-produced dates; it does not re-project anything.
+ * Because the first uncovered date is by definition the earliest such day, a
+ * date on or before the window end always means a genuine gap inside it.
+ */
+export function shortWithoutOrdering(row: NettingResult): boolean {
+  const uncovered = row.with_open_po_first_uncovered_date
+  const horizonEnd = row.risk_horizon_end_date
+  if (uncovered === null || horizonEnd === null) {
+    return false
+  }
+  return uncovered <= horizonEnd
+}
+
 /** True for the dispositions that belong in the default "needs attention" filter. */
 export function needsAttention(row: NettingResult): boolean {
   const disposition = riskDisposition(row)

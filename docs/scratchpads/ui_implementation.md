@@ -977,3 +977,44 @@ Asked twice, so centred. Recorded reasoning for the left-aligned alternative:
 tabs control the panel beneath them and left alignment keeps them on the same
 scan line as the title and the table's first column. Reversible by removing
 `mx-auto` from the `TabsList` in `LocationPlanningPage`.
+
+## Status column reframed to "without ordering" (2026-09-01)
+
+The maintainer rejected the previous framing outright, correctly: a status that
+counts the proposed order **will always read Covered**, because the engine
+proposes exactly enough to cover the window. Zero information.
+
+The decision-useful question is what happens if the order is *not* placed — or
+cannot be. `with_open_po_first_uncovered_date` is exactly that: the earliest day
+stock plus already-accepted orders cannot serve. Comparing it to
+`risk_horizon_end_date` gives the flag, and both are engine-produced dates, so
+nothing is re-projected. Because the first uncovered date is by definition the
+earliest such day, a date on or before the window end always means a real gap.
+
+Severity ladder now:
+
+| Badge | Meaning |
+|---|---|
+| Too late to fix | Shortfall lands before any delivery could arrive |
+| Order not enough | Short **even with** the proposal — `actionable_risk_status = at_risk` |
+| Not enough data | Evidence stopped before the window ended |
+| **At risk** — short *date* unless ordered | Accepted supply runs out inside the window; the proposal fixes it |
+| Covered — without ordering | Accepted supply carries the window on its own |
+
+### Filter renamed to avoid contradicting the badge
+
+With the badge reporting the without-ordering truth, nearly every row with a
+proposal reads **At risk** — which is correct, but it would then contradict a
+filter called "Needs attention" that excluded those rows. The filter is now
+**Problems only** and still keys off `actionable_risk_status`, so it means
+"ordering does not solve this". Two genuinely different questions, each labelled
+as what it is.
+
+### Open question for Codex
+
+`actionable_risk_status` is specified as the source for "the row status, and
+Overview meaning". The row status now answers the without-ordering question
+instead, because the specified field is tautological in that cell. Overview KPIs
+and the location filter still use the backend status unchanged. An explicit
+`risk_without_proposal_status` would remove the date comparison from React
+entirely and is the cleaner long-term contract.

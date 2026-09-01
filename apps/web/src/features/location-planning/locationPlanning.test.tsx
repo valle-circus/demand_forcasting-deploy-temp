@@ -447,17 +447,17 @@ describe('what counts as risk after the v2 engine correction', () => {
 
     renderPage()
 
-    // Covered by this plan, with the later dip as secondary context rather
-    // than as the status itself.
-    expect(await screen.findByText('Covered')).toBeInTheDocument()
-    expect(screen.getByText(/dips again/i)).toBeInTheDocument()
+    // The proposal solves it, so it is not a problem — but without ordering
+    // the item still runs short inside the window, and the badge says so.
+    expect(await screen.findByText('At risk')).toBeInTheDocument()
+    expect(screen.getByText(/unless ordered/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/1 ingredient covered for this decision/i),
+      screen.getByText(/the proposed order covers this window/i),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Still short')).not.toBeInTheDocument()
+    expect(screen.queryByText('Order not enough')).not.toBeInTheDocument()
   })
 
-  it('says "still short" when the proposal does not close the gap', async () => {
+  it('says the order is not enough when the proposal does not close the gap', async () => {
     // The status reports risk *after* this plan, so at_risk means the proposed
     // order is not enough — not merely that an order is needed.
     withNetting({
@@ -467,7 +467,7 @@ describe('what counts as risk after the v2 engine correction', () => {
 
     renderPage()
 
-    expect(await screen.findByText('Still short')).toBeInTheDocument()
+    expect(await screen.findByText('Order not enough')).toBeInTheDocument()
   })
 
   it('keeps incomplete evidence distinct from covered', async () => {
