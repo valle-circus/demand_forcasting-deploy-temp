@@ -18,6 +18,8 @@ export interface CoverageSegment {
   status: CoverageExtensionStatus
   /** True when a receipt lands on or after an earlier gap and cannot bridge it. */
   afterGap: boolean
+  /** Last date this scenario fully serves. */
+  throughDate: string | null
 }
 
 export interface CoverageRow {
@@ -42,11 +44,13 @@ function segment(
   days: number | null,
   status: CoverageExtensionStatus | null,
   afterGap: boolean | null,
+  throughDate: string | null,
 ): CoverageSegment {
   return {
     days: days ?? 0,
     status: status ?? 'exact',
     afterGap: afterGap ?? false,
+    throughDate,
   }
 }
 
@@ -70,11 +74,13 @@ export function toCoverageRow(
     row.open_po_coverage_extension_days,
     row.open_po_coverage_extension_status,
     row.open_po_receipts_at_or_after_gap,
+    row.with_open_po_coverage_through_date,
   )
   const proposal = segment(
     row.proposal_coverage_extension_days,
     row.proposal_coverage_extension_status,
     row.proposal_receipts_at_or_after_gap,
+    row.with_proposal_coverage_through_date,
   )
 
   return {

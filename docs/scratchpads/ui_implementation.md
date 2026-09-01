@@ -851,3 +851,31 @@ could not complete the request", because it is caught by the sanitized
 "provide a forward snapshot or move planning_as_of_at". It should be a 422 with
 the message so the maintainer can act on it, rather than a log line only a
 developer sees.
+
+## Coverage bar made readable (2026-09-01)
+
+The bar showed only a total ("12 days") with no way to see what each segment
+contributed, so the number read as unexplained.
+
+- **Inline numbers in each segment** — `2`, `+2`, `+8` — rendered only where a
+  segment is at least 9% of the track, so narrow ones do not overflow.
+- **A detail card on hover and keyboard focus**, giving each scenario's days
+  and the date it covers through, then the total and the item's target. The
+  bar row is `tabIndex={0}`, and `:focus-visible` was verified to match so the
+  card is genuinely keyboard-reachable, not hover-only.
+- **The target marker now overhangs the bar** vertically, so "how far must this
+  reach" survives sitting next to a long bar.
+
+Per `circus-ui`, essential information is never hover-only: the total, the
+target comparison and the risk badge stay visible on the row. The card carries
+the arithmetic, which is nice-to-know.
+
+### Scale: one shared axis, deliberately
+
+`scaleMax` spans all rows, so bar lengths are comparable between ingredients —
+30 days renders 2.5× longer than 12. Known trade-off: an item needing 30 days
+and holding 25 draws *longer* than one needing 5 and holding 8, though the
+first is short and the second is fine. The per-item target marker and the amber
+total are what resolve it. Normalising each bar to its own target would fix the
+"is it enough" read but destroy cross-ingredient comparison, which is the thing
+that was actually asked for. Revisit only with real multi-item data.

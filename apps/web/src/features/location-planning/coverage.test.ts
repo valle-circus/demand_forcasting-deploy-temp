@@ -121,7 +121,7 @@ describe('segment wording', () => {
     // not_observable means earlier supply already covers the whole forecast,
     // so nothing could be measured — not that the delivery is worthless.
     const text = describeSegment(
-      { days: 0, status: 'not_observable', afterGap: false },
+      { days: 0, status: 'not_observable', afterGap: false, throughDate: null },
       'Already on order',
     )
 
@@ -131,13 +131,13 @@ describe('segment wording', () => {
 
   it('describes a lower-bound segment as at least N', () => {
     expect(
-      describeSegment({ days: 5, status: 'lower_bound', afterGap: false }, 'X'),
+      describeSegment({ days: 5, status: 'lower_bound', afterGap: false, throughDate: null }, 'X'),
     ).toBe('X: at least 5 more days')
   })
 
   it('explains a delivery that lands after stock already ran out', () => {
     const text = describeSegment(
-      { days: 0, status: 'exact', afterGap: true },
+      { days: 0, status: 'exact', afterGap: true, throughDate: null },
       'Already on order',
     )
     expect(text).toMatch(/arrives after stock has already run out/i)
