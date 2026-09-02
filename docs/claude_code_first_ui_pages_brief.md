@@ -229,10 +229,13 @@ recommendation horizon. Read
 `docs/plans/planning_horizon_and_shelf_life_correction_plan.md` before further
 Location planning or Overview work.
 
-- Use `planning_netting_results.actionable_risk_status` for the default risk
-  filter, row status, and Overview meaning. It is `at_risk`, `covered`, or
-  `not_evaluated`. Do not treat every full-forecast `first_stockout_date` as
-  current risk. A
+- Use the FastAPI read-model field `order_requirement_status` for the default
+  attention filter, Location order status, and Overview “needs an order”
+  meaning. It is `needs_order`, `covered_without_order`, or `not_evaluated` and
+  excludes the unplaced proposal. Keep the persisted
+  `actionable_risk_status` as the separate post-proposal outcome: `at_risk`
+  means the proposal is insufficient. Do not compare dates in React or treat
+  every full-forecast `first_stockout_date` as current risk. A
   shortage after the active planning-line coverage end is expected to be
   reconsidered in a later review cycle and must not inflate the default risk
   filter or Overview KPI.
@@ -330,7 +333,7 @@ following semantic changes:
 
 | Existing/ambiguous UI behavior | Correct backend meaning | Required UI adjustment |
 |---|---|---|
-| Any non-null full-forecast `first_stockout_date` means **At risk** | Only `actionable_risk_status = at_risk` is current decision risk | Use the explicit status for filters, badges, KPIs and alerts; present a later shortage as **Future replan expected** |
+| “Needs an order” and “proposal succeeds” are represented by one risk field | `order_requirement_status` classifies accepted supply before the proposal; `actionable_risk_status` classifies the outcome after it | Use the first for action counts, row status and filters; use the second for **proposal insufficient**; never derive either by comparing dates in React |
 | `Needed` shows `netting_results.gross_requirement_g` | That value spans the complete uploaded forecast | Use `planning_lines.gross_requirement_g` and `coverage_end_date` as **Demand to protect through <date>**; keep full-forecast demand secondary |
 | `Lasts N days` is presented as a stock KPI | It is derived from a full-forecast shortage and includes calendar/zero-demand days | Prefer **Covered through**, **Shortage within decision window**, or **Future shortage on** using server dates/statuses |
 | A negative ending balance looks like negative physical stock | It is cumulative uncovered demand if no later planning cycle places another order | Separate non-negative usable stock from the labelled full-forecast counterfactual |

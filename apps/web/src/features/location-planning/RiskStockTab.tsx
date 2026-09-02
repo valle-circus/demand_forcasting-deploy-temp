@@ -23,12 +23,7 @@ import type {
 } from '@/lib/types'
 import { CoverageChart } from './CoverageChart'
 import { StockProjectionChart } from './StockProjectionChart'
-import {
-  byRisk,
-  needsAttention,
-  riskDisposition,
-  shortWithoutOrdering,
-} from './planning'
+import { byRisk, needsAttention, riskDisposition } from './planning'
 import type { RiskDisposition } from './planning'
 
 /**
@@ -50,6 +45,8 @@ const DISPOSITION: Record<
   at_risk: { tone: 'blocked', label: 'Order not enough' },
   // Evidence did not reach the end of the window. Not the same as safe.
   not_evaluated: { tone: 'neutral', label: 'Not enough data' },
+  // Accepted supply runs short, while the backend says the proposal solves it.
+  order_required: { tone: 'warning', label: 'Order required' },
   // Covered through this window; the forecast dips again afterwards, which a
   // later review handles.
   future_replan: { tone: 'ready', label: 'Covered' },
@@ -100,15 +97,15 @@ export function RiskStockTab({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
           {attention === 0
-            ? `${formatCount(netting.length, 'ingredient')} — the proposed order covers this window.`
-            : `${String(attention)} of ${String(netting.length)} ingredients are not solved by ordering.`}
+            ? `${formatCount(netting.length, 'ingredient')} needs no action for this window.`
+            : `${String(attention)} of ${String(netting.length)} ingredients need attention now.`}
         </p>
         <Toggle
           pressed={attentionOnly}
           onPressedChange={setAttentionOnly}
           size="sm"
         >
-          Problems only
+          Needs attention
         </Toggle>
       </div>
 
@@ -143,9 +140,9 @@ export function RiskStockTab({
                 <span className="inline-flex items-center gap-1">
                   Status
                   <InfoHint label="What does the status mean?">
-                    What happens if this order is not placed. Stock and orders
-                    already accepted are counted; the proposal is not, because
-                    a status that assumed it would read Covered on every row.
+                    Whether accepted stock and open orders cover this window
+                    before the proposal is counted. If the proposal still
+                    cannot solve the shortage, the status says so separately.
                   </InfoHint>
                 </span>
               </TableHead>
@@ -295,12 +292,7 @@ function ItemDetail({
 }
 
 /**
- * What happens if this order is not placed.
- *
- * The exceptional dispositions come straight from the backend and always win,
- * because they say something ordering cannot fix or cannot confirm. Otherwise
- * the useful fact is whether stock and already-accepted orders carry the item
- * through the window on their own — and if not, the date they run out.
+ * The backend-owned pre-proposal action and post-proposal outcome.
  */
 function StatusCell({
   row,
@@ -309,37 +301,41 @@ function StatusCell({
   row: NettingResult
   disposition: RiskDisposition
 }) {
-  if (disposition !== 'covered' && disposition !== 'future_replan') {
+  if (disposition === 'order_required') {
     return (
       <>
         <StatusBadge {...DISPOSITION[disposition]} />
-        {disposition === 'at_risk' &&
-          row.first_stockout_within_horizon_date !== null && (
-            <span className="mt-0.5 block text-xs text-faint">
-              short {formatDate(row.first_stockout_within_horizon_date)} even
-              with it
-            </span>
-          )}
+        <span className="mt-0.5 block text-xs text-faint">
+          short {formatDate(row.with_open_po_first_uncovered_date)} without the
+          proposal
+        </span>
       </>
     )
   }
 
-  if (shortWithoutOrdering(row)) {
+  if (disposition === 'at_risk') {
     return (
       <>
-        <StatusBadge tone="warning" label="At risk" />
-        <span className="mt-0.5 block text-xs text-faint">
-          short {formatDate(row.with_open_po_first_uncovered_date)} unless ordered
-        </span>
+        <StatusBadge {...DISPOSITION[disposition]} />
+        {row.first_stockout_within_horizon_date !== null && (
+          <span className="mt-0.5 block text-xs text-faint">
+            short {formatDate(row.first_stockout_within_horizon_date)} even with
+            the proposal
+          </span>
+        )}
       </>
     )
+  }
+
+  if (disposition === 'unavoidable' || disposition === 'not_evaluated') {
+    return <StatusBadge {...DISPOSITION[disposition]} />
   }
 
   return (
     <>
       <StatusBadge tone="ready" label="Covered" />
       <span className="mt-0.5 block text-xs text-faint">
-        without ordering
+        without the proposal
       </span>
     </>
   )

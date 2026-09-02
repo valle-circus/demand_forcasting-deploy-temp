@@ -216,8 +216,8 @@ export function LocationPlanningPage() {
           <TabsList className="mx-auto flex">
             <TabsTrigger value="risk">
               Risk &amp; stock
-              {result.summary.items_at_risk > 0 &&
-                ` (${String(result.summary.items_at_risk)})`}
+              {result.summary.items_requiring_order > 0 &&
+                ` (${String(result.summary.items_requiring_order)})`}
             </TabsTrigger>
             <TabsTrigger value="orders">On order</TabsTrigger>
             <TabsTrigger value="proposals">

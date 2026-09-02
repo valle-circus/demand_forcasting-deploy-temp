@@ -69,8 +69,10 @@ forecast as risk. In the demo, the recommendation covers through
 simulated. The engine correctly reports zero active-horizon stockout issues,
 while the UI reports one item at risk.
 
-The backend is corrected. React still needs to consume
-`actionable_risk_status` rather than its old helper.
+The backend post-proposal classification is corrected. As of 2026-09-02, the
+separate ordering action is returned as `order_requirement_status`; React uses
+that field rather than comparing dates. `actionable_risk_status` is retained
+only for whether the proposal itself leaves residual risk.
 
 ### F2 — the chart hides the event arithmetic
 
@@ -169,17 +171,23 @@ The primary item row should be decision-oriented:
 
 Full-forecast demand, future shortfall after the protection horizon, and the
 forecast-through date remain useful secondary context. They must not feed
-`items_at_risk`, the default risk filter, or the Overview alert unless the
-backend explicitly classifies them as actionable.
+`items_requiring_order`, residual `items_at_risk`, the default attention
+filter, or the Overview alert unless the backend explicitly classifies them.
 
 `planning_netting_results` now persists:
 
 - `risk_horizon_end_date` and `risk_evaluated_through_date`;
 - `risk_horizon_fully_observed`;
-- `actionable_risk_status` as `at_risk`, `covered`, or `not_evaluated`;
+- `actionable_risk_status` as the post-proposal outcome: `at_risk`, `covered`,
+  or `not_evaluated`;
 - `first_stockout_within_horizon_date` and
   `max_stockout_within_horizon_g`; and
 - `projected_balance_at_risk_horizon_end_g`.
+
+Coverage v3 additionally persists the accepted-supply runway. FastAPI derives
+`order_requirement_status` from that evidence as `needs_order`,
+`covered_without_order`, or `not_evaluated`. This keeps the action meaning in
+Python while avoiding a new persistence column.
 
 Run summaries, `/risks`, and `/overview` use the explicit status. A future
 shortage is counted separately as context, and incomplete evidence is not

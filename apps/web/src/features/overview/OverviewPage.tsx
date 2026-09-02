@@ -27,8 +27,9 @@ const STATE_PRESENTATION: Record<
   { tone: StatusTone; label: string }
 > = {
   blocked: { tone: 'blocked', label: 'Blocked' },
-  at_risk: { tone: 'warning', label: 'Needs an order' },
+  at_risk: { tone: 'blocked', label: 'Proposal insufficient' },
   not_evaluated: { tone: 'neutral', label: 'Not enough data' },
+  needs_order: { tone: 'warning', label: 'Needs an order' },
   stale: { tone: 'warning', label: 'Out of date' },
   no_run: { tone: 'neutral', label: 'Never run' },
   ready: { tone: 'ready', label: 'Ready' },
@@ -107,8 +108,8 @@ function TopAlertStrip({
         <StatusBadge tone="ready" label="All clear" />
         <span className="text-muted-foreground">
           {total === 1
-            ? 'The kitchen is ready and covered.'
-            : `All ${String(total)} kitchens are ready and covered.`}
+            ? 'No order or data action is required.'
+            : `No order or data action is required across ${String(total)} kitchens.`}
         </span>
       </div>
     )
@@ -151,20 +152,20 @@ function KpiRow({ overview }: { overview: OverviewResponse }) {
   return (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
       <Kpi
-        label="Kitchens ready"
+        label="Kitchens ready to plan"
         value={`${String(kpis.locations_ready)} of ${String(kpis.locations_total)}`}
         to="/data"
       />
       <Kpi
         label="Kitchens needing an order"
-        value={known ? String(kpis.locations_at_risk) : null}
-        tone={kpis.locations_at_risk > 0 ? 'warning' : undefined}
+        value={known ? String(kpis.locations_requiring_order) : null}
+        tone={kpis.locations_requiring_order > 0 ? 'warning' : undefined}
       />
       <Kpi
         label="Ingredients needing an order"
-        value={known ? String(kpis.items_at_risk) : null}
-        tone={kpis.items_at_risk > 0 ? 'warning' : undefined}
-        hint="Ingredients short within the window the current order has to cover. A shortage after that is handled by a later review."
+        value={known ? String(kpis.items_requiring_order) : null}
+        tone={kpis.items_requiring_order > 0 ? 'warning' : undefined}
+        hint="Ingredients whose accepted stock and open orders do not cover the current protection window. The proposed order is not counted here."
       />
       <Kpi
         label="Not fully checked"
@@ -275,12 +276,14 @@ function LocationTable({ locations }: { locations: OverviewLocationRow[] }) {
                 </TableCell>
                 <TableCell className="text-right tabular">
                   {/* Blank rather than 0 when no current run backs the count. */}
-                  {row.latest_run_is_current ? row.items_at_risk : '—'}
+                  {row.latest_run_is_current
+                    ? row.items_requiring_order
+                    : '—'}
                 </TableCell>
                 <TableCell className="tabular">
-                  {row.earliest_risk_date === null
+                  {row.earliest_order_required_date === null
                     ? '—'
-                    : formatDate(row.earliest_risk_date)}
+                    : formatDate(row.earliest_order_required_date)}
                 </TableCell>
                 <TableCell className="tabular">
                   {stock === null

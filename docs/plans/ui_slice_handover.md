@@ -48,15 +48,24 @@ it quotes the engine's `binding_constraint`, `constraint_status` and
 up, asserting the UI still shows what the engine stored. **If those ever
 disagree in production, the bug is in the engine and must stay visible.**
 
-### Risk comes from the backend's classification, never from a date
+### Order action and proposal outcome are separate backend classifications
 
 Three helpers were deleted during the v2 adoption because their meaning came
 from the wrong field: `riskLevel`, `daysOfCover`, `horizonDays`. The first
 treated any `first_stockout_date` as current risk, which swept in shortages a
 later review handles and badly inflated the risk list.
 
-Risk now reads `actionable_risk_status`. A shortage after the protection
-horizon renders **Replan later**, and `not_evaluated` is its own state.
+The coverage-v3 correction adds `order_requirement_status` to the FastAPI read
+model. It answers whether accepted stock plus open POs cover the protection
+window before the proposal is counted. Overview “needs an order”, Location row
+status, sorting, and the attention filter use this explicit field.
+
+The persisted `actionable_risk_status` has a historical name: it classifies the
+projection after the proposal is included. It is retained to distinguish
+**proposal insufficient** from an ordinary **order required** state. React must
+not compare `with_open_po_first_uncovered_date` with the horizon to derive the
+status. A shortage after the protection horizon remains later-replan context,
+and `not_evaluated` remains separate from covered.
 
 ### Unknown is never rendered as zero
 

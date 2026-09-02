@@ -621,14 +621,20 @@ fragments that. Keep frontend notes here.
   `LOC_DEMO_HAMBURG_002`, plus one Apicbase-style stock workbook and one
   parseable Transgourmet PDF per location. Its README owns the exact 2 September
   cutoffs and upload order.
-- Berlin replay `improved-9bd06fb63c77` has one actionable long-lead pod risk
+- Berlin replay `improved-098d7fc2acfa` has one actionable long-lead pod risk
   on 26 September before the 30 September candidate receipt. Hamburg replay
-  `improved-7383aef1b01e` has all five items covered; stock and four accepted
+  `improved-c2f5d6806fd5` has all five items covered; stock and four accepted
   open-PO lines explain several zero recommendations. Both runs have zero
   blockers and byte-identical replays.
 - Fresh, TK, Kuehl, RT and pod cases are all represented. The fresh showcase is
   deliberately scoped through 12 September while the six-week demand/menu
   horizon remains available for the 35-day pod policy.
+- On 2 September the first live master upload exposed a contract mismatch:
+  the synthetic rice row used display-like order unit `BAG`, while persistence
+  accepts only `PACK` or `CARTON`. The packet now encodes its 5 kg bag as one
+  `PACK`, and the XLSX adapter rejects unsupported order units before the
+  persistence transaction so maintainers receive a file/row/field error rather
+  than a generic `503`.
 - Optional LLM assistance is now tracked in master backlog 2H and UI WP7: one
   grounded Overview executive summary and one plain-language recommendation
   explanation. The model is presentation-only; persisted engine fields remain

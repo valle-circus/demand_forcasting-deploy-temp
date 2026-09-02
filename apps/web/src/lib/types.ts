@@ -300,6 +300,15 @@ export type ConstraintStatus =
  */
 export type ActionableRiskStatus = 'at_risk' | 'covered' | 'not_evaluated'
 
+/**
+ * Whether accepted supply covers the item-specific protection window before
+ * this run's unplaced proposal is counted. Computed by the Python backend.
+ */
+export type OrderRequirementStatus =
+  | 'needs_order'
+  | 'covered_without_order'
+  | 'not_evaluated'
+
 export interface PlanningRecommendation {
   recommendation_id: string
   planning_line_id: string
@@ -324,7 +333,7 @@ export interface PlanningException {
   remedy: string
 }
 
-/** Item-level netting summary. `first_stockout_date` drives risk severity. */
+/** Item-level netting summary with separate pre- and post-proposal outcomes. */
 export interface NettingResult {
   run_id: string
   location_id: string
@@ -344,7 +353,7 @@ export interface NettingResult {
   /**
    * First shortage anywhere in the uploaded forecast. Context only — a date
    * after the protection horizon is a later replan, not current risk. Use
-   * `actionable_risk_status` for anything a maintainer must act on.
+   * `order_requirement_status` for the current ordering decision.
    */
   first_stockout_date: IsoDate | null
   unavoidable_pre_candidate_stockout_g: Numeric
@@ -355,6 +364,7 @@ export interface NettingResult {
   /** How far the evidence actually reached, which may fall short of the above. */
   risk_evaluated_through_date: IsoDate | null
   risk_horizon_fully_observed: boolean
+  /** Historical name: this is the outcome after the proposal is included. */
   actionable_risk_status: ActionableRiskStatus
   first_stockout_within_horizon_date: IsoDate | null
   max_stockout_within_horizon_g: Numeric | null
@@ -404,6 +414,10 @@ export interface NettingResult {
 
   /** Item-specific target span. Null when policy is not evaluable. */
   protection_horizon_days: number | null
+
+  // --- backend read-model action classification ---------------------------
+  /** Accepted stock + open POs only; the proposal is explicitly excluded. */
+  order_requirement_status: OrderRequirementStatus
 }
 
 /**
@@ -456,8 +470,10 @@ export interface PlanningRunSummary {
   recommendation_count: number
   issue_count: number
   blocker_count: number
-  /** Items classified `at_risk` — needing a decision now. */
+  /** Items that remain short after the proposed receipt is included. */
   items_at_risk: number
+  /** Items whose accepted supply is insufficient before proposals are counted. */
+  items_requiring_order: number
   /** Items whose evidence was incomplete. Distinct from covered. */
   items_risk_not_evaluated: number
   /** Covered now, but short later in the forecast. Context, not risk. */
@@ -659,8 +675,12 @@ export interface OverviewKpis {
   locations_ready: number
   locations_total: number
   locations_at_risk: number
-  /** Backend-classified `at_risk`, counted only from a current run. */
+  /** Locations with at least one item still short after its proposal. */
+  locations_requiring_order: number
+  /** Items still short after the proposed receipt is included. */
   items_at_risk: number
+  /** Items whose accepted supply is insufficient without the proposal. */
+  items_requiring_order: number
   /** Incomplete evidence. Never fold this into risk, or into zero risk. */
   items_risk_not_evaluated: number
   recommendations_due: number
@@ -679,8 +699,10 @@ export interface OverviewLocationRow {
   timezone: string
   ready: boolean
   items_at_risk: number
+  items_requiring_order: number
   items_risk_not_evaluated: number
   earliest_risk_date: IsoDate | null
+  earliest_order_required_date: IsoDate | null
   sources: PlanningStatusSources
   latest_run: PlanningRun | null
   latest_run_is_current: boolean

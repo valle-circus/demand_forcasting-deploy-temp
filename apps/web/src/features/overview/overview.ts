@@ -12,6 +12,7 @@ export type LocationState =
   | 'blocked'
   | 'at_risk'
   | 'not_evaluated'
+  | 'needs_order'
   | 'stale'
   | 'no_run'
   | 'ready'
@@ -40,6 +41,9 @@ export function locationState(row: OverviewLocationRow): LocationState {
   if (row.items_risk_not_evaluated > 0) {
     return 'not_evaluated'
   }
+  if (row.items_requiring_order > 0) {
+    return 'needs_order'
+  }
   return 'ready'
 }
 
@@ -47,9 +51,10 @@ const STATE_ORDER: Record<LocationState, number> = {
   blocked: 0,
   at_risk: 1,
   not_evaluated: 2,
-  stale: 3,
-  no_run: 4,
-  ready: 5,
+  needs_order: 3,
+  stale: 4,
+  no_run: 5,
+  ready: 6,
 }
 
 export function byUrgency(
@@ -61,8 +66,14 @@ export function byUrgency(
   if (bySeverity !== 0) {
     return bySeverity
   }
-  const leftDate = left.earliest_risk_date ?? '9999-12-31'
-  const rightDate = right.earliest_risk_date ?? '9999-12-31'
+  const leftDate =
+    left.earliest_risk_date ??
+    left.earliest_order_required_date ??
+    '9999-12-31'
+  const rightDate =
+    right.earliest_risk_date ??
+    right.earliest_order_required_date ??
+    '9999-12-31'
   return leftDate.localeCompare(rightDate)
 }
 
@@ -82,6 +93,10 @@ const ALERT_COPY: Record<
     action: 'Fix the data',
   },
   at_risk: {
+    headline: (name) => `${name}'s proposal does not fully cover demand`,
+    action: 'Review the location',
+  },
+  needs_order: {
     headline: (name) => `${name} needs an order`,
     action: 'Open the location',
   },

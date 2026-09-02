@@ -15,9 +15,23 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
-- 2026-09-01: **The event-aware per-item supply-coverage backend contract v3 is
-  implemented; only migration 005/live verification and Claude's React chart
-  remain.** Coverage means consecutive calendar days from projection start
+- 2026-09-02: **Overview and Location now share an explicit pre-proposal order
+  requirement while retaining post-proposal risk separately.** FastAPI derives
+  `order_requirement_status` from persisted coverage-v3 evidence and returns
+  `items_requiring_order`/`locations_requiring_order`; existing
+  `actionable_risk_status` means whether the projection remains short after the
+  proposal is included. React no longer compares dates to classify the action.
+  Existing v3 runs work without a new migration or recomputation; pre-v3 rows
+  return `not_evaluated`. Evidence: `src/supply_planning/engine/netting.py`,
+  `apps/api/supply_planning_api/services.py`, `apps/web/src/features/overview`,
+  `apps/web/src/features/location-planning`, and
+  `docs/plans/order_requirement_status_alignment.md`. Verification: 91 Python
+  tests, focused Ruff/strict mypy, and the full web check with 143 tests pass.
+  Status: `active`.
+
+- 2026-09-01: **The event-aware per-item supply-coverage backend contract v3,
+  migration 005, and React coverage chart are implemented.** Coverage means
+  consecutive calendar days from projection start
   whose dated demand is fully served, not stock divided by average demand.
   Zero-demand days count, a fully served zero-closing-balance day counts, the
   first unmet-demand day does not, and late receipts cannot repair an earlier
@@ -28,16 +42,17 @@ not a task log or a replacement for the detailed engineering brief.
   Proposals remain visibly not ordered; existing stock/open-PO lot MHD remains
   unavailable. Run schema v3, FastAPI `coverage_context`, and
   `persist_planning_run_v3` prevent React from recreating the logic and prevent
-  legacy v2 nulls from appearing as zero. Apply
-  `supabase/migrations/202609010005_event_aware_supply_coverage.sql` in the SQL
-  Editor, create a fresh v3 run, then hand only the chart/types/tests to Claude.
+  legacy v2 nulls from appearing as zero. Migration
+  `supabase/migrations/202609010005_event_aware_supply_coverage.sql` was applied
+  through the Supabase SQL Editor and fresh multi-location v3 results are
+  visible in the UI.
   Evidence: `src/supply_planning/engine/netting.py`,
   `src/supply_planning/application/run_improved.py`,
   `apps/api/supply_planning_api/services.py`,
   `supabase/migrations/202609010005_event_aware_supply_coverage.sql`, and
-  `docs/claude_code_first_ui_pages_brief.md`. Verification: all 87 Python
-  tests, focused Ruff, and strict mypy pass; no live PostgreSQL/Supabase syntax
-  application was available locally. Status: `active`.
+  `docs/claude_code_first_ui_pages_brief.md`. Verification: migration 005 is
+  live, fresh multi-location results render, and the contract is covered by the
+  current repository checks. Status: `active`.
 
 - 2026-08-31: **The three-page maintainer UI is built, connected and verified;
   the frontend slice of Milestone 2 (2D/2E/2F) is complete.** A maintainer can
@@ -47,10 +62,10 @@ not a task log or a replacement for the detailed engineering brief.
   server-generated CSV/JSON. Three rules are enforced in code and pinned by
   tests: no planning arithmetic in the browser (`planning.ts` reads fields, and
   a test feeds a deliberately inconsistent line to prove the UI shows what the
-  engine stored); risk comes from `actionable_risk_status`, never from a
-  stockout date — the three helpers that derived meaning from
-  `first_stockout_date`, full-projection demand or date arithmetic were deleted
-  during v2 adoption; and a count with no current run behind it renders
+  engine stored); order action comes from backend `order_requirement_status`,
+  while the historically named `actionable_risk_status` is the separate
+  post-proposal outcome — React never derives either from dates; and a count
+  with no current run behind it renders
   **not known**, never `0`. Migration 004 is applied and readiness reports ready
   on v2 code. Stack is React 19 + Vite + Tailwind v4 + shadcn/ui on Base UI,
   lucide, Geist, motion and Recharts, following the `circus-ui` skill. Verified:

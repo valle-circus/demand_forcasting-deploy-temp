@@ -195,8 +195,9 @@ new business facts.
 | Metric | Definition and action | Availability |
 |---|---|---|
 | **Locations ready to plan** | Locations with an active master version, an accepted planning input, stock snapshot, and known PO source. Opens data freshness. | Implemented in the Overview/planning-status API; approved freshness thresholds remain future policy. |
-| **Locations at risk** | Distinct locations whose latest current run has a projected stockout inside its horizon. Opens the filtered location view. | Implemented from persisted netting summaries. |
-| **Items at risk** | Distinct location/item pairs whose latest current run has `actionable_risk_status = at_risk`; display `first_stockout_within_horizon_date`. A later full-forecast shortage is secondary context. | Implemented in the v2 run/Overview read models. |
+| **Locations needing an order** | Distinct locations with at least one latest-current-run item whose `order_requirement_status = needs_order`. Opens the filtered location view. | Implemented from the backend-derived coverage-v3 status. |
+| **Items needing an order** | Distinct location/item pairs whose accepted stock plus open POs run short within the protection window before the proposal is counted; display `with_open_po_first_uncovered_date`. | Implemented in the run/Overview read models as `items_requiring_order`. |
+| **Residual proposal risk** | Items whose `actionable_risk_status = at_risk`, meaning the item remains short even after the proposed receipt is included. This is more severe than an ordinary order requirement and must be labelled separately. | Implemented as the backward-compatible `items_at_risk`/`locations_at_risk` fields. |
 | **Recommendations due** | Positive proposals whose `order_date` is today/past, grouped by location. Label “recommendations”, never “orders”. | Implemented from persisted recommendations. |
 | **Blocking issues** | Blockers in current imports or latest current runs; warnings remain separate. | Implemented for current run blockers and import readiness. |
 | **Latest planning run** | Status, planning-as-of time, completion time, location, and whether its inputs are still current. | Implemented; a newer accepted import makes the prior run stale. |
@@ -316,8 +317,10 @@ or patterned/translucent segment for proposed coverage. The last segment must
 say **proposal—not ordered** in the legend and accessible text. Do not use a
 single global target line: the relevant `protection_horizon_days` is item-
 specific and may be `null` when policy is not evaluable. Show the item marker
-or target in its row/tooltip and preserve `actionable_risk_status` as the risk
-classification.
+or target in its row/tooltip. Use backend `order_requirement_status` for the
+action/filter/“needs an order” meaning and preserve `actionable_risk_status` as
+the separate post-proposal outcome. React must not compare coverage dates to
+recreate either classification.
 
 When a scenario has `*_coverage_forecast_limited = true`, render its value as
 “at least N days”/`≥ N`, because the uploaded forecast ends before a shortage.

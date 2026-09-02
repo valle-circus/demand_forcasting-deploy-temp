@@ -71,6 +71,7 @@ function runResponse(): PlanningRunResponse {
       issue_count: 1,
       blocker_count: 0,
       items_at_risk: 1,
+      items_requiring_order: 1,
       items_risk_not_evaluated: 0,
       future_stockout_items: 0,
     },
@@ -189,6 +190,7 @@ function runResponse(): PlanningRunResponse {
         open_po_receipts_at_or_after_gap: false,
         proposal_receipts_at_or_after_gap: false,
         protection_horizon_days: 10,
+        order_requirement_status: 'needs_order',
       },
     ],
     projection_days: [],
@@ -447,13 +449,10 @@ describe('what counts as risk after the v2 engine correction', () => {
 
     renderPage()
 
-    // The proposal solves it, so it is not a problem — but without ordering
-    // the item still runs short inside the window, and the badge says so.
-    expect(await screen.findByText('At risk')).toBeInTheDocument()
-    expect(screen.getByText(/unless ordered/i)).toBeInTheDocument()
-    expect(
-      screen.getByText(/the proposed order covers this window/i),
-    ).toBeInTheDocument()
+    // Accepted supply is insufficient, while the separate proposal outcome is
+    // covered. The backend supplies both facts explicitly.
+    expect(await screen.findByText('Order required')).toBeInTheDocument()
+    expect(screen.getByText(/without the proposal/i)).toBeInTheDocument()
     expect(screen.queryByText('Order not enough')).not.toBeInTheDocument()
   })
 

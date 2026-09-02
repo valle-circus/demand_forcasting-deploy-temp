@@ -57,6 +57,7 @@ function row(overrides: Partial<NettingResult> = {}): NettingResult {
     open_po_receipts_at_or_after_gap: false,
     proposal_receipts_at_or_after_gap: false,
     protection_horizon_days: 10,
+    order_requirement_status: 'needs_order',
     ...overrides,
   }
 }

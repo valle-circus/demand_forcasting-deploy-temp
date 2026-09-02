@@ -53,6 +53,10 @@ from supply_planning.domain.models import (
     StockQuantityUnit,
     StorageClass,
 )
+from supply_planning.engine.netting import (
+    OrderRequirementStatus,
+    classify_order_requirement,
+)
 
 from . import __version__
 from .auth import AuthenticatedUser
@@ -199,6 +203,30 @@ def _value(value: Any) -> Any:
     if hasattr(value, "value"):
         return str(value.value)
     return value
+
+
+def _netting_read_model(row: JsonObject) -> JsonObject:
+    """Add backend-owned action semantics to one persisted netting result.
+
+    Coverage-v3 already persists the evidence, so this read-model field works
+    for existing current runs and needs no Supabase schema migration.
+    """
+
+    payload = dict(row)
+    if row.get("coverage_contract_version") != 1:
+        status = OrderRequirementStatus.NOT_EVALUATED
+    else:
+        status = classify_order_requirement(
+            accepted_supply_first_uncovered_date=_optional_date(
+                row.get("with_open_po_first_uncovered_date")
+            ),
+            risk_horizon_end_date=_optional_date(row.get("risk_horizon_end_date")),
+            risk_horizon_fully_observed=(
+                row.get("risk_horizon_fully_observed") is True
+            ),
+        )
+    payload["order_requirement_status"] = status.value
+    return payload
 
 
 def _issue_payload(issue: PlanningIssue) -> JsonObject:
@@ -1808,6 +1836,7 @@ class PlanningBackend:
             run=run,
             lines=lines,
         )
+        netting = [_netting_read_model(row) for row in netting]
         return {
             "run": run,
             "summary": {
@@ -1820,8 +1849,12 @@ class PlanningBackend:
                     row.get("actionable_risk_status") == "at_risk"
                     for row in netting
                 ),
+                "items_requiring_order": sum(
+                    row.get("order_requirement_status") == "needs_order"
+                    for row in netting
+                ),
                 "items_risk_not_evaluated": sum(
-                    row.get("actionable_risk_status") == "not_evaluated"
+                    row.get("order_requirement_status") == "not_evaluated"
                     for row in netting
                 ),
                 "future_stockout_items": sum(
@@ -1914,6 +1947,11 @@ class PlanningBackend:
                     "protection_horizon_days": [
                         "planning_as_of_at",
                         "planning_lines.coverage_end_date",
+                    ],
+                    "order_requirement_status": [
+                        "with_open_po_first_uncovered_date",
+                        "risk_horizon_end_date",
+                        "risk_horizon_fully_observed",
                     ],
                 },
                 "daily_projection_fields": [
@@ -2219,6 +2257,7 @@ class PlanningBackend:
             for row in locations_payload["locations"]
         ]
         items_at_risk = 0
+        items_requiring_order = 0
         items_risk_not_evaluated = 0
         recommendations_due = 0
         blocking_issues = 0
@@ -2229,24 +2268,16 @@ class PlanningBackend:
             location_id = str(status_payload["location_id"])
             run = status_payload.get("latest_run")
             risk_count = 0
+            order_required_count = 0
             risk_not_evaluated_count = 0
             earliest_risk_date: str | None = None
+            earliest_order_required_date: str | None = None
             if isinstance(run, dict) and status_payload["latest_run_is_current"]:
                 run_id = str(run["run_id"])
-                netting, risk_not_evaluated, recommendations, exceptions = await asyncio.gather(
+                netting, recommendations, exceptions = await asyncio.gather(
                     self._store.select_rows(
                         "planning_netting_results",
-                        filters={
-                            "run_id": f"eq.{run_id}",
-                            "actionable_risk_status": "eq.at_risk",
-                        },
-                    ),
-                    self._store.select_rows(
-                        "planning_netting_results",
-                        filters={
-                            "run_id": f"eq.{run_id}",
-                            "actionable_risk_status": "eq.not_evaluated",
-                        },
+                        filters={"run_id": f"eq.{run_id}"},
                     ),
                     self._store.select_rows(
                         "planning_recommendations",
@@ -2257,16 +2288,42 @@ class PlanningBackend:
                         filters={"run_id": f"eq.{run_id}", "severity": "eq.blocker"},
                     ),
                 )
-                risk_count = len(netting)
+                netting = [_netting_read_model(row) for row in netting]
+                residual_risk = [
+                    row
+                    for row in netting
+                    if row.get("actionable_risk_status") == "at_risk"
+                ]
+                requiring_order = [
+                    row
+                    for row in netting
+                    if row.get("order_requirement_status") == "needs_order"
+                ]
+                risk_not_evaluated = [
+                    row
+                    for row in netting
+                    if row.get("order_requirement_status") == "not_evaluated"
+                ]
+                risk_count = len(residual_risk)
                 earliest_risk_date = min(
                     (
                         str(row["first_stockout_within_horizon_date"])
-                        for row in netting
+                        for row in residual_risk
                         if row.get("first_stockout_within_horizon_date") is not None
                     ),
                     default=None,
                 )
                 items_at_risk += risk_count
+                order_required_count = len(requiring_order)
+                items_requiring_order += order_required_count
+                earliest_order_required_date = min(
+                    (
+                        str(row["with_open_po_first_uncovered_date"])
+                        for row in requiring_order
+                        if row.get("with_open_po_first_uncovered_date") is not None
+                    ),
+                    default=None,
+                )
                 risk_not_evaluated_count = len(risk_not_evaluated)
                 items_risk_not_evaluated += risk_not_evaluated_count
                 recommendations_due += sum(
@@ -2293,8 +2350,10 @@ class PlanningBackend:
                     "timezone": location_metadata[location_id]["timezone"],
                     "ready": status_payload["ready"],
                     "items_at_risk": risk_count,
+                    "items_requiring_order": order_required_count,
                     "items_risk_not_evaluated": risk_not_evaluated_count,
                     "earliest_risk_date": earliest_risk_date,
+                    "earliest_order_required_date": earliest_order_required_date,
                     "sources": status_payload["sources"],
                     "latest_run": run,
                     "latest_run_is_current": status_payload["latest_run_is_current"],
@@ -2318,6 +2377,10 @@ class PlanningBackend:
                     row["items_at_risk"] > 0 for row in location_rows
                 ),
                 "items_at_risk": items_at_risk,
+                "locations_requiring_order": sum(
+                    row["items_requiring_order"] > 0 for row in location_rows
+                ),
+                "items_requiring_order": items_requiring_order,
                 "items_risk_not_evaluated": items_risk_not_evaluated,
                 "recommendations_due": recommendations_due,
                 "blocking_issues": blocking_issues,

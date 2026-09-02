@@ -30,10 +30,43 @@ class ActionableRiskStatus(StrEnum):
     NOT_EVALUATED = "not_evaluated"
 
 
+class OrderRequirementStatus(StrEnum):
+    NEEDS_ORDER = "needs_order"
+    COVERED_WITHOUT_ORDER = "covered_without_order"
+    NOT_EVALUATED = "not_evaluated"
+
+
 class CoverageExtensionStatus(StrEnum):
     EXACT = "exact"
     LOWER_BOUND = "lower_bound"
     NOT_OBSERVABLE = "not_observable"
+
+
+def classify_order_requirement(
+    *,
+    accepted_supply_first_uncovered_date: date | None,
+    risk_horizon_end_date: date | None,
+    risk_horizon_fully_observed: bool,
+) -> OrderRequirementStatus:
+    """Classify whether accepted supply covers the protection window.
+
+    This is deliberately separate from ``actionable_risk_status``. That legacy
+    field is attached to the final projection, which includes the run's
+    unplaced proposal and therefore answers whether the proposed plan works.
+    This status answers the maintainer's preceding action question using only
+    usable stock and already accepted open POs.
+    """
+
+    if risk_horizon_end_date is None:
+        return OrderRequirementStatus.NOT_EVALUATED
+    if (
+        accepted_supply_first_uncovered_date is not None
+        and accepted_supply_first_uncovered_date <= risk_horizon_end_date
+    ):
+        return OrderRequirementStatus.NEEDS_ORDER
+    if risk_horizon_fully_observed:
+        return OrderRequirementStatus.COVERED_WITHOUT_ORDER
+    return OrderRequirementStatus.NOT_EVALUATED
 
 
 @dataclass(frozen=True, slots=True)

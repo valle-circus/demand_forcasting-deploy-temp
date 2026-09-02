@@ -137,6 +137,42 @@ class V1TemplateAdapterTests(unittest.TestCase):
             with self.assertRaisesRegex(InputFileError, "fixed schema mismatch"):
                 load_master_template(path)
 
+    def test_unsupported_order_unit_is_rejected_before_persistence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "bad-order-unit.xlsx"
+            workbook = Workbook()
+            workbook.remove(workbook.active)
+            _write_table(
+                workbook.create_sheet("Items"),
+                ITEM_HEADERS,
+                (
+                    "ITEM_1", "Test item", "INGREDIENT", "Transgourmet",
+                    "TRANSGOURMET", "123", "Test item", "", "", "", "RT",
+                    1000, 1, "BAG", "PACK", "UID-1", "Test item", 3, 30,
+                    "RECEIPT_DATE", 2, 1, 14, 1, 1, True, "SOURCE_VALUE", "test",
+                ),
+            )
+            _write_table(
+                workbook.create_sheet("Locations"),
+                LOCATION_HEADERS,
+                ("LOC_1", "Demo", "Europe/Berlin", True, "SOURCE_VALUE", "test"),
+            )
+            _write_table(
+                workbook.create_sheet("Delivery_Rules"),
+                DELIVERY_HEADERS,
+                (
+                    "RULE_1", "LOC_1", "TRANSGOURMET", "RT", "", "", "",
+                    "", "", 7, date(2026, 8, 26), "", True, "SOURCE_VALUE", "test",
+                ),
+            )
+            workbook.save(path)
+
+            with self.assertRaisesRegex(
+                InputFileError,
+                r"sheet Items row 2, field order_unit: 'BAG' is invalid; use one of CARTON, PACK",
+            ):
+                load_master_template(path)
+
 
 class ApicbaseStockAdapterTests(unittest.TestCase):
     def test_uid_mapping_preserves_fractional_stock_and_adds_explicit_scenario_zero(self) -> None:

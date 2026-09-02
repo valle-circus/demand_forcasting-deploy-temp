@@ -436,13 +436,27 @@ silently exceeded by pack/MOQ rounding.
 ### 5.3a `planning_netting_results` and `planning_projection_days`
 
 One netting result persists the full uploaded-forecast projection plus a
-separate item-specific actionable-risk window. The v2 risk contract includes
+separate item-specific protection window. The v2 risk contract includes
 `risk_horizon_end_date`, `risk_evaluated_through_date`, whether that horizon is
 fully observed, `actionable_risk_status`, the first/max shortage inside the
 horizon, and the balance at horizon end. `first_stockout_date` remains the
 first shortage anywhere in the full forecast and is secondary context only.
 Daily rows preserve dated demand, existing PO receipts, candidate receipts,
 signed balance, and uncovered demand.
+
+The name `actionable_risk_status` is retained for storage compatibility, but it
+classifies the final projection **after the unplaced proposal is included**. It
+therefore means `covered by proposal`, `still at risk after proposal`, or
+`not_evaluated`; it must not drive a “needs an order” count.
+
+For coverage-v3 rows, FastAPI derives the explicit read-model field
+`order_requirement_status` from `with_open_po_first_uncovered_date`,
+`risk_horizon_end_date`, and `risk_horizon_fully_observed`. Its values are
+`needs_order`, `covered_without_order`, or `not_evaluated`. This answers whether
+usable stock plus accepted open POs cover the protection window before the
+proposal is counted. The evidence is already persisted, so the derived field
+needs neither a new Supabase column nor a fresh run. Legacy pre-v3 rows return
+`not_evaluated` rather than a guessed status.
 
 ### 5.4 `planning_recommendations` and `exceptions`
 

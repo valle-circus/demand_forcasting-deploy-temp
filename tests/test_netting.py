@@ -18,8 +18,10 @@ from supply_planning.engine.netting import (
     CandidateReceipt,
     CoverageExtensionStatus,
     InventoryEventKind,
+    OrderRequirementStatus,
     attach_supply_coverage,
     classify_actionable_risk,
+    classify_order_requirement,
     continuous_coverage_runway,
     project_inventory,
 )
@@ -214,6 +216,32 @@ class NettingTests(unittest.TestCase):
         )
         self.assertFalse(result.risk_horizon_fully_observed)
         self.assertEqual(result.risk_evaluated_through_date, date(2026, 8, 25))
+
+    def test_order_requirement_is_separate_from_post_proposal_outcome(self) -> None:
+        status = classify_order_requirement(
+            accepted_supply_first_uncovered_date=date(2026, 8, 27),
+            risk_horizon_end_date=date(2026, 8, 30),
+            risk_horizon_fully_observed=True,
+        )
+
+        self.assertEqual(status, OrderRequirementStatus.NEEDS_ORDER)
+
+    def test_order_requirement_needs_complete_evidence_before_saying_covered(
+        self,
+    ) -> None:
+        unknown = classify_order_requirement(
+            accepted_supply_first_uncovered_date=None,
+            risk_horizon_end_date=date(2026, 8, 30),
+            risk_horizon_fully_observed=False,
+        )
+        covered = classify_order_requirement(
+            accepted_supply_first_uncovered_date=date(2026, 9, 2),
+            risk_horizon_end_date=date(2026, 8, 30),
+            risk_horizon_fully_observed=True,
+        )
+
+        self.assertEqual(unknown, OrderRequirementStatus.NOT_EVALUATED)
+        self.assertEqual(covered, OrderRequirementStatus.COVERED_WITHOUT_ORDER)
 
     def test_supply_coverage_uses_lumpy_dated_demand_and_nested_scenarios(
         self,

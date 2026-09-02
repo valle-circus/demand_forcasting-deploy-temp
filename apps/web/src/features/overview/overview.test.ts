@@ -18,8 +18,10 @@ function location(
     timezone: 'Europe/Berlin',
     ready: true,
     items_at_risk: 0,
+    items_requiring_order: 0,
     items_risk_not_evaluated: 0,
     earliest_risk_date: null,
+    earliest_order_required_date: null,
     sources: {
       master_data_version: null,
       planning_input: null,
@@ -40,7 +42,9 @@ function overview(rows: OverviewLocationRow[]): OverviewResponse {
       locations_ready: rows.length,
       locations_total: rows.length,
       locations_at_risk: 0,
+      locations_requiring_order: 0,
       items_at_risk: 0,
+      items_requiring_order: 0,
       items_risk_not_evaluated: 0,
       recommendations_due: 0,
       blocking_issues: 0,
@@ -83,6 +87,17 @@ describe('what a location needs', () => {
     expect(locationState(location())).toBe('ready')
   })
 
+  it('keeps an order requirement distinct from residual proposal risk', () => {
+    expect(locationState(location({ items_requiring_order: 1 }))).toBe(
+      'needs_order',
+    )
+    expect(
+      locationState(
+        location({ items_requiring_order: 1, items_at_risk: 1 }),
+      ),
+    ).toBe('at_risk')
+  })
+
   it('does not read risk from a stale run', () => {
     // The backend only counts risk from a current run, so a stale row must not
     // present its old count as current risk.
@@ -94,6 +109,11 @@ describe('what a location needs', () => {
   it('orders by urgency, then by the earliest shortage', () => {
     const rows = [
       location({ location_id: 'ready' }),
+      location({
+        location_id: 'needs-order',
+        items_requiring_order: 1,
+        earliest_order_required_date: '2026-09-03',
+      }),
       location({
         location_id: 'risk-late',
         items_at_risk: 1,
@@ -114,6 +134,7 @@ describe('what a location needs', () => {
       'blocked',
       'risk-soon',
       'risk-late',
+      'needs-order',
       'ready',
     ])
   })
@@ -140,6 +161,21 @@ describe('the top alert', () => {
   it('stays silent when nothing needs attention', () => {
     // The page then shows a calm confirmation rather than an empty alert box.
     expect(topAlert(overview([location()]))).toBeNull()
+  })
+
+  it('surfaces a proposal that still has to be placed', () => {
+    const alert = topAlert(
+      overview([
+        location({
+          location_name: 'Hamburg',
+          items_requiring_order: 1,
+          earliest_order_required_date: '2026-09-04',
+        }),
+      ]),
+    )
+
+    expect(alert?.state).toBe('needs_order')
+    expect(alert?.headline).toBe('Hamburg needs an order')
   })
 })
 

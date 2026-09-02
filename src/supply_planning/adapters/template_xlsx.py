@@ -130,6 +130,7 @@ WEEKDAYS = {
     "saturday": 5,
     "sunday": 6,
 }
+ORDER_UNITS = frozenset({"PACK", "CARTON"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +172,17 @@ def _workbook(path: Path) -> Any:
         return load_workbook(path, read_only=True, data_only=True)
     except (OSError, ValueError, KeyError) as exc:
         raise InputFileError(f"cannot read XLSX workbook {path}: {exc}") from exc
+
+
+def _order_unit(path: Path, sheet: str, row: int, value: Any) -> str:
+    parsed = _text(path, sheet, row, "order_unit", value)
+    if parsed not in ORDER_UNITS:
+        allowed = ", ".join(sorted(ORDER_UNITS))
+        raise InputFileError(
+            f"{path} sheet {sheet} row {row}, field order_unit: {parsed!r} is invalid; "
+            f"use one of {allowed}"
+        )
+    return parsed
 
 
 def _rows(path: Path, workbook: Any, sheet_name: str, headers: tuple[str, ...]) -> list[tuple[int, dict[str, Any]]]:
@@ -404,7 +416,7 @@ def load_master_template(path: Path) -> MasterWorkbookData:
                     "packs_per_order_unit",
                     row["packs_per_order_unit"],
                 ),
-                order_unit=_text(path, "Items", row_number, "order_unit", row["order_unit"]),
+                order_unit=_order_unit(path, "Items", row_number, row["order_unit"]),
                 stock_qty_unit=_enum(
                     path,
                     "Items",

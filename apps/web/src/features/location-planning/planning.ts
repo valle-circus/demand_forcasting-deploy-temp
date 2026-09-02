@@ -58,16 +58,15 @@ export function runStatusLabel(run: PlanningRun): string {
 /**
  * What the maintainer should do about one item.
  *
- * Derived from the backend's `actionable_risk_status`, never from a stockout
- * date. Before the v2 engine correction this was computed in the browser from
- * `first_stockout_date`, which counted shortages far beyond the item's own
- * protection horizon as current risk and badly inflated the risk list. Those
- * later shortages are real, but they are the next planning cycle's problem.
+ * The pre-proposal action comes from `order_requirement_status`; the separate
+ * post-proposal outcome remains `actionable_risk_status`. Both are supplied by
+ * Python. Dates below are display and tie-breaker fields, not classifications.
  */
 export type RiskDisposition =
   | 'unavoidable'
   | 'at_risk'
   | 'not_evaluated'
+  | 'order_required'
   | 'future_replan'
   | 'covered'
 
@@ -81,6 +80,12 @@ export function riskDisposition(row: NettingResult): RiskDisposition {
   }
   if (row.actionable_risk_status === 'not_evaluated') {
     // Incomplete evidence. Emphatically not the same as covered.
+    return 'not_evaluated'
+  }
+  if (row.order_requirement_status === 'needs_order') {
+    return 'order_required'
+  }
+  if (row.order_requirement_status === 'not_evaluated') {
     return 'not_evaluated'
   }
   // Covered through this decision's horizon, but the forecast runs short
@@ -102,36 +107,14 @@ export function uncoveredDemandG(row: NettingResult): number | null {
   return balance === null || balance >= 0 ? null : Math.abs(balance)
 }
 
-/**
- * Whether supply runs out inside the decision window **if nothing is ordered**.
- *
- * `actionable_risk_status` alone is nearly always `covered`, because the engine
- * proposes exactly enough to cover the window — so on its own it tells the
- * maintainer nothing. The decision-useful fact is what happens without acting,
- * and the engine already stores both dates needed to say it:
- * `with_open_po_first_uncovered_date` is the earliest day stock plus accepted
- * orders cannot serve, and `risk_horizon_end_date` is where the window closes.
- *
- * This compares two engine-produced dates; it does not re-project anything.
- * Because the first uncovered date is by definition the earliest such day, a
- * date on or before the window end always means a genuine gap inside it.
- */
-export function shortWithoutOrdering(row: NettingResult): boolean {
-  const uncovered = row.with_open_po_first_uncovered_date
-  const horizonEnd = row.risk_horizon_end_date
-  if (uncovered === null || horizonEnd === null) {
-    return false
-  }
-  return uncovered <= horizonEnd
-}
-
 /** True for the dispositions that belong in the default "needs attention" filter. */
 export function needsAttention(row: NettingResult): boolean {
   const disposition = riskDisposition(row)
   return (
     disposition === 'unavoidable' ||
     disposition === 'at_risk' ||
-    disposition === 'not_evaluated'
+    disposition === 'not_evaluated' ||
+    disposition === 'order_required'
   )
 }
 
@@ -139,8 +122,9 @@ const DISPOSITION_ORDER: Record<RiskDisposition, number> = {
   unavoidable: 0,
   at_risk: 1,
   not_evaluated: 2,
-  future_replan: 3,
-  covered: 4,
+  order_required: 3,
+  future_replan: 4,
+  covered: 5,
 }
 
 /** Worst first, then earliest shortage inside the decision window. */
@@ -152,8 +136,12 @@ export function byRisk(left: NettingResult, right: NettingResult): number {
     return bySeverity
   }
   const leftDate =
-    left.first_stockout_within_horizon_date ?? left.first_stockout_date ?? '9999-12-31'
+    left.with_open_po_first_uncovered_date ??
+    left.first_stockout_within_horizon_date ??
+    left.first_stockout_date ??
+    '9999-12-31'
   const rightDate =
+    right.with_open_po_first_uncovered_date ??
     right.first_stockout_within_horizon_date ??
     right.first_stockout_date ??
     '9999-12-31'

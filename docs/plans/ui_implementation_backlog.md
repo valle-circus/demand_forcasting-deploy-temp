@@ -564,10 +564,10 @@ each explains its own blocker before the API has to.
 
 ### Maintainer horizon/MHD review — correction tranche (2026-08-30)
 
-- [x] Backend actionable-horizon/MHD contract supplied and tested. Migration
-      `004` must be applied before the next connected v2 run; React must use
-      `actionable_risk_status`, not classify every full-forecast
-      `first_stockout_date` as current risk.
+- [x] Backend actionable-horizon/MHD contract supplied and tested. React uses
+      backend `order_requirement_status` for the pre-proposal ordering action
+      and `actionable_risk_status` for the separate post-proposal outcome; it
+      does not classify risk from full-forecast dates.
 - [ ] Replace the primary full-forecast `Needed` value with server-returned
       demand for the active protection window and show the coverage end.
 - [ ] Default the stock chart to the decision window; make four-week/full-

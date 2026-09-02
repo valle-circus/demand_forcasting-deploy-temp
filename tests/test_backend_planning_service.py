@@ -551,6 +551,10 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
                         "first_stockout_date": "2026-09-20",
                         "first_stockout_within_horizon_date": None,
                         "actionable_risk_status": "covered",
+                        "coverage_contract_version": 1,
+                        "risk_horizon_end_date": "2026-09-08",
+                        "risk_horizon_fully_observed": True,
+                        "with_open_po_first_uncovered_date": "2026-09-20",
                     },
                     {
                         "run_id": "run-risk-contract",
@@ -558,6 +562,21 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
                         "first_stockout_date": "2026-09-02",
                         "first_stockout_within_horizon_date": "2026-09-02",
                         "actionable_risk_status": "at_risk",
+                        "coverage_contract_version": 1,
+                        "risk_horizon_end_date": "2026-09-08",
+                        "risk_horizon_fully_observed": True,
+                        "with_open_po_first_uncovered_date": "2026-09-02",
+                    },
+                    {
+                        "run_id": "run-risk-contract",
+                        "item_id": "SOLVED_BY_PROPOSAL",
+                        "first_stockout_date": None,
+                        "first_stockout_within_horizon_date": None,
+                        "actionable_risk_status": "covered",
+                        "coverage_contract_version": 1,
+                        "risk_horizon_end_date": "2026-09-08",
+                        "risk_horizon_fully_observed": True,
+                        "with_open_po_first_uncovered_date": "2026-09-04",
                     },
                     {
                         "run_id": "run-risk-contract",
@@ -565,6 +584,10 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
                         "first_stockout_date": None,
                         "first_stockout_within_horizon_date": None,
                         "actionable_risk_status": "not_evaluated",
+                        "coverage_contract_version": 1,
+                        "risk_horizon_end_date": "2026-09-08",
+                        "risk_horizon_fully_observed": False,
+                        "with_open_po_first_uncovered_date": None,
                     },
                 ],
             }
@@ -574,12 +597,58 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await backend.get_planning_run("run-risk-contract")
 
         self.assertEqual(result["summary"]["items_at_risk"], 1)
+        self.assertEqual(result["summary"]["items_requiring_order"], 2)
         self.assertEqual(result["summary"]["items_risk_not_evaluated"], 1)
         self.assertEqual(result["summary"]["future_stockout_items"], 1)
-        self.assertFalse(result["coverage_context"]["available_for_all_items"])
-        self.assertTrue(result["coverage_context"]["requires_fresh_schema_v3_run"])
+        statuses = {
+            row["item_id"]: row["order_requirement_status"]
+            for row in result["netting_results"]
+        }
+        self.assertEqual(statuses["SOLVED_BY_PROPOSAL"], "needs_order")
+        self.assertEqual(statuses["FUTURE"], "covered_without_order")
+        self.assertEqual(statuses["UNKNOWN"], "not_evaluated")
+        self.assertTrue(result["coverage_context"]["available_for_all_items"])
+        self.assertFalse(result["coverage_context"]["requires_fresh_schema_v3_run"])
 
-    async def test_overview_uses_persisted_actionable_risk_status(self) -> None:
+    async def test_legacy_run_does_not_invent_an_order_requirement_status(self) -> None:
+        settings = Settings.model_validate(
+            {"APP_ENV": "test", "CORS_ORIGINS": "http://localhost:5173"}
+        )
+        store = _RunStore()
+        store.tables.update(
+            {
+                "planning_runs": [{"run_id": "legacy-run"}],
+                "planning_run_inputs": [],
+                "planning_lines": [],
+                "planning_recommendations": [],
+                "planning_exceptions": [],
+                "planning_projection_days": [],
+                "planning_netting_results": [
+                    {
+                        "run_id": "legacy-run",
+                        "item_id": "LEGACY",
+                        "actionable_risk_status": "covered",
+                        "coverage_contract_version": None,
+                        "risk_horizon_end_date": "2026-09-08",
+                        "risk_horizon_fully_observed": True,
+                        "with_open_po_first_uncovered_date": None,
+                        "first_stockout_date": None,
+                    }
+                ],
+            }
+        )
+        backend = PlanningBackend(cast(CanonicalStore, store), settings)
+
+        result = await backend.get_planning_run("legacy-run")
+
+        self.assertEqual(result["summary"]["items_requiring_order"], 0)
+        self.assertEqual(result["summary"]["items_risk_not_evaluated"], 1)
+        self.assertEqual(
+            result["netting_results"][0]["order_requirement_status"],
+            "not_evaluated",
+        )
+
+    async def test_overview_separates_order_need_from_post_proposal_risk(self) -> None:
         settings = Settings.model_validate(
             {"APP_ENV": "test", "CORS_ORIGINS": "http://localhost:5173"}
         )
@@ -590,6 +659,10 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
                 "item_id": "FUTURE",
                 "first_stockout_date": "2026-09-20",
                 "actionable_risk_status": "covered",
+                "coverage_contract_version": 1,
+                "risk_horizon_end_date": "2026-09-08",
+                "risk_horizon_fully_observed": True,
+                "with_open_po_first_uncovered_date": "2026-09-20",
             },
             {
                 "run_id": "run-risk-contract",
@@ -597,12 +670,31 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
                 "first_stockout_date": "2026-09-02",
                 "first_stockout_within_horizon_date": "2026-09-02",
                 "actionable_risk_status": "at_risk",
+                "coverage_contract_version": 1,
+                "risk_horizon_end_date": "2026-09-08",
+                "risk_horizon_fully_observed": True,
+                "with_open_po_first_uncovered_date": "2026-09-02",
+            },
+            {
+                "run_id": "run-risk-contract",
+                "item_id": "SOLVED_BY_PROPOSAL",
+                "first_stockout_date": None,
+                "first_stockout_within_horizon_date": None,
+                "actionable_risk_status": "covered",
+                "coverage_contract_version": 1,
+                "risk_horizon_end_date": "2026-09-08",
+                "risk_horizon_fully_observed": True,
+                "with_open_po_first_uncovered_date": "2026-09-04",
             },
             {
                 "run_id": "run-risk-contract",
                 "item_id": "UNKNOWN",
                 "first_stockout_date": None,
                 "actionable_risk_status": "not_evaluated",
+                "coverage_contract_version": 1,
+                "risk_horizon_end_date": "2026-09-08",
+                "risk_horizon_fully_observed": False,
+                "with_open_po_first_uncovered_date": None,
             },
         ]
         backend = _OverviewBackend(cast(CanonicalStore, store), settings)
@@ -610,13 +702,20 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await backend.overview()
 
         self.assertEqual(result["kpis"]["items_at_risk"], 1)
+        self.assertEqual(result["kpis"]["items_requiring_order"], 2)
         self.assertEqual(result["kpis"]["items_risk_not_evaluated"], 1)
         self.assertEqual(result["kpis"]["locations_at_risk"], 1)
+        self.assertEqual(result["kpis"]["locations_requiring_order"], 1)
         self.assertEqual(result["locations"][0]["items_at_risk"], 1)
+        self.assertEqual(result["locations"][0]["items_requiring_order"], 2)
         self.assertEqual(result["locations"][0]["items_risk_not_evaluated"], 1)
         self.assertEqual(result["locations"][0]["location_name"], "Location A")
         self.assertEqual(result["locations"][0]["timezone"], "Europe/Berlin")
         self.assertEqual(result["locations"][0]["earliest_risk_date"], "2026-09-02")
+        self.assertEqual(
+            result["locations"][0]["earliest_order_required_date"],
+            "2026-09-02",
+        )
         self.assertEqual(
             result["locations"][0]["sources"]["stock"]["id"], STOCK_IMPORT_ID
         )

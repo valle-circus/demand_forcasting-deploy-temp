@@ -16,7 +16,6 @@ import {
   needsAttention,
   riskDisposition,
   runCurrency,
-  shortWithoutOrdering,
   shelfLifeEvidence,
   uncoveredDemandG,
 } from './planning'
@@ -68,6 +67,7 @@ function netting(overrides: Partial<NettingResult> = {}): NettingResult {
     open_po_receipts_at_or_after_gap: null,
     proposal_receipts_at_or_after_gap: null,
     protection_horizon_days: null,
+    order_requirement_status: 'covered_without_order',
     ...overrides,
   }
 }
@@ -182,6 +182,17 @@ describe('item risk', () => {
     ).toBe('not_evaluated')
   })
 
+  it('uses the backend order requirement instead of comparing dates', () => {
+    expect(
+      riskDisposition(
+        netting({
+          order_requirement_status: 'needs_order',
+          with_open_po_first_uncovered_date: '2026-09-04',
+        }),
+      ),
+    ).toBe('order_required')
+  })
+
   it('separates a shortfall that ordering cannot fix', () => {
     expect(
       riskDisposition(
@@ -211,6 +222,9 @@ describe('item risk', () => {
     expect(
       needsAttention(netting({ actionable_risk_status: 'not_evaluated' })),
     ).toBe(true)
+    expect(
+      needsAttention(netting({ order_requirement_status: 'needs_order' })),
+    ).toBe(true)
     // A later replan must not inflate the attention count.
     expect(
       needsAttention(
@@ -225,6 +239,11 @@ describe('item risk', () => {
   it('sorts worst first, then by earliest shortage in the window', () => {
     const rows = [
       netting({ item_id: 'covered' }),
+      netting({
+        item_id: 'order-required',
+        order_requirement_status: 'needs_order',
+        with_open_po_first_uncovered_date: '2026-09-04',
+      }),
       netting({
         item_id: 'later',
         actionable_risk_status: 'covered',
@@ -248,6 +267,7 @@ describe('item risk', () => {
       'unfixable',
       'soon',
       'unknown',
+      'order-required',
       'later',
       'covered',
     ])
@@ -423,55 +443,5 @@ describe('exceptions', () => {
 
   it('leaves run-level notes out of a line detail', () => {
     expect(exceptionsForLine(exceptions, 'line-3')).toEqual([])
-  })
-})
-
-describe('what happens without ordering', () => {
-  it('is short when supply runs out on or before the window ends', () => {
-    // The insight actionable_risk_status cannot give: it counts the proposal,
-    // so it reads covered on almost every row.
-    expect(
-      shortWithoutOrdering(
-        netting({
-          with_open_po_first_uncovered_date: '2026-09-04',
-          risk_horizon_end_date: '2026-09-09',
-        }),
-      ),
-    ).toBe(true)
-  })
-
-  it('is fine when accepted supply outlasts the window', () => {
-    expect(
-      shortWithoutOrdering(
-        netting({
-          with_open_po_first_uncovered_date: '2026-09-20',
-          risk_horizon_end_date: '2026-09-09',
-        }),
-      ),
-    ).toBe(false)
-  })
-
-  it('is fine when accepted supply never runs out in the forecast', () => {
-    expect(
-      shortWithoutOrdering(
-        netting({
-          with_open_po_first_uncovered_date: null,
-          risk_horizon_end_date: '2026-09-09',
-        }),
-      ),
-    ).toBe(false)
-  })
-
-  it('makes no claim when the window is unknown', () => {
-    // A missing horizon means policy was not evaluable; guessing would be worse
-    // than staying quiet.
-    expect(
-      shortWithoutOrdering(
-        netting({
-          with_open_po_first_uncovered_date: '2026-09-04',
-          risk_horizon_end_date: null,
-        }),
-      ),
-    ).toBe(false)
   })
 })

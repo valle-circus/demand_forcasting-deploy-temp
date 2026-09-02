@@ -226,6 +226,10 @@ the checkboxes below remain the milestone authority.
 - [x] Correct `/overview` and run-summary `items_at_risk` so they count only
       backend-classified actionable-horizon risk, not any stockout anywhere in
       the uploaded forecast.
+- [x] Separate pre-proposal order requirements from post-proposal residual risk:
+      FastAPI now returns `order_requirement_status`,
+      `items_requiring_order`, and `locations_requiring_order`; Overview and
+      Location consume those fields without browser-side date comparison.
 - [x] Build KPI cards, location-risk table, data-freshness panel, latest-run
       activity, and direct corrective/drill-down actions.
 - [x] Keep actual waste, supplier service level, actual OOS, and mixed-unit
