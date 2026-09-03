@@ -7,6 +7,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from .config import Settings
+from .http_client import SupabaseHttpClient
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,9 +39,20 @@ class SupabaseIdentityVerifier:
         settings: Settings,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
+        http_client: SupabaseHttpClient | None = None,
     ) -> None:
+        if transport is not None and http_client is not None:
+            raise ValueError("Pass either transport or http_client, not both")
         self._settings = settings
-        self._transport = transport
+        self._http_client = http_client or SupabaseHttpClient(
+            timeout_seconds=settings.supabase_timeout_seconds,
+            transport=transport,
+        )
+        self._owns_http_client = http_client is None
+
+    async def aclose(self) -> None:
+        if self._owns_http_client:
+            await self._http_client.aclose()
 
     async def verify(self, access_token: str) -> AuthenticatedUser:
         if not self._settings.supabase_configured:
@@ -63,11 +75,7 @@ class SupabaseIdentityVerifier:
             "Accept": "application/json",
         }
         try:
-            async with httpx.AsyncClient(
-                timeout=self._settings.supabase_timeout_seconds,
-                transport=self._transport,
-            ) as client:
-                response = await client.get(endpoint, headers=headers)
+            response = await self._http_client.request("GET", endpoint, headers=headers)
         except httpx.HTTPError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,6 +16,7 @@ from . import __version__
 from .auth import IdentityVerifier, SupabaseIdentityVerifier
 from .config import Settings, get_settings
 from .errors import ApiError
+from .http_client import SupabaseHttpClient
 from .repository import CanonicalStore, SupabaseCanonicalStore
 from .routes import create_domain_router
 from .services import Backend, PlanningBackend
@@ -79,12 +82,33 @@ def create_app(
     store: CanonicalStore | None = None,
     backend: Backend | None = None,
     identity_verifier: IdentityVerifier | None = None,
+    supabase_http_client: SupabaseHttpClient | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
-    resolved_probe = supabase_probe or SupabaseReadinessProbe(resolved_settings)
-    resolved_store = store or SupabaseCanonicalStore(resolved_settings)
+    resolved_http_client = supabase_http_client or SupabaseHttpClient(
+        timeout_seconds=resolved_settings.supabase_timeout_seconds,
+    )
+    resolved_store = store or SupabaseCanonicalStore(
+        resolved_settings,
+        http_client=resolved_http_client,
+    )
+    resolved_probe = supabase_probe or SupabaseReadinessProbe(
+        resolved_settings,
+        resolved_store,
+    )
     resolved_backend = backend or PlanningBackend(resolved_store, resolved_settings)
-    resolved_verifier = identity_verifier or SupabaseIdentityVerifier(resolved_settings)
+    resolved_verifier = identity_verifier or SupabaseIdentityVerifier(
+        resolved_settings,
+        http_client=resolved_http_client,
+    )
+
+    @asynccontextmanager
+    async def lifespan(_application: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            await resolved_http_client.aclose()
+
     application = FastAPI(
         title="Supply Planning API",
         version=__version__,
@@ -92,6 +116,7 @@ def create_app(
             "Thin HTTP boundary for the Phase 2 supply-planning engine. "
             "It does not place supplier orders."
         ),
+        lifespan=lifespan,
     )
     # Keep the unexpected-error boundary inside CORS. Starlette's own server
     # error middleware is outside user middleware, so without this ordering an

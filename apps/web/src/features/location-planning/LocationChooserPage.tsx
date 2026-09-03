@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { EmptyState } from '@/components/EmptyState'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingState } from '@/components/LoadingState'
+import { RefreshErrorNotice } from '@/components/RefreshErrorNotice'
 import { fetchLocations } from '@/lib/apiClient'
 import { isNotFound } from '@/lib/errors'
+import { resourceKeys } from '@/lib/resourceCache'
 import { useApiResource } from '@/lib/useApiResource'
 
 /**
@@ -17,7 +19,10 @@ import { useApiResource } from '@/lib/useApiResource'
  * that something is broken when they have simply not imported anything yet.
  */
 export function LocationChooserPage() {
-  const { state, refetch } = useApiResource((signal) => fetchLocations(signal), [])
+  const { state, refetch } = useApiResource(
+    resourceKeys.locations,
+    (signal) => fetchLocations(signal),
+  )
 
   if (state.status === 'loading' || state.status === 'idle') {
     return <LoadingState label="Loading locations" />
@@ -51,6 +56,7 @@ export function LocationChooserPage() {
   return (
     <div className="mx-auto max-w-[1280px] space-y-4">
       <h1 className="text-3xl font-semibold tracking-tight">Location planning</h1>
+      <RefreshErrorNotice error={state.refreshError} onRetry={refetch} />
       <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {locations.map((location) => (
           <li key={location.location_id}>

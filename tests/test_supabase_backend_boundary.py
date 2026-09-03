@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 
 import httpx
@@ -7,6 +8,7 @@ from fastapi import HTTPException
 
 from apps.api.supply_planning_api.auth import SupabaseIdentityVerifier
 from apps.api.supply_planning_api.config import Settings
+from apps.api.supply_planning_api.http_client import SupabaseHttpClient
 from apps.api.supply_planning_api.repository import (
     REQUIRED_SCHEMA_FUNCTIONS,
     REQUIRED_SCHEMA_TABLES,
@@ -43,6 +45,7 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
             _settings(),
             transport=httpx.MockTransport(handler),
         )
+        self.addAsyncCleanup(verifier.aclose)
         user = await verifier.verify("browser-access-token")
 
         self.assertEqual("maintainer@example.test", user.email)
@@ -57,6 +60,7 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 lambda _request: httpx.Response(401, json={"message": "invalid"})
             ),
         )
+        self.addAsyncCleanup(verifier.aclose)
 
         with self.assertRaises(HTTPException) as captured:
             await verifier.verify("expired-token")
@@ -83,6 +87,7 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
             _settings(),
             transport=httpx.MockTransport(handler),
         )
+        self.addAsyncCleanup(store.aclose)
         state = await store.schema_state()
 
         self.assertTrue(state.ready)
@@ -110,10 +115,12 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 },
             )
 
-        state = await SupabaseCanonicalStore(
+        store = SupabaseCanonicalStore(
             _settings(),
             transport=httpx.MockTransport(handler),
-        ).schema_state()
+        )
+        self.addAsyncCleanup(store.aclose)
+        state = await store.schema_state()
 
         self.assertFalse(state.ready)
         self.assertEqual((missing,), state.missing_tables)
@@ -129,6 +136,7 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
             _settings(),
             transport=httpx.MockTransport(handler),
         )
+        self.addAsyncCleanup(store.aclose)
         await store.select_rows("source_imports", limit=1)
 
         self.assertEqual("sb_secret_server-test", seen[0].headers["apikey"])
@@ -145,6 +153,7 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
             _settings(),
             transport=httpx.MockTransport(handler),
         )
+        self.addAsyncCleanup(store.aclose)
 
         run_id = await store.persist_planning_run({"run": {"run_id": "run-v3"}})
 
@@ -153,6 +162,43 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
             seen[0].url.path,
             "/rest/v1/rpc/persist_planning_run_v3",
         )
+
+    async def test_auth_and_postgrest_can_share_one_reusable_client(self) -> None:
+        seen_paths: list[str] = []
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            seen_paths.append(request.url.path)
+            if request.url.path == "/auth/v1/user":
+                return httpx.Response(
+                    200,
+                    json={"id": "user-1", "email": "maintainer@example.test"},
+                )
+            return httpx.Response(200, json=[])
+
+        shared_client = SupabaseHttpClient(
+            timeout_seconds=1,
+            transport=httpx.MockTransport(handler),
+        )
+        self.addAsyncCleanup(shared_client.aclose)
+        store = SupabaseCanonicalStore(_settings(), http_client=shared_client)
+        verifier = SupabaseIdentityVerifier(_settings(), http_client=shared_client)
+
+        _, _, user = await asyncio.gather(
+            store.select_rows("source_imports", limit=1),
+            store.select_rows("master_data_versions", limit=1),
+            verifier.verify("browser-access-token"),
+        )
+
+        self.assertEqual("user-1", user.user_id)
+        self.assertCountEqual(
+            [
+                "/rest/v1/source_imports",
+                "/rest/v1/master_data_versions",
+                "/auth/v1/user",
+            ],
+            seen_paths,
+        )
+        self.assertFalse(shared_client.is_closed)
 
 
 if __name__ == "__main__":

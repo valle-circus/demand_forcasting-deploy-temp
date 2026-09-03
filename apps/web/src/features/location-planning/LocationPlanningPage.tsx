@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useSelectedLocation } from '@/app/location/locationContext'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingState } from '@/components/LoadingState'
+import { RefreshErrorNotice } from '@/components/RefreshErrorNotice'
 import { StatusBadge } from '@/components/StatusBadge'
 import {
   Select,
@@ -28,7 +29,8 @@ import {
   toLocalInputValue,
 } from '@/lib/formatting'
 import type { PlanningRunResponse } from '@/lib/types'
-import { useApiResource } from '@/lib/useApiResource'
+import { resourceKeys } from '@/lib/resourceCache'
+import { refreshError, useApiResource } from '@/lib/useApiResource'
 import { useMutation } from '@/lib/useMutation'
 import { FreshnessStrip } from './FreshnessStrip'
 import { LocationChooserPage } from './LocationChooserPage'
@@ -58,10 +60,12 @@ export function LocationPlanningPage() {
     }
   }, [locationId, setLocationId])
 
-  const locations = useApiResource((signal) => fetchLocations(signal), [])
+  const locations = useApiResource(resourceKeys.locations, (signal) =>
+    fetchLocations(signal),
+  )
   const status = useApiResource(
+    resourceKeys.planningStatus(locationId ?? ''),
     (signal) => fetchPlanningStatus(locationId ?? '', signal),
-    [locationId],
     { enabled: Boolean(locationId) },
   )
 
@@ -71,23 +75,31 @@ export function LocationPlanningPage() {
       : null
 
   const persistedRun = useApiResource(
+    resourceKeys.planningRun(latestRunId ?? ''),
     (signal) => getPlanningRun(latestRunId ?? '', signal),
-    [latestRunId],
     { enabled: latestRunId !== null },
   )
 
   const inventory = useApiResource(
+    resourceKeys.inventory(locationId ?? ''),
     (signal) => fetchInventory(locationId ?? '', signal),
-    [locationId],
     { enabled: Boolean(locationId) },
   )
 
   // Only fetched when its tab is open: the maintainer may never look at it.
   const purchaseOrders = useApiResource(
+    resourceKeys.purchaseOrders(locationId ?? ''),
     (signal) => fetchPurchaseOrders(locationId ?? '', signal),
-    [locationId],
     { enabled: Boolean(locationId) && tab === 'orders' },
   )
+
+  const refreshAll = useCallback(() => {
+    locations.refetch()
+    status.refetch()
+    persistedRun.refetch()
+    inventory.refetch()
+    purchaseOrders.refetch()
+  }, [locations, status, persistedRun, inventory, purchaseOrders])
 
   const run = useMutation(async (id: string) => {
     const result = await createPlanningRun({
@@ -133,6 +145,12 @@ export function LocationPlanningPage() {
   const currency = runCurrency(planningStatus)
   const inventoryData =
     inventory.state.status === 'success' ? inventory.state.data : null
+  const refreshFailure =
+    refreshError(locations.state) ??
+    refreshError(status.state) ??
+    refreshError(persistedRun.state) ??
+    refreshError(inventory.state) ??
+    refreshError(purchaseOrders.state)
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-5">
@@ -181,6 +199,8 @@ export function LocationPlanningPage() {
           onCutoffChange={setCutoff}
         />
       </header>
+
+      <RefreshErrorNotice error={refreshFailure} onRetry={refreshAll} />
 
       <FreshnessStrip status={planningStatus} />
 

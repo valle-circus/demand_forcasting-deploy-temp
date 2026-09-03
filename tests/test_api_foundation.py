@@ -5,6 +5,7 @@ import unittest
 import httpx
 
 from apps.api.supply_planning_api.config import Settings
+from apps.api.supply_planning_api.http_client import SupabaseHttpClient
 from apps.api.supply_planning_api.main import create_app
 from apps.api.supply_planning_api.supabase import DependencyState
 
@@ -95,6 +96,26 @@ class ApiFoundationTests(unittest.IsolatedAsyncioTestCase):
             "http://localhost:5173",
             response.headers["access-control-allow-origin"],
         )
+
+    async def test_application_lifespan_closes_its_shared_supabase_client(self) -> None:
+        shared_client = SupabaseHttpClient(
+            timeout_seconds=1,
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, json={"status": "ok"})
+            ),
+        )
+        application = create_app(
+            settings=self._settings(),
+            supabase_probe=_StubProbe(DependencyState("ready", "Ready.")),
+            supabase_http_client=shared_client,
+        )
+
+        async with application.router.lifespan_context(application):
+            response = await shared_client.request("GET", "https://example.test")
+            self.assertEqual(200, response.status_code)
+            self.assertFalse(shared_client.is_closed)
+
+        self.assertTrue(shared_client.is_closed)
 
     def test_wildcard_cors_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "must list exact origins"):

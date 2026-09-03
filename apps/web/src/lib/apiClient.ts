@@ -33,6 +33,12 @@ import type {
   SourceImport,
   UserResponse,
 } from './types'
+import {
+  invalidateResource,
+  invalidateResourcePrefix,
+  primeResource,
+  resourceKeys,
+} from './resourceCache'
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 
@@ -422,25 +428,40 @@ export function getImport(
 }
 
 /** Creates a master-data *draft*. Activation is a separate explicit action. */
-export function importMasterData(
+export async function importMasterData(
   file: File,
   options?: UploadOptions,
 ): Promise<SourceImport> {
   const form = new FormData()
   form.append('file', file)
-  return upload<SourceImport>('/api/v1/imports/master-data', form, options)
+  const result = await upload<SourceImport>(
+    '/api/v1/imports/master-data',
+    form,
+    options,
+  )
+  invalidateResourcePrefix('imports:')
+  invalidateResource(resourceKeys.masterVersions)
+  return result
 }
 
-export function importPlanningInput(
+export async function importPlanningInput(
   file: File,
   options?: UploadOptions,
 ): Promise<SourceImport> {
   const form = new FormData()
   form.append('file', file)
-  return upload<SourceImport>('/api/v1/imports/planning-input', form, options)
+  const result = await upload<SourceImport>(
+    '/api/v1/imports/planning-input',
+    form,
+    options,
+  )
+  invalidateResourcePrefix('imports:')
+  invalidateResource(resourceKeys.overview)
+  invalidateResourcePrefix(resourceKeys.planningStatus(''))
+  return result
 }
 
-export function importStock(
+export async function importStock(
   file: File,
   locationId: string,
   options?: UploadOptions,
@@ -448,14 +469,19 @@ export function importStock(
   const form = new FormData()
   form.append('file', file)
   form.append('location_id', locationId)
-  return upload<SourceImport>('/api/v1/imports/stock', form, options)
+  const result = await upload<SourceImport>('/api/v1/imports/stock', form, options)
+  invalidateResourcePrefix('imports:')
+  invalidateResource(resourceKeys.overview)
+  invalidateResource(resourceKeys.planningStatus(locationId))
+  invalidateResource(resourceKeys.inventory(locationId))
+  return result
 }
 
 /**
  * Cumulative Transgourmet PDFs. `asOfAt` must include a timezone offset; the
  * API rejects a naive timestamp.
  */
-export function importPurchaseOrders(
+export async function importPurchaseOrders(
   files: File[],
   locationId: string,
   asOfAt: IsoDateTime,
@@ -467,7 +493,16 @@ export function importPurchaseOrders(
   }
   form.append('location_id', locationId)
   form.append('as_of_at', asOfAt)
-  return upload<SourceImport>('/api/v1/imports/purchase-orders', form, options)
+  const result = await upload<SourceImport>(
+    '/api/v1/imports/purchase-orders',
+    form,
+    options,
+  )
+  invalidateResourcePrefix('imports:')
+  invalidateResource(resourceKeys.overview)
+  invalidateResource(resourceKeys.planningStatus(locationId))
+  invalidateResource(resourceKeys.purchaseOrders(locationId))
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -480,14 +515,20 @@ export function listMasterVersions(
   return request<MasterDataVersion[]>('/api/v1/master-data/versions', { signal })
 }
 
-export function activateMasterVersion(
+export async function activateMasterVersion(
   versionId: string,
   signal?: AbortSignal,
 ): Promise<ActivationResponse> {
-  return request<ActivationResponse>(
+  const result = await request<ActivationResponse>(
     `/api/v1/master-data/versions/${encodeURIComponent(versionId)}/activate`,
     { method: 'POST', signal },
   )
+  invalidateResource(resourceKeys.masterVersions)
+  invalidateResource(resourceKeys.locations)
+  invalidateResource(resourceKeys.overview)
+  invalidateResourcePrefix(resourceKeys.planningStatus(''))
+  invalidateResourcePrefix(resourceKeys.inventory(''))
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -502,13 +543,17 @@ export function activateMasterVersion(
  * request would not stop the server-side run, and could leave the maintainer
  * believing nothing happened when a run had in fact been persisted.
  */
-export function createPlanningRun(
+export async function createPlanningRun(
   body: CreatePlanningRunRequest,
 ): Promise<PlanningRunResponse> {
-  return request<PlanningRunResponse>('/api/v1/planning-runs', {
+  const result = await request<PlanningRunResponse>('/api/v1/planning-runs', {
     method: 'POST',
     json: body,
   })
+  primeResource(resourceKeys.planningRun(result.run.run_id), result)
+  invalidateResource(resourceKeys.planningStatus(body.location_id))
+  invalidateResource(resourceKeys.overview)
+  return result
 }
 
 export function getPlanningRun(

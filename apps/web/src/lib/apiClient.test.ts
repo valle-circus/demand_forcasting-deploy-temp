@@ -3,11 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   configureAuthTokenProvider,
   configureUnauthorizedHandler,
+  activateMasterVersion,
+  createPlanningRun,
   fetchLocations,
   fetchOverview,
   fetchReadiness,
 } from './apiClient'
 import { ServiceUnavailableError, UnauthorizedError } from './errors'
+import {
+  primeResource,
+  readResource,
+  resourceKeys,
+} from './resourceCache'
+import type { PlanningRunResponse } from './types'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -125,5 +133,63 @@ describe('request shape', () => {
 
     await fetchLocations()
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/locations')
+  })
+})
+
+describe('mutation cache boundaries', () => {
+  it('invalidates master-dependent reads after activation', async () => {
+    for (const key of [
+      resourceKeys.masterVersions,
+      resourceKeys.locations,
+      resourceKeys.overview,
+      resourceKeys.planningStatus('LOC_A'),
+      resourceKeys.inventory('LOC_A'),
+    ]) {
+      primeResource(key, { previous: true })
+    }
+    fetchMock.mockResolvedValue(
+      jsonResponse({
+        id: 'v2',
+        environment: 'development',
+        version_label: 'v2',
+        status: 'active',
+        activated_at: '2026-09-03T10:00:00+00:00',
+        activated_by: 'user-1',
+      }),
+    )
+
+    await activateMasterVersion('v2')
+
+    expect(readResource(resourceKeys.masterVersions).invalidated).toBe(true)
+    expect(readResource(resourceKeys.locations).invalidated).toBe(true)
+    expect(readResource(resourceKeys.overview).invalidated).toBe(true)
+    expect(readResource(resourceKeys.planningStatus('LOC_A')).invalidated).toBe(
+      true,
+    )
+    expect(readResource(resourceKeys.inventory('LOC_A')).invalidated).toBe(true)
+  })
+
+  it('primes the returned run and invalidates its summaries', async () => {
+    const response = {
+      run: { run_id: 'run-new' },
+      proposal_only: true,
+    } as PlanningRunResponse
+    primeResource(resourceKeys.overview, { previous: true })
+    primeResource(resourceKeys.planningStatus('LOC_A'), { previous: true })
+    fetchMock.mockResolvedValue(jsonResponse(response))
+
+    await createPlanningRun({
+      location_id: 'LOC_A',
+      planning_as_of_at: '2026-09-03T10:00:00+02:00',
+      run_mode: 'scenario',
+    })
+
+    expect(readResource(resourceKeys.planningRun('run-new')).data).toEqual(
+      response,
+    )
+    expect(readResource(resourceKeys.overview).invalidated).toBe(true)
+    expect(readResource(resourceKeys.planningStatus('LOC_A')).invalidated).toBe(
+      true,
+    )
   })
 })

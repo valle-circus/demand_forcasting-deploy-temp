@@ -1,4 +1,5 @@
 import { fetchReadiness } from '@/lib/apiClient'
+import { resourceKeys } from '@/lib/resourceCache'
 import { useApiResource } from '@/lib/useApiResource'
 
 const DOT = {
@@ -14,7 +15,9 @@ const DOT = {
  * database is not, and the API cannot be reached at all.
  */
 export function ApiStatusLine() {
-  const { state } = useApiResource((signal) => fetchReadiness(signal), [])
+  const { state } = useApiResource(resourceKeys.readiness, (signal) =>
+    fetchReadiness(signal),
+  )
 
   let tone: keyof typeof DOT = 'pending'
   let label = 'Checking'

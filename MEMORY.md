@@ -15,6 +15,22 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-09-03: **The original no-cache UI decision is superseded; performance
+  tranche 1 is implemented and query-shape reduction is next after browser
+  acceptance.** The frontend now uses a 30-second session-memory cache with
+  stable keys, in-flight deduplication, stale-while-revalidate behavior,
+  explicit mutation invalidation, visible refresh errors, and Auth-boundary
+  clearing. FastAPI owns one reusable async Supabase client shared by Auth and
+  PostgREST and closes it on shutdown without caching identity decisions.
+  Automated verification passed with 93 Python and 156 Vitest tests plus Ruff,
+  strict mypy, ESLint, TypeScript, and a production build. The Overview direct
+  median improved from about 2.45 seconds to 1.87 seconds, but its 35 reads are
+  unchanged; reduce the Overview N+1 and Location status-to-run waterfall in
+  tranche 2 after authenticated first/revisit timing. Evidence:
+  `docs/plans/ui_performance_optimization_plan.md`,
+  `docs/plans/ui_implementation_backlog.md`, and
+  `docs/scratchpads/ui_implementation.md`. Status: `active`.
+
 - 2026-09-02: **Overview and Location now share an explicit pre-proposal order
   requirement while retaining post-proposal risk separately.** FastAPI derives
   `order_requirement_status` from persisted coverage-v3 evidence and returns

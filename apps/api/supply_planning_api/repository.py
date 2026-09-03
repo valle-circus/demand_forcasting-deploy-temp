@@ -7,6 +7,7 @@ import httpx
 
 from .config import Settings
 from .errors import ConflictError, RepositoryUnavailableError
+from .http_client import SupabaseHttpClient
 
 type JsonObject = dict[str, Any]
 
@@ -105,9 +106,20 @@ class SupabaseCanonicalStore:
         settings: Settings,
         *,
         transport: httpx.AsyncBaseTransport | None = None,
+        http_client: SupabaseHttpClient | None = None,
     ) -> None:
+        if transport is not None and http_client is not None:
+            raise ValueError("Pass either transport or http_client, not both")
         self._settings = settings
-        self._transport = transport
+        self._http_client = http_client or SupabaseHttpClient(
+            timeout_seconds=settings.supabase_timeout_seconds,
+            transport=transport,
+        )
+        self._owns_http_client = http_client is None
+
+    async def aclose(self) -> None:
+        if self._owns_http_client:
+            await self._http_client.aclose()
 
     def _configuration(self) -> tuple[str, str]:
         if not self._settings.supabase_configured:
@@ -155,17 +167,13 @@ class SupabaseCanonicalStore:
         if accept is not None:
             headers["Accept"] = accept
         try:
-            async with httpx.AsyncClient(
-                timeout=self._settings.supabase_timeout_seconds,
-                transport=self._transport,
-            ) as client:
-                response = await client.request(
-                    method,
-                    f"{base_url}/rest/v1/{path}",
-                    params=params,
-                    json=payload,
-                    headers=headers,
-                )
+            response = await self._http_client.request(
+                method,
+                f"{base_url}/rest/v1/{path}",
+                params=params,
+                json=payload,
+                headers=headers,
+            )
         except httpx.HTTPError as exc:
             raise RepositoryUnavailableError(
                 "Supabase could not be reached from the API service."

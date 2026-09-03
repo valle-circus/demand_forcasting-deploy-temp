@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, Protocol
 
 from .config import Settings
-from .repository import SupabaseCanonicalStore
+from .repository import CanonicalStore
 
 DependencyStatus = Literal["ready", "not_configured", "unavailable"]
 
@@ -22,8 +22,9 @@ class ReadinessProbe(Protocol):
 class SupabaseReadinessProbe:
     """Verify the server-side Supabase REST boundary without exposing secrets."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, store: CanonicalStore) -> None:
         self._settings = settings
+        self._store = store
 
     async def check(self) -> DependencyState:
         if not self._settings.supabase_configured:
@@ -33,7 +34,7 @@ class SupabaseReadinessProbe:
             )
 
         try:
-            schema = await SupabaseCanonicalStore(self._settings).schema_state()
+            schema = await self._store.schema_state()
         except Exception:
             return DependencyState(
                 status="unavailable",

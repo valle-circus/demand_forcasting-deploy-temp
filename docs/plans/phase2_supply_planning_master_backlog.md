@@ -93,6 +93,8 @@ decisions awaiting maintainer confirmation — is in
 `docs/plans/ui_implementation_backlog.md`, with its working notes in
 `docs/scratchpads/ui_implementation.md`. Those files execute this milestone;
 the checkboxes below remain the milestone authority.
+The measured page-load correction is planned separately in
+`docs/plans/ui_performance_optimization_plan.md` and tracked under 2I/WP8.
 
 #### 2A — repository, API and deployment foundation
 
@@ -281,6 +283,23 @@ the checkboxes below remain the milestone authority.
       privacy, retention, latency, cost and evaluation gates before enabling it.
 - [ ] Validate representative runs with the maintainer and require the existing
       operational gate before showing shadow/production-ready status.
+
+#### 2I — page-load performance and navigation continuity
+
+- [x] Preserve recently loaded route data in a short memory-only browser cache,
+      deduplicate in-flight reads, revalidate stale data without a full-page
+      blank, and clear the cache on Auth loss.
+- [x] Explicitly invalidate affected Overview/location/import/master resources
+      after uploads, activation, and planning runs.
+- [x] Reuse pooled backend HTTP connections for Supabase Auth and PostgREST
+      while preserving per-request authorization and existing error behavior.
+- [ ] Measure and then reduce the Overview N+1 and Location status/latest-run
+      waterfall with set-based/composed reads and query-count regression tests.
+- [x] Record repeated direct-backend timing evidence after connection reuse:
+      Overview median 1,866 ms with its 35 reads unchanged.
+- [ ] Verify authenticated first visits and immediate revisits for all three
+      pages, then investigate deployment cold starts or payload splitting only
+      if they remain material.
 
 **Entry decision:** UI planning and implementation may start. The completed
 local scenario contracts are stable. Maintainer feedback is a gate before the

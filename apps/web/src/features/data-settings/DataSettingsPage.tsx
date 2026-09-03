@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react'
 import { useSelectedLocation } from '@/app/location/locationContext'
 import { ErrorState } from '@/components/ErrorState'
 import { LoadingState } from '@/components/LoadingState'
+import { RefreshErrorNotice } from '@/components/RefreshErrorNotice'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -31,7 +32,8 @@ import {
   toLocalInputValue,
 } from '@/lib/formatting'
 import type { DatasetType, MasterDataVersion, SourceImport } from '@/lib/types'
-import { useApiResource } from '@/lib/useApiResource'
+import { resourceKeys } from '@/lib/resourceCache'
+import { refreshError, useApiResource } from '@/lib/useApiResource'
 import { ActivateMasterDialog } from './ActivateMasterDialog'
 import { MasterVersionList } from './MasterVersionList'
 import { PlannedFeatureCard } from './PlannedFeatureCard'
@@ -46,12 +48,18 @@ export function DataSettingsPage() {
   const [activating, setActivating] = useState(false)
   const [activationError, setActivationError] = useState<string | null>(null)
 
-  const imports = useApiResource((signal) => listImports({}, signal), [])
-  const versions = useApiResource((signal) => listMasterVersions(signal), [])
-  const locations = useApiResource((signal) => fetchLocations(signal), [])
+  const imports = useApiResource(resourceKeys.imports(), (signal) =>
+    listImports({}, signal),
+  )
+  const versions = useApiResource(resourceKeys.masterVersions, (signal) =>
+    listMasterVersions(signal),
+  )
+  const locations = useApiResource(resourceKeys.locations, (signal) =>
+    fetchLocations(signal),
+  )
   const planningStatus = useApiResource(
+    resourceKeys.planningStatus(locationId ?? ''),
     (signal) => fetchPlanningStatus(locationId ?? '', signal),
-    [locationId],
     { enabled: locationId !== null },
   )
 
@@ -70,6 +78,11 @@ export function DataSettingsPage() {
     locations.state.status === 'error' && !isNotFound(locations.state.error)
       ? locations.state.error
       : null
+  const refreshFailure =
+    refreshError(imports.state) ??
+    refreshError(versions.state) ??
+    refreshError(locations.state) ??
+    refreshError(planningStatus.state)
 
   if (imports.state.status === 'error') {
     return <ErrorState error={imports.state.error} onRetry={refreshAll} />
@@ -193,6 +206,8 @@ export function DataSettingsPage() {
           </Select>
         </div>
       </header>
+
+      <RefreshErrorNotice error={refreshFailure} onRetry={refreshAll} />
 
       {locationsError !== null && (
         <ErrorState

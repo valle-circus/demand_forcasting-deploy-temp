@@ -1024,3 +1024,163 @@ instead, because the specified field is tautological in that cell. Overview KPIs
 and the location filter still use the backend status unchanged. An explicit
 `risk_without_proposal_status` would remove the date comparison from React
 entirely and is the cleaner long-term contract.
+
+## Page-load latency investigation (2026-09-03)
+
+### Symptom reproduced by the current design
+
+The maintainer reports roughly 3–4 seconds before each page becomes useful,
+including a full wait when returning to Data & settings only seconds after
+leaving it. This is consistent with the code path: `useApiResource` has no
+cache, every route mount starts in `loading`, and unmount aborts/discards the
+page's state. React Router replaces the route component, so back navigation is
+not a return to retained data; it is a new load.
+
+Do not reuse the old rationale that a cache would falsify freshness. The API's
+source/import timestamps describe the returned snapshot. A short session cache
+can render that exact snapshot immediately, state when it is refreshing, and
+invalidate it after writes without inventing a newer source time.
+
+### Read-only measurements
+
+Probes used the configured development Supabase project, returned only counts/
+timings, and made no writes. They invoked `PlanningBackend` locally, so they
+exclude browser → API latency and the remote Supabase Auth verification that
+each domain endpoint performs.
+
+| Backend operation | Database reads | Current timing |
+|---|---:|---:|
+| `list_locations` | 5 | 402–489 ms |
+| `planning_status` | 11 | 764–843 ms |
+| `inventory` | 7 | 535–550 ms |
+| `get_planning_run` | 12 | 699–769 ms |
+| `overview` (2 active locations) | 35 | 2,444–2,485 ms |
+| `list_imports` | 1 | 198 ms |
+| `list_master_versions` | 1 | 123 ms |
+
+Location initial mount calls locations, status, and inventory. The latest run
+is enabled only after status returns its id, so useful result content waits on
+an approximately 1.5-second direct-backend waterfall before browser/API/Auth
+overhead. Total route work is 35 database reads plus four separately
+authenticated API calls.
+
+Data & settings starts imports, versions, locations, and selected-location
+status. Only imports + versions gate the entire scaffold, but all four routes
+still recreate their Auth and database work on every remount.
+
+The latest-run response was 121.7 KiB with 230 projection rows. This is not the
+first bottleneck at current scale, though it is already listed as an unbounded
+contract observation and should be re-measured with realistic data.
+
+### Connection churn is confirmed, not inferred
+
+Both `SupabaseCanonicalStore._request` and
+`SupabaseIdentityVerifier.verify` open a new `httpx.AsyncClient` for every
+operation. A read-only prototype using one shared client changed timings as
+follows:
+
+| Read | New client each operation | Shared client |
+|---|---:|---:|
+| locations | 489 ms | 239 ms |
+| status | 764 ms | 520 ms |
+| inventory | 550 ms | 390 ms |
+| latest run | 738 ms | 461 ms |
+| Overview | 2,444 ms | 1,625 ms |
+
+That 29–51% range makes connection reuse a justified first tranche, but the
+remaining 1.6-second Overview read proves it is not sufficient alone.
+
+### Query-shape findings
+
+- `_load_master` reads the active/version row and four master tables. It is
+  repeated by locations, planning status, inventory, and planning-line
+  explanations.
+- `planning_status` uses 11 reads in the current two-location data state,
+  including candidate planning-import coverage checks, three latest source
+  paths, latest run, and run inputs.
+- `get_planning_run` reads the run, six result tables, then reloads five master
+  tables for explanations.
+- Overview correctly exposes one browser endpoint, but internally calls full
+  planning status sequentially per location, then reads netting,
+  recommendations, blockers, and open POs per location. It is a backend N+1.
+- React Strict Mode may double initial effects in `pnpm dev`. Keep Strict Mode;
+  correct cache/deduplication instead of hiding the behavior in development.
+
+### Chosen sequence
+
+1. Implement regression tests, shared backend HTTP-client lifetime, and the
+   session-scoped stale-while-revalidate resource cache with explicit mutation
+   invalidation. Verify immediate revisit UX and measure again.
+2. Reduce remaining database round trips: set-based Overview, shared master
+   loads in composed requests, and a Location bootstrap read model only if the
+   post-tranche-1 waterfall is still material.
+3. Only then consider projection splitting/prefetch, deployment tier/region,
+   cold-start mitigation, or local JWT verification.
+
+Detailed checklist, acceptance criteria, risks, and the exact baseline live in
+`docs/plans/ui_performance_optimization_plan.md`. WP8 in the UI backlog and 2I
+in the master backlog track completion.
+
+## Page-load tranche 1 implementation (2026-09-03)
+
+### What changed
+
+- `resourceCache.ts` now owns successful browser resources in memory for a
+  named 30-second fresh window. Keys cover readiness, Overview, locations,
+  imports, master versions, per-location status/inventory/POs, and run id.
+- Same-key requests share one in-flight promise. Route unmount no longer aborts
+  a request that a remount or second subscriber can use.
+- A recent route remount renders the known result immediately. Stale or
+  invalidated data remains visible while it revalidates; a failed refresh is
+  shown inline with Retry instead of replacing the useful page with an error.
+- Resource state is tagged by key so changing locations inside the mounted page
+  cannot flash the previous location's data while subscriptions change.
+- Successful imports, master activation, and planning-run creation invalidate
+  the exact dependent keys. The returned planning run primes its own cache.
+- Sign-out, rejected/expired sessions, restored-session ownership setup, and a
+  user-id change clear all cached domain data. The cache is never persisted.
+- FastAPI supplies one lazily created `SupabaseHttpClient` to both
+  `SupabaseIdentityVerifier` and `SupabaseCanonicalStore`, then closes it during
+  application shutdown. Auth verification still occurs per browser request.
+
+### Verification and measured outcome
+
+All automated checks passed: 93 Python tests; focused Ruff and strict mypy;
+156 Vitest tests across 13 files; ESLint; TypeScript; and the Vite production
+build. Tests explicitly cover recent remount, stale background refresh,
+deduplication, invalidation, refresh failure, cache clearing, authenticated-user
+change, key changes, mutation invalidation, shared transport, and shutdown.
+The shell navigation regression exercises Overview → Data & settings → Overview
+and asserts one Overview request and no second full-page loading state.
+
+Three consecutive direct backend read cycles using the implemented pooled
+client produced:
+
+| Read | Median | Range | Reads |
+|---|---:|---:|---:|
+| locations | 240 ms | 238–717 ms | 5 |
+| planning status | 614 ms | 583–872 ms | 11 |
+| inventory | 400 ms | 395–404 ms | 7 |
+| latest run | 538 ms | 536–541 ms | 12 |
+| Overview | 1,866 ms | 1,827–1,887 ms | 35 |
+
+The 717 ms locations sample was the first warm-up; the next two were 238 and
+240 ms. Overview improved by about 24–25% relative to the original observed
+2,444–2,485 ms range, but keeping all 35 reads leaves it too slow. This is the
+evidence for tranche 2: reduce query count rather than tune cache duration or
+add a more complex frontend library.
+
+The production build also reports a 1,178.08 KiB minified JavaScript chunk
+(355.92 KiB gzip). That may affect cold initial asset load, but it cannot cause
+the old repeated API wait on a route revisit. Keep it in tranche 3 unless the
+authenticated trace shows asset execution is material.
+
+### Remaining gate and next work
+
+- Run the real authenticated browser sequence for first visit and immediate
+  revisit on Overview, Data & settings, and one Location. Capture request count,
+  whether known content ever disappears, and time to useful content.
+- If that accepts tranche 1, start tranche 2 with safe query-count/timing
+  instrumentation, then replace Overview's sequential per-location status
+  composition with set-based reads. Re-measure before designing a Location
+  bootstrap endpoint or database view/RPC.

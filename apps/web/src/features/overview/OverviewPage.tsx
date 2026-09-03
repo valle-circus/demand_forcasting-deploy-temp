@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { ErrorState } from '@/components/ErrorState'
 import { InfoHint } from '@/components/InfoHint'
 import { LoadingState } from '@/components/LoadingState'
+import { RefreshErrorNotice } from '@/components/RefreshErrorNotice'
 import { StatusBadge } from '@/components/StatusBadge'
 import type { StatusTone } from '@/components/StatusBadge'
 import {
@@ -17,6 +18,7 @@ import {
 import { fetchOverview } from '@/lib/apiClient'
 import { isNotFound } from '@/lib/errors'
 import { formatDate, formatRelativeAge } from '@/lib/formatting'
+import { resourceKeys } from '@/lib/resourceCache'
 import type { OverviewLocationRow, OverviewResponse } from '@/lib/types'
 import { useApiResource } from '@/lib/useApiResource'
 import { byUrgency, hasCurrentResult, locationState, topAlert } from './overview'
@@ -36,7 +38,10 @@ const STATE_PRESENTATION: Record<
 }
 
 export function OverviewPage() {
-  const { state, refetch } = useApiResource((signal) => fetchOverview(signal), [])
+  const { state, refetch } = useApiResource(
+    resourceKeys.overview,
+    (signal) => fetchOverview(signal),
+  )
 
   if (state.status === 'error') {
     // No active master version yet: the first-run state, not a failure.
@@ -79,6 +84,8 @@ export function OverviewPage() {
           Where things stand across every kitchen.
         </p>
       </header>
+
+      <RefreshErrorNotice error={state.refreshError} onRetry={refetch} />
 
       <TopAlertStrip alert={alert} total={overview.locations.length} />
 

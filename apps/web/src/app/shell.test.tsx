@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -9,6 +9,7 @@ import {
   readinessResponse,
 } from '../test/supabaseMock'
 import type { FakeSupabase } from '../test/supabaseMock'
+import { primeResource, readResource } from '../lib/resourceCache'
 
 let fake: FakeSupabase
 
@@ -186,6 +187,75 @@ describe('navigation', () => {
         within(nav).getByRole('link', { name: /Location planning/ }),
       ).toHaveAttribute('href', '/locations/LOC_KOELN')
     })
+  })
+
+  it('reuses a recently loaded page when the maintainer navigates back', async () => {
+    const user = userEvent.setup()
+    fetchMock.mockImplementation((input) => {
+      const url = String(input)
+      if (url.includes('/readiness')) {
+        return Promise.resolve(readinessResponse())
+      }
+      if (url.includes('/overview')) {
+        return Promise.resolve(jsonResponse(EMPTY_OVERVIEW))
+      }
+      if (url.includes('/imports')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+      if (url.includes('/master-data/versions')) {
+        return Promise.resolve(jsonResponse([]))
+      }
+      return Promise.resolve(
+        jsonResponse({ master_data_version_id: 'v1', locations: [] }),
+      )
+    })
+
+    renderApp()
+    await screen.findByText(/No order or data action is required across 0 kitchens/i)
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' })
+    await user.click(within(nav).getByRole('link', { name: /Data & settings/ }))
+    await screen.findByRole('heading', { name: 'Data & settings' })
+    await user.click(within(nav).getByRole('link', { name: /^Overview$/ }))
+
+    expect(
+      screen.getByText(/No order or data action is required across 0 kitchens/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Loading overview')).not.toBeInTheDocument()
+    expect(
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).includes('/api/v1/overview'),
+      ),
+    ).toHaveLength(1)
+  })
+})
+
+describe('session cache ownership', () => {
+  it('clears cached domain data when the maintainer signs out', async () => {
+    const user = userEvent.setup()
+    renderApp()
+    await screen.findByText(/nothing here orders anything/i)
+    primeResource('private:test', { value: 'user data' })
+
+    await user.click(screen.getByRole('button', { name: /sign out/i }))
+
+    await screen.findByRole('heading', { name: /sign in/i })
+    expect(readResource('private:test').hasData).toBe(false)
+  })
+
+  it('clears cached domain data if the authenticated user changes', async () => {
+    renderApp()
+    await screen.findByText(/nothing here orders anything/i)
+    primeResource('private:test', { value: 'first user data' })
+
+    act(() => {
+      fake.emit({
+        access_token: 'second-user-token',
+        user: { id: 'user-2', email: 'other@example.com' },
+      })
+    })
+
+    expect(readResource('private:test').hasData).toBe(false)
   })
 })
 

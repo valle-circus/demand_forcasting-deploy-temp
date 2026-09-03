@@ -42,8 +42,9 @@ planning arithmetic, no KPI derivation in TypeScript.
 
 ## 2. Decisions
 
-Maintainer review 2026-08-29 confirmed D2, D5, D7 and D8, and dropped D4.
-D1, D3 and D6 remain open.
+Maintainer review 2026-08-29 confirmed the original D2, D5, D7 and D8, and
+dropped D4. D2 was revised from measured page latency on 2026-09-03. D1, D3
+and D6 remain open.
 
 ### D1 — Router: add `react-router-dom` v7 *(open)*
 
@@ -56,25 +57,27 @@ principle. Hand-rolling that is worse code for no saving.
 roughly the same amount of code, no nested-layout support, no scroll or focus
 restoration, and it would have to be replaced later anyway.
 
-### D2 — Server state: small hand-written hooks, no TanStack Query *(confirmed)*
+### D2 — Server state: small session cache with explicit invalidation *(revised 2026-09-03)*
 
-Recommendation: a ~60-line `useApiResource(fetcher, deps)` hook returning a
-discriminated union `{ status: 'idle' | 'loading' | 'success' | 'error' }`,
-plus explicit `refetch()` and a tiny `useMutation`-style helper for uploads,
-activation, and the run.
+Keep the project-owned `useApiResource`/`useMutation` boundary, but add stable
+resource keys, a short memory-only fresh window, in-flight deduplication,
+stale-while-revalidate behavior, and explicit invalidation after writes. Do not
+add TanStack Query in the first performance tranche.
 
-Rationale beyond "the journey doc says avoid a large state framework": this
-product deliberately **does not want a cache**. Every screen's message is "here
-is how fresh this is". A background cache that serves a previous response while
-revalidating would put a number on screen whose freshness stamp is a lie. With
-no cache, cross-page invalidation stops being a problem — a page refetches on
-mount and after its own mutations, and that is always correct.
+The original confirmed decision was **no cache** because every screen reports
+source freshness. Measured navigation disproved the UX part of that decision:
+route unmount discards a response opened seconds earlier, forces the full read
+path again, and returns the user to a blank loading state. `source_at` and
+`imported_at` describe the immutable source snapshot; keeping that snapshot
+briefly in browser memory does not falsify either timestamp. A stale or
+invalidated snapshot must revalidate without hiding known content, and Auth
+loss must clear the cache.
 
-*Alternative considered:* TanStack Query with `staleTime: 0` and
-`refetchOnMount: 'always'`. Legitimate, and it would give retry/dedupe for
-free, but it is configuration effort spent turning off the feature you added it
-for. Revisit if request volume or polling appears (it would, if runs ever go
-async).
+*Alternatives considered:* retain no cache (rejected by the measured 3–4 second
+repeat-navigation cost); add TanStack Query (deferred because the current three
+pages need only bounded caching/deduplication/invalidation and a new dependency
+is not yet justified). Revisit a library if polling, pagination, optimistic
+updates, or invalidation complexity grows.
 
 ### D3 — Tests: add Vitest + Testing Library *(open)*
 
@@ -700,6 +703,50 @@ fan-out.
       deployed environment.
 - [x] Backlog, scratchpad, journey description and `MEMORY.md` updated.
 
+### WP8 — Page-load performance and cached navigation → 2H usability
+
+Priority: **active P0 follow-up**. Tranche 1 is implemented and automatically
+verified; authenticated browser acceptance remains. Detailed evidence, task
+order, risks, and acceptance criteria are in
+`docs/plans/ui_performance_optimization_plan.md`.
+
+#### Tranche 1 — immediate revisit UX and connection reuse
+
+- [x] Add a small memory-only resource cache with explicit keys, 30-second
+      freshness, in-flight deduplication, stale-while-revalidate behavior, and
+      a forced-refresh path. Keep known content visible during refresh.
+- [x] Clear cached domain data on sign-out/Auth loss and explicitly invalidate
+      affected resources after import, master activation, and planning runs.
+- [x] Create and close a shared `httpx.AsyncClient` through FastAPI lifespan;
+      inject it into Auth and PostgREST adapters instead of constructing a new
+      client for every upstream request.
+- [x] Add cache/invalidation/Auth-boundary tests and shared-client lifecycle/
+      error-mapping tests before changing endpoint shapes.
+- [x] Run full applicable Python/frontend checks and repeated direct backend
+      timing. The new medians are locations 240 ms, status 614 ms, inventory
+      400 ms, latest run 538 ms, and Overview 1,866 ms; query counts are
+      unchanged and Overview still performs 35 reads.
+- [ ] Capture authenticated first-visit/immediate-revisit timings and confirm
+      the loading-state behavior for all three pages in the real browser.
+
+#### Tranche 2 — query-plan reduction after tranche-1 measurement
+
+- [ ] Replace Overview's sequential per-location status composition with
+      set-based reads grouped in Python; do not merely parallelize an unbounded
+      N+1 pattern.
+- [ ] Reuse active/versioned master data within composed reads and set query-
+      count regression ceilings.
+- [ ] Evaluate a Location bootstrap read model only if the measured status →
+      latest-run waterfall remains material. Keep one Python planning contract.
+- [ ] Re-measure before adding a database view, RPC, materialized KPI table, or
+      deployment-tier cost.
+
+#### Later only if still measured
+
+- [ ] Bound or lazy-load projection-day payloads, add navigation prefetch, and
+      investigate Render cold starts/region placement or Auth verification
+      alternatives only from production-like traces.
+
 ### WP7 — Optional grounded LLM assistance after the core UI
 
 This is a post-core enhancement, not a dependency for the 2 September demo or
@@ -808,6 +855,8 @@ backend logic:
 - [x] activate a master draft explicitly;
 - [x] run one location, with blockers explained and duplicates prevented;
 - [x] reopen the persisted result after a refresh;
+- [ ] revisit a recently loaded page without losing visible content or paying
+      the full loading path again, while stale/invalidated data revalidates;
 - [x] inspect risks, open POs, recommendations and the full derivation of any
       proposed quantity;
 - [x] download the server-generated CSV and JSON;
@@ -816,6 +865,30 @@ backend logic:
 ---
 
 ## 8. Dated progress
+
+- 2026-09-03 — **Page-load performance diagnosed and planned.** With two active
+  locations, read-only direct probes measured 35 Supabase reads and about
+  2.45 seconds for Overview. A Location visit also initiates 35 reads across
+  locations/status/inventory/latest-run calls, with a status → latest-run
+  waterfall of about 1.5 seconds before browser/API/Auth overhead. Every Auth
+  and PostgREST operation currently constructs a new HTTP client; an isolated
+  shared-client comparison improved the measured multi-read paths by 29–51%.
+  The explicit no-cache D2 decision is superseded because route remounts discard
+  seconds-old data and recreate full-page loading. WP8 and
+  `docs/plans/ui_performance_optimization_plan.md` define a cache/connection-
+  reuse tranche first, then measured query reduction.
+
+- 2026-09-03 — **WP8 tranche 1 implemented and automatically verified.** The
+  browser now keeps successful route resources in a 30-second session-memory
+  cache, deduplicates in-flight work, preserves known data during revalidation,
+  shows background-refresh failures, invalidates after writes, and clears all
+  domain data across Auth boundaries. FastAPI now owns one pooled Supabase HTTP
+  transport shared by Auth and PostgREST and closes it on shutdown. Verification
+  passed with 93 Python tests, Ruff, strict mypy, 156 Vitest tests, ESLint,
+  TypeScript, and the production build. The route test proves Overview → Data &
+  settings → Overview performs only one Overview request and never returns to
+  the full loading state. Direct Overview median improved to 1,866 ms but still
+  uses 35 reads; authenticated browser acceptance is pending before tranche 2.
 
 - 2026-09-01 — **Coverage-v3 backend contract complete.** The pure engine now
   calculates event-aware continuous runways for on-hand, on-hand plus accepted

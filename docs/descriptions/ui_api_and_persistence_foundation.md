@@ -109,6 +109,24 @@ slice after migration 005 and a fresh run are available.
 The frontend contains a lazy Supabase client initializer for Auth. It
 does not query domain tables directly and receives no elevated credential.
 
+The original browser resource helper intentionally discarded data on every
+route unmount. Read-only latency investigation on 2026-09-03 showed that this
+caused recently visited pages to pay the complete remote read path again. The
+implemented correction is a 30-second session-scoped memory cache with explicit
+resource keys, in-flight deduplication, background revalidation, mutation
+invalidation, and clearing on Auth loss/user change. A refresh failure remains
+visible beside the previously loaded data, and explicit Refresh/Retry forces a
+network request. Source/import timestamps remain the freshness authority.
+
+FastAPI now owns a reusable async Supabase HTTP client shared by the Auth and
+PostgREST adapters and closes it during application shutdown. Bearer-token
+verification still runs for every authenticated API request; only connection
+lifetime changed. Repeated direct measurements improved Overview from roughly
+2.45 seconds to a 1.87-second median, but its 35-read query plan is unchanged.
+The next performance tranche therefore reduces query fanout after an
+authenticated browser acceptance check. Detailed scope, evidence, and
+acceptance are in `docs/plans/ui_performance_optimization_plan.md`.
+
 ## Environment boundary
 
 | Runtime | Variable | Purpose | Secret? |
@@ -206,6 +224,9 @@ ephemeral local filesystem.
 
 ## Deferred work
 
+- Complete authenticated-browser acceptance for the implemented first page-load
+  tranche in `docs/plans/ui_performance_optimization_plan.md`, then reduce the
+  measured Overview N+1 and Location waterfall with set-based/composed reads.
 - Apply migration 005 and verify readiness plus one fresh representative v3
   run; old v2 rows cannot populate the new calculated fields retroactively.
 - Render the cross-ingredient coverage chart from the explicit v3 fields,
