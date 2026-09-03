@@ -19,6 +19,8 @@ export interface DatasetDefinition {
   accept: string
   multiple: boolean
   fileDescription: string
+  /** Dataset-specific instruction shown immediately before file selection. */
+  uploadInstruction?: string
   purpose: string
   /** What accepting a new file does to what came before. */
   updateBehaviour: string
@@ -78,10 +80,12 @@ export const DATASETS: readonly DatasetDefinition[] = [
     accept: '.pdf',
     multiple: true,
     fileDescription: 'Cumulative Transgourmet Bestelldetails PDFs',
+    uploadInstruction:
+      'Select all still-relevant Transgourmet PDFs together, including files from previous order days. This upload replaces the previous PO snapshot, so files from earlier uploads are not carried forward. Exact duplicate files in this batch are ignored.',
     purpose:
       'Observed open supplier orders, so in-transit stock participates in netting.',
     updateBehaviour:
-      'Adds and de-duplicates documents. Correct a line by uploading newer PDFs or fixing the item mapping.',
+      'Replaces the previous PO snapshot for this location. Exact duplicate PDFs in the selected batch are de-duplicated.',
     sourceTimeLabel: 'Documents as of',
   },
 ]

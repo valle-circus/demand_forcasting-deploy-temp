@@ -360,6 +360,60 @@ describe('boundaries stated on the page', () => {
     ).toBeInTheDocument()
   })
 
+  it('tells maintainers to upload one complete cumulative PO batch', async () => {
+    window.sessionStorage.setItem(
+      'supply-planning.selected-location',
+      'LOC_A',
+    )
+    vi.mocked(api.listImports).mockResolvedValue([sourceImport()])
+    vi.mocked(api.listMasterVersions).mockResolvedValue([
+      masterVersion({
+        status: 'active',
+        activated_at: '2026-08-29T10:00:00+00:00',
+      }),
+    ])
+    vi.mocked(api.fetchLocations).mockResolvedValue({
+      master_data_version_id: 'version-1',
+      locations: [
+        {
+          location_id: 'LOC_A',
+          location_name: 'Kitchen A',
+          timezone: 'Europe/Berlin',
+          active: true,
+        },
+      ],
+    })
+    vi.mocked(api.fetchPlanningStatus).mockResolvedValue({
+      location_id: 'LOC_A',
+      ready: false,
+      blockers: [],
+      sources: {
+        master_data_version: null,
+        planning_input: null,
+        stock: null,
+        purchase_orders: null,
+      },
+      latest_run: null,
+      latest_run_is_current: false,
+      proposal_only: true,
+    })
+
+    renderPage()
+
+    const purchaseOrders = await screen.findByRole('region', {
+      name: 'Purchase-order PDFs',
+    })
+    expect(
+      within(purchaseOrders).getByText('Select all PDFs together'),
+    ).toBeInTheDocument()
+    expect(purchaseOrders).toHaveTextContent(
+      /including files from previous order days/i,
+    )
+    expect(purchaseOrders).toHaveTextContent(
+      /earlier uploads are not carried forward/i,
+    )
+  })
+
   it('offers no way to edit observed stock or purchase-order lines', async () => {
     freshWorkspace()
     renderPage()

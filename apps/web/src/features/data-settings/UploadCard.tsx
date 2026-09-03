@@ -171,6 +171,17 @@ export function UploadCard({
           <>
             {extraControls}
 
+            {definition.uploadInstruction !== undefined && (
+              <div className="rounded-md border border-border bg-surface px-3 py-2.5">
+                <p className="text-xs font-medium text-foreground">
+                  Select all PDFs together
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {definition.uploadInstruction}
+                </p>
+              </div>
+            )}
+
             <FileDropzone
               accept={definition.accept}
               multiple={definition.multiple}

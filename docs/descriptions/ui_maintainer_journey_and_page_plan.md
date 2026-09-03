@@ -422,7 +422,7 @@ maintainer and dataset-specific status after validation.
 | **Master data & rules** | `Phase2_Master_Data_Template_v1.xlsx`: `Items`, `Locations`, `Delivery_Rules` | `load_master_template` in `src/supply_planning/adapters/template_xlsx.py` | Import creates a draft master version; activation is separate and transactional. | View/edit normalized items, policies, locations, and delivery rules in a draft. Never edit the active version in place. |
 | **Forecast, menu & BOM** | `Phase2_Planning_Input_Template_v1.xlsx`: `Demand_Plan`, `Menu_Calendar`, `BOM_Lines` | `load_planning_template` in `src/supply_planning/adapters/template_xlsx.py` | Import creates immutable normalized source versions. Initially one workbook updates the three datasets together. | Forecast is upload/review first. Menu needs a later weekly draft editor. BOM can use a controlled, infrequent draft editor after the import workflow is stable. |
 | **Current stock** | Standard Apicbase `Stock Report` XLSX, selected location | `normalize_apicbase_stock` in `src/supply_planning/adapters/apicbase_stock_xlsx.py` | Replace latest accepted snapshot for the location while preserving normalized snapshot history. `counted_at` comes from the export, not upload time. | Summary only: source location, counted time, records, mapped/unmapped items. Correct the export or item mapping; do not edit stock lines. |
-| **Purchase-order PDFs** | One or more cumulative Transgourmet `Bestelldetails` PDFs, selected location | `scan_transgourmet_pdfs` and `normalize_transgourmet_pos` in `src/supply_planning/adapters/transgourmet_pdf.py` and `transgourmet_v1.py` | Add/deduplicate observed documents by content/document identity and refresh normalized open/history views. | Summary only: documents, recent orders, open/mapped/quarantined lines. Correct mappings or upload newer PDFs; do not edit observed PO lines. |
+| **Purchase-order PDFs** | One cumulative batch of Transgourmet `Bestelldetails` PDFs, selected location | `scan_transgourmet_pdfs` and `normalize_transgourmet_pos` in `src/supply_planning/adapters/transgourmet_pdf.py` and `transgourmet_v1.py` | Each import is a complete snapshot: select all still-relevant PDFs together. The accepted snapshot supersedes the previous import; exact duplicate documents inside the batch are deduplicated. | Summary only: documents, recent orders, open/mapped/quarantined lines. Correct mappings or replace an incorrect PDF in the next complete batch; do not edit observed PO lines. |
 
 The generated local output path in `run_template_v1` proves the complete
 adapter sequence. The future API should reuse the loaders/normalizers directly
@@ -448,8 +448,10 @@ check file extension/size for fast feedback but never treats that as domain
 validation.
 
 Accepted imports do not overwrite audit history and do not automatically
-activate a master draft or trigger a plan. Stock is replacement-by-new-snapshot;
-PO PDFs are cumulative/deduplicated; master/planning workbooks create versions.
+activate a master draft or trigger a plan. Stock and PO imports are both
+replacement-by-new-snapshot. A PO snapshot combines and deduplicates the
+cumulative batch selected in that one upload; it does not carry files forward
+from earlier imports. Master/planning workbooks create versions.
 Because activation is the required completion of Step 1, a newly imported
 master draft must expose an inline **Activate master data and continue** action
 in the Step 1 card. The separate version list remains the audit/history surface;

@@ -53,6 +53,23 @@ describe('the upload sequence', () => {
     ])
   })
 
+  it('makes the purchase-order snapshot workflow explicit', () => {
+    const purchaseOrders = DATASETS.find(
+      (entry) => entry.key === 'purchase_orders',
+    )
+
+    expect(purchaseOrders?.multiple).toBe(true)
+    expect(purchaseOrders?.uploadInstruction).toMatch(
+      /all still-relevant Transgourmet PDFs together/i,
+    )
+    expect(purchaseOrders?.uploadInstruction).toMatch(
+      /replaces the previous PO snapshot/i,
+    )
+    expect(purchaseOrders?.uploadInstruction).toMatch(
+      /earlier uploads are not carried forward/i,
+    )
+  })
+
   it('lets the master workbook be imported on a completely empty workspace', () => {
     expect(
       prerequisiteFor('master_data', {
