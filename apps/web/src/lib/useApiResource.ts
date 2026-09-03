@@ -45,11 +45,6 @@ export interface ResourceOptions {
 const IDLE = { status: 'idle', data: null, error: null } as const
 const LOADING = { status: 'loading', data: null, error: null } as const
 
-interface KeyedResourceState<T> {
-  identity: string | null
-  state: ResourceState<T>
-}
-
 /**
  * @param key Stable identity shared by every consumer of the same API result.
  * @param fetcher Receives an `AbortSignal`; must reject on failure. It must
@@ -62,7 +57,6 @@ export function useApiResource<T>(
 ): Resource<T> {
   const enabled = options.enabled ?? true
   const staleTimeMs = options.staleTimeMs ?? RESOURCE_FRESH_TIME_MS
-  const identity = enabled ? key : null
 
   function stateFromCache(): ResourceState<T> {
     if (!enabled) {
@@ -84,27 +78,27 @@ export function useApiResource<T>(
     return LOADING
   }
 
-  const [observed, setObserved] = useState<KeyedResourceState<T>>(() => ({
-    identity,
-    state: stateFromCache(),
-  }))
-  // A location/key change can occur without unmounting the page component.
-  // Never render the previous key's data while the new effect subscribes.
-  const state =
-    observed.identity === identity ? observed.state : stateFromCache()
+  // The cache is the only source of truth and is read on every render, so a
+  // location/key change - which can occur without unmounting the page - never
+  // renders the previous key's data. The subscription below therefore only has
+  // to ask for a re-render when the cache entry changes.
+  const state = stateFromCache()
+  const [, requestRender] = useState(0)
 
   // Keep the latest fetcher without making it a dependency: callers pass an
-  // inline arrow, which would otherwise re-run the effect on every render.
+  // inline arrow, which would otherwise re-run the effect on every render. The
+  // write happens in an effect because a ref must not be mutated during render,
+  // and this effect is declared first so it lands before the load below.
   const fetcherRef = useRef(fetcher)
-  fetcherRef.current = fetcher
+  useEffect(() => {
+    fetcherRef.current = fetcher
+  })
 
   useEffect(() => {
     if (!enabled) {
-      setObserved({ identity: null, state: IDLE })
       return
     }
 
-    let active = true
     const startLoad = (force = false): void => {
       void loadResource({
         key,
@@ -120,28 +114,23 @@ export function useApiResource<T>(
       })
     }
 
-    const sync = (): void => {
-      if (!active) {
-        return
-      }
+    const onCacheChange = (): void => {
+      requestRender((revision) => revision + 1)
       const snapshot = readResource<T>(key)
-      setObserved({ identity, state: stateFromCache() })
       if (snapshot.invalidated && !snapshot.isRefreshing) {
         startLoad()
       }
     }
 
-    const unsubscribe = subscribeResource(key, sync)
-    sync()
+    // Subscribe before loading: starting a request notifies subscribers, which
+    // is how the first `isRefreshing` render is triggered. An entry that is
+    // already invalidated is refetched by this same call.
+    const unsubscribe = subscribeResource(key, onCacheChange)
     startLoad()
 
     return () => {
-      active = false
       unsubscribe()
     }
-    // stateFromCache and startLoad use current options/fetcher through this
-    // render and the ref. The stable key is the resource identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, key, staleTimeMs])
 
   const refetch = useCallback(() => {

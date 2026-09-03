@@ -35,10 +35,11 @@ export function AppShell() {
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const mainRef = useRef<HTMLElement>(null)
 
-  // Close the drawer on navigation and move focus to the new page, so keyboard
-  // users are not left at the top of the shell.
+  // Move focus to the new page on navigation, so keyboard users are not left
+  // at the top of the shell. The drawer closes itself through the handlers
+  // below: SideNavigation calls onNavigate for every link it renders, and the
+  // drawer is the only navigation offered while it is open.
   useEffect(() => {
-    setDrawerOpen(false)
     mainRef.current?.focus()
   }, [location.pathname])
 

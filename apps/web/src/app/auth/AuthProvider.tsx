@@ -50,7 +50,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const client = getSupabaseClient()
     if (client === null) {
-      setStatus('unconfigured')
+      // Nothing to set: the client is null for exactly the reason `status`
+      // already starts at 'unconfigured' - the same module-level flag.
       return
     }
 

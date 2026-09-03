@@ -77,6 +77,9 @@ function routedFetch(input: RequestInfo | URL): Promise<Response> {
   if (url.includes('/overview')) {
     return Promise.resolve(jsonResponse(EMPTY_OVERVIEW))
   }
+  if (url.includes('/imports') || url.includes('/master-data/versions')) {
+    return Promise.resolve(jsonResponse([]))
+  }
   return Promise.resolve(jsonResponse({ master_data_version_id: 'v1', locations: [] }))
 }
 
@@ -292,6 +295,31 @@ describe('the small-screen drawer', () => {
     })
     // Focus must come back to the control that opened it.
     expect(trigger).toHaveFocus()
+  })
+
+  it('closes when a destination inside it is chosen', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    await user.click(
+      await screen.findByRole('button', { name: /open navigation/i }),
+    )
+    const drawer = await screen.findByRole('dialog', {
+      name: /primary navigation/i,
+    })
+
+    await user.click(
+      within(drawer).getByRole('link', { name: /Data & settings/ }),
+    )
+
+    // The drawer is the only navigation on a small screen, so choosing a
+    // destination has to get it out of the way.
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog', { name: /primary navigation/i }),
+      ).not.toBeInTheDocument()
+    })
+    await screen.findByRole('heading', { name: 'Data & settings' })
   })
 })
 
