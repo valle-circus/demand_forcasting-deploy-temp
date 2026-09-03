@@ -16,11 +16,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   createPlanningRun,
-  fetchInventory,
-  fetchLocations,
-  fetchPlanningStatus,
+  fetchLocationView,
   fetchPurchaseOrders,
-  getPlanningRun,
 } from '@/lib/apiClient'
 import { isNotFound } from '@/lib/errors'
 import {
@@ -48,7 +45,10 @@ export function LocationPlanningPage() {
   const { setLocationId } = useSelectedLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  const [freshRun, setFreshRun] = useState<PlanningRunResponse | null>(null)
+  const [freshRun, setFreshRun] = useState<{
+    locationId: string
+    result: PlanningRunResponse
+  } | null>(null)
   const [cutoff, setCutoff] = useState(() => toLocalInputValue())
 
   const rawTab = searchParams.get('tab')
@@ -60,29 +60,9 @@ export function LocationPlanningPage() {
     }
   }, [locationId, setLocationId])
 
-  const locations = useApiResource(resourceKeys.locations, (signal) =>
-    fetchLocations(signal),
-  )
-  const status = useApiResource(
-    resourceKeys.planningStatus(locationId ?? ''),
-    (signal) => fetchPlanningStatus(locationId ?? '', signal),
-    { enabled: Boolean(locationId) },
-  )
-
-  const latestRunId =
-    status.state.status === 'success'
-      ? (status.state.data.latest_run?.run_id ?? null)
-      : null
-
-  const persistedRun = useApiResource(
-    resourceKeys.planningRun(latestRunId ?? ''),
-    (signal) => getPlanningRun(latestRunId ?? '', signal),
-    { enabled: latestRunId !== null },
-  )
-
-  const inventory = useApiResource(
-    resourceKeys.inventory(locationId ?? ''),
-    (signal) => fetchInventory(locationId ?? '', signal),
+  const view = useApiResource(
+    resourceKeys.locationView(locationId ?? ''),
+    (signal) => fetchLocationView(locationId ?? '', signal),
     { enabled: Boolean(locationId) },
   )
 
@@ -94,12 +74,9 @@ export function LocationPlanningPage() {
   )
 
   const refreshAll = useCallback(() => {
-    locations.refetch()
-    status.refetch()
-    persistedRun.refetch()
-    inventory.refetch()
+    view.refetch()
     purchaseOrders.refetch()
-  }, [locations, status, persistedRun, inventory, purchaseOrders])
+  }, [view, purchaseOrders])
 
   const run = useMutation(async (id: string) => {
     const result = await createPlanningRun({
@@ -108,8 +85,8 @@ export function LocationPlanningPage() {
       planning_as_of_at: fromLocalInputValue(cutoff) ?? nowWithOffset(),
       run_mode: 'scenario',
     })
-    setFreshRun(result)
-    status.refetch()
+    setFreshRun({ locationId: id, result })
+    view.refetch()
     return result
   })
 
@@ -124,32 +101,28 @@ export function LocationPlanningPage() {
     return <LocationChooserPage />
   }
 
-  if (status.state.status === 'error') {
-    return <ErrorState error={status.state.error} onRetry={status.refetch} />
+  if (view.state.status === 'error') {
+    return <ErrorState error={view.state.error} onRetry={view.refetch} />
   }
-  if (status.state.status !== 'success') {
+  if (view.state.status !== 'success') {
     return <LoadingState label="Loading this location" />
   }
 
-  const planningStatus = status.state.data
-  const locationList =
-    locations.state.status === 'success' ? locations.state.data.locations : []
+  const planningStatus = view.state.data.status
+  const locationList = view.state.data.locations.locations
   const location =
     locationList.find((entry) => entry.location_id === locationId) ?? null
 
   // The freshly computed run wins over the persisted read until a refetch.
   const result =
-    freshRun ??
-    (persistedRun.state.status === 'success' ? persistedRun.state.data : null)
+    freshRun?.locationId === locationId
+      ? freshRun.result
+      : view.state.data.planning_run
 
   const currency = runCurrency(planningStatus)
-  const inventoryData =
-    inventory.state.status === 'success' ? inventory.state.data : null
+  const inventoryData = view.state.data.inventory
   const refreshFailure =
-    refreshError(locations.state) ??
-    refreshError(status.state) ??
-    refreshError(persistedRun.state) ??
-    refreshError(inventory.state) ??
+    refreshError(view.state) ??
     refreshError(purchaseOrders.state)
 
   return (
@@ -213,19 +186,7 @@ export function LocationPlanningPage() {
         </p>
       )}
 
-      {result === null && latestRunId !== null ? (
-        // A run exists and is still being fetched. Saying "no result yet" here
-        // would invite a second synchronous calculation for no reason.
-        persistedRun.state.status === 'error' ? (
-          <ErrorState
-            error={persistedRun.state.error}
-            onRetry={persistedRun.refetch}
-            title="The last result could not be loaded"
-          />
-        ) : (
-          <LoadingState label="Loading the last result" />
-        )
-      ) : result === null ? (
+      {result === null ? (
         <p className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           {planningStatus.ready
             ? 'No result yet. Compute a recommendation to see risk and proposals.'

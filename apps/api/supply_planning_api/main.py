@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from time import perf_counter
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,7 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from starlette.types import ASGIApp, Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__
 from .auth import IdentityVerifier, SupabaseIdentityVerifier
@@ -18,6 +19,7 @@ from .config import Settings, get_settings
 from .errors import ApiError
 from .http_client import SupabaseHttpClient
 from .repository import CanonicalStore, SupabaseCanonicalStore
+from .request_metrics import collect_request_metrics
 from .routes import create_domain_router
 from .services import Backend, PlanningBackend
 from .supabase import ReadinessProbe, SupabaseReadinessProbe
@@ -53,6 +55,48 @@ class UnexpectedErrorBoundaryMiddleware:
                 },
             )
             await response(scope, receive, send)
+
+
+class RequestMetricsMiddleware:
+    """Log safe aggregate latency and Supabase call counts per HTTP request."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        started = perf_counter()
+        status_code = 500
+
+        async def capture_status(message: Message) -> None:
+            nonlocal status_code
+            if message.get("type") == "http.response.start":
+                status_code = int(message["status"])
+            await send(message)
+
+        with collect_request_metrics() as metrics:
+            try:
+                await self.app(scope, receive, capture_status)
+            finally:
+                route = scope.get("route")
+                route_template = getattr(route, "path", "<unmatched>")
+                logger.info(
+                    "api_request_metrics method=%s route=%s status=%d "
+                    "duration_ms=%.1f supabase_calls=%d auth_calls=%d "
+                    "postgrest_reads=%d postgrest_writes=%d "
+                    "supabase_elapsed_ms=%.1f",
+                    scope.get("method", "UNKNOWN"),
+                    route_template,
+                    status_code,
+                    (perf_counter() - started) * 1_000,
+                    metrics.supabase_calls,
+                    metrics.auth_calls,
+                    metrics.postgrest_reads,
+                    metrics.postgrest_writes,
+                    metrics.supabase_elapsed_ms,
+                )
 
 
 class HealthResponse(BaseModel):
@@ -123,6 +167,7 @@ def create_app(
     # escaped exception can be reported by browsers as a misleading CORS
     # failure instead of a readable sanitized 500 response.
     application.add_middleware(UnexpectedErrorBoundaryMiddleware)
+    application.add_middleware(RequestMetricsMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=list(resolved_settings.cors_origins),

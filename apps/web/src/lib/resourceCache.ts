@@ -1,4 +1,4 @@
-export const RESOURCE_FRESH_TIME_MS = 30_000
+export const RESOURCE_FRESH_TIME_MS = 10 * 60 * 1_000
 
 export const resourceKeys = {
   readiness: 'system:readiness',
@@ -8,6 +8,7 @@ export const resourceKeys = {
     `imports:${datasetType}:${locationId}`,
   masterVersions: 'master:versions',
   planningStatus: (locationId: string) => `planning-status:${locationId}`,
+  locationView: (locationId: string) => `location-view:${locationId}`,
   inventory: (locationId: string) => `inventory:${locationId}`,
   purchaseOrders: (locationId: string) => `purchase-orders:${locationId}`,
   planningRun: (runId: string) => `planning-run:${runId}`,

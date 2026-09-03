@@ -123,6 +123,8 @@ class Backend(Protocol):
 
     async def inventory(self, location_id: str) -> JsonObject: ...
 
+    async def location_view(self, location_id: str) -> JsonObject: ...
+
     async def purchase_orders(self, location_id: str) -> JsonObject: ...
 
     async def create_planning_run(
@@ -147,6 +149,12 @@ class LoadedMaster:
     items: tuple[Item, ...]
     policies: tuple[ItemPlanningPolicy, ...]
     rules: tuple[DeliveryCoverageRule, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class LoadedLocationMaster:
+    version: JsonObject
+    locations: tuple[Location, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,6 +250,16 @@ def _issue_payload(issue: PlanningIssue) -> JsonObject:
 
 def _accepted_status(warning_count: int) -> str:
     return "accepted_with_warnings" if warning_count else "accepted"
+
+
+def _in_filter(values: tuple[str, ...]) -> str:
+    if not values:
+        raise ValueError("PostgREST in-filter requires at least one value")
+    quoted = []
+    for value in values:
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        quoted.append(f'"{escaped}"')
+    return f"in.({','.join(quoted)})"
 
 
 class PlanningBackend:
@@ -1056,7 +1074,7 @@ class PlanningBackend:
             environment=self._settings.app_environment,
         )
 
-    async def _load_master(self, version_id: str | None = None) -> LoadedMaster:
+    async def _master_version(self, version_id: str | None = None) -> JsonObject:
         filters = {"environment": f"eq.{self._settings.app_environment}"}
         if version_id is None:
             filters["status"] = "eq.active"
@@ -1068,7 +1086,31 @@ class PlanningBackend:
         if not versions:
             identifier = version_id or self._settings.app_environment
             raise NotFoundError("Active master-data version", identifier)
-        version = versions[0]
+        return versions[0]
+
+    async def _load_location_master(
+        self, version_id: str | None = None
+    ) -> LoadedLocationMaster:
+        version = await self._master_version(version_id)
+        selected_id = str(version["id"])
+        locations_raw = await self._store.select_rows(
+            "locations", filters={"version_id": f"eq.{selected_id}"}
+        )
+        return LoadedLocationMaster(
+            version=version,
+            locations=tuple(
+                Location(
+                    location_id=str(row["location_id"]),
+                    location_name=str(row["location_name"]),
+                    timezone=str(row["timezone"]),
+                    active=bool(row["active"]),
+                )
+                for row in locations_raw
+            ),
+        )
+
+    async def _load_master(self, version_id: str | None = None) -> LoadedMaster:
+        version = await self._master_version(version_id)
         selected_id = str(version["id"])
         locations_raw, items_raw, policies_raw, rules_raw = await asyncio.gather(
             self._store.select_rows(
@@ -1190,7 +1232,9 @@ class PlanningBackend:
         )
 
     @staticmethod
-    def _location(master: LoadedMaster, location_id: str) -> Location:
+    def _location(
+        master: LoadedMaster | LoadedLocationMaster, location_id: str
+    ) -> Location:
         location = next(
             (row for row in master.locations if row.location_id == location_id), None
         )
@@ -1798,6 +1842,15 @@ class PlanningBackend:
         if not runs:
             raise NotFoundError("Planning run", run_id)
         run = runs[0]
+        return await self._planning_run_payload(run)
+
+    async def _planning_run_payload(
+        self,
+        run: JsonObject,
+        *,
+        master: LoadedMaster | None = None,
+    ) -> JsonObject:
+        run_id = str(run["run_id"])
         inputs, lines, recommendations, exceptions, netting, projections = (
             await asyncio.gather(
                 self._store.select_rows(
@@ -1835,6 +1888,7 @@ class PlanningBackend:
         planning_line_explanations = await self._planning_line_explanations(
             run=run,
             lines=lines,
+            master=master,
         )
         netting = [_netting_read_model(row) for row in netting]
         return {
@@ -1996,11 +2050,13 @@ class PlanningBackend:
         *,
         run: JsonObject,
         lines: list[JsonObject],
+        master: LoadedMaster | None = None,
     ) -> list[JsonObject]:
         version_id = run.get("master_data_version_id")
         if version_id is None:
             return []
-        master = await self._load_master(str(version_id))
+        if master is None:
+            master = await self._load_master(str(version_id))
         items = {item.item_id: item for item in master.items}
         policies = {policy.item_id: policy for policy in master.policies}
         rules = {rule.delivery_rule_id: rule for rule in master.rules}
@@ -2111,7 +2167,7 @@ class PlanningBackend:
         return explanations
 
     async def list_locations(self) -> JsonObject:
-        master = await self._load_master()
+        master = await self._load_location_master()
         return {
             "master_data_version_id": master.version["id"],
             "locations": [
@@ -2126,80 +2182,230 @@ class PlanningBackend:
             ],
         }
 
-    async def _latest_run(self, location_id: str) -> JsonObject | None:
+    @staticmethod
+    def _metadata_location_ids(source: JsonObject) -> frozenset[str] | None:
+        metadata = source.get("metadata")
+        if not isinstance(metadata, dict):
+            return None
+        raw_ids = metadata.get("location_ids")
+        if not isinstance(raw_ids, list) or any(
+            not isinstance(value, str) for value in raw_ids
+        ):
+            return None
+        return frozenset(raw_ids)
+
+    async def _latest_planning_imports_for_locations(
+        self, location_ids: tuple[str, ...]
+    ) -> dict[str, JsonObject]:
+        if not location_ids:
+            return {}
+        candidates = await self._store.select_rows(
+            "source_imports",
+            filters={
+                "dataset_type": "eq.planning_input",
+                "status": ACCEPTED_STATUSES,
+            },
+            order="created_at.desc",
+            limit=25,
+        )
+        fallback_ids = tuple(
+            str(candidate["id"])
+            for candidate in candidates
+            if self._metadata_location_ids(candidate) is None
+        )
+        fallback_pairs: set[tuple[str, str]] = set()
+        if fallback_ids:
+            rows = await self._store.select_rows(
+                "forecast_daily",
+                columns="import_id,location_id",
+                filters={
+                    "import_id": _in_filter(fallback_ids),
+                    "location_id": _in_filter(location_ids),
+                },
+            )
+            fallback_pairs = {
+                (str(row["import_id"]), str(row["location_id"])) for row in rows
+            }
+
+        latest: dict[str, JsonObject] = {}
+        for candidate in candidates:
+            candidate_id = str(candidate["id"])
+            metadata_ids = self._metadata_location_ids(candidate)
+            covered_ids = (
+                metadata_ids
+                if metadata_ids is not None
+                else frozenset(
+                    location_id
+                    for import_id, location_id in fallback_pairs
+                    if import_id == candidate_id
+                )
+            )
+            for location_id in location_ids:
+                if location_id in covered_ids:
+                    latest.setdefault(location_id, candidate)
+        return latest
+
+    async def _latest_location_imports(
+        self, location_ids: tuple[str, ...]
+    ) -> dict[tuple[str, str], JsonObject]:
+        if not location_ids:
+            return {}
+        rows = await self._store.select_rows(
+            "source_imports",
+            filters={
+                "dataset_type": _in_filter(("stock", "purchase_orders")),
+                "status": ACCEPTED_STATUSES,
+                "location_id": _in_filter(location_ids),
+            },
+            order="created_at.desc",
+        )
+        latest: dict[tuple[str, str], JsonObject] = {}
+        for row in rows:
+            dataset_type = str(row["dataset_type"])
+            location_id = str(row["location_id"])
+            latest.setdefault((dataset_type, location_id), row)
+        return latest
+
+    async def _latest_runs_for_locations(
+        self, location_ids: tuple[str, ...]
+    ) -> dict[str, JsonObject]:
+        if not location_ids:
+            return {}
         rows = await self._store.select_rows(
             "planning_runs",
-            filters={"location_id": f"eq.{location_id}"},
+            filters={"location_id": _in_filter(location_ids)},
             order="created_at.desc",
-            limit=1,
         )
-        return rows[0] if rows else None
+        latest: dict[str, JsonObject] = {}
+        for row in rows:
+            latest.setdefault(str(row["location_id"]), row)
+        return latest
+
+    async def _planning_statuses(
+        self,
+        location_ids: tuple[str, ...],
+        *,
+        master: LoadedMaster | LoadedLocationMaster | None,
+        master_blocker: str | None = None,
+    ) -> list[JsonObject]:
+        planning_by_location, imports_by_key, runs_by_location = await asyncio.gather(
+            self._latest_planning_imports_for_locations(location_ids),
+            self._latest_location_imports(location_ids),
+            self._latest_runs_for_locations(location_ids),
+        )
+        run_ids = tuple(
+            str(run["run_id"])
+            for run in runs_by_location.values()
+            if run.get("run_id") is not None
+        )
+        input_rows = (
+            await self._store.select_rows(
+                "planning_run_inputs",
+                columns="run_id,source_import_id",
+                filters={"run_id": _in_filter(run_ids)},
+            )
+            if run_ids
+            else []
+        )
+        used_ids_by_run: dict[str, set[str]] = {}
+        for row in input_rows:
+            source_import_id = row.get("source_import_id")
+            if source_import_id is not None:
+                used_ids_by_run.setdefault(str(row["run_id"]), set()).add(
+                    str(source_import_id)
+                )
+
+        statuses: list[JsonObject] = []
+        for location_id in location_ids:
+            blockers: list[JsonObject] = []
+            if master_blocker is not None:
+                blockers.append({"code": "master_missing", "message": master_blocker})
+            planning = planning_by_location.get(location_id)
+            stock = imports_by_key.get(("stock", location_id))
+            po = imports_by_key.get(("purchase_orders", location_id))
+            for code, label, source in (
+                ("planning_input_missing", "planning workbook", planning),
+                ("stock_missing", "current stock", stock),
+                ("purchase_orders_missing", "purchase-order PDFs", po),
+            ):
+                if source is None:
+                    blockers.append(
+                        {
+                            "code": code,
+                            "message": f"No accepted {label} import is available.",
+                        }
+                    )
+            latest_run = runs_by_location.get(location_id)
+            current_ids = {
+                str(source["id"])
+                for source in (planning, stock, po)
+                if source is not None
+            }
+            is_current = False
+            if latest_run is not None and master is not None:
+                used_ids = used_ids_by_run.get(str(latest_run["run_id"]), set())
+                is_current = (
+                    current_ids.issubset(used_ids)
+                    and str(latest_run.get("master_data_version_id"))
+                    == str(master.version["id"])
+                )
+            statuses.append(
+                {
+                    "location_id": location_id,
+                    "ready": not blockers,
+                    "blockers": blockers,
+                    "sources": {
+                        "master_data_version": (
+                            master.version if master is not None else None
+                        ),
+                        "planning_input": planning,
+                        "stock": stock,
+                        "purchase_orders": po,
+                    },
+                    "latest_run": latest_run,
+                    "latest_run_is_current": is_current,
+                    "proposal_only": True,
+                }
+            )
+        return statuses
 
     async def planning_status(self, location_id: str) -> JsonObject:
-        blockers: list[JsonObject] = []
+        master_blocker: str | None
         try:
-            master = await self._load_master()
+            master = await self._load_location_master()
             self._location(master, location_id)
         except (NotFoundError, ConflictError) as exc:
             master = None
-            blockers.append({"code": "master_missing", "message": exc.message})
-        planning, stock, po = await asyncio.gather(
-            self._latest_planning_import_for_location(location_id),
-            self._latest_import("stock", location_id=location_id),
-            self._latest_import("purchase_orders", location_id=location_id),
+            master_blocker = exc.message
+        else:
+            master_blocker = None
+        statuses = await self._planning_statuses(
+            (location_id,),
+            master=master,
+            master_blocker=master_blocker,
         )
-        for code, label, source in (
-            ("planning_input_missing", "planning workbook", planning),
-            ("stock_missing", "current stock", stock),
-            ("purchase_orders_missing", "purchase-order PDFs", po),
-        ):
-            if source is None:
-                blockers.append(
-                    {"code": code, "message": f"No accepted {label} import is available."}
-                )
-        latest_run = await self._latest_run(location_id)
-        current_ids = {
-            str(source["id"])
-            for source in (planning, stock, po)
-            if source is not None
-        }
-        is_current = False
-        if latest_run is not None and master is not None:
-            run_inputs = await self._store.select_rows(
-                "planning_run_inputs",
-                columns="source_import_id",
-                filters={"run_id": f"eq.{latest_run['run_id']}"},
-            )
-            used_ids = {
-                str(row["source_import_id"])
-                for row in run_inputs
-                if row.get("source_import_id") is not None
-            }
-            is_current = (
-                current_ids.issubset(used_ids)
-                and str(latest_run.get("master_data_version_id"))
-                == str(master.version["id"])
-            )
-        return {
-            "location_id": location_id,
-            "ready": not blockers,
-            "blockers": blockers,
-            "sources": {
-                "master_data_version": master.version if master is not None else None,
-                "planning_input": planning,
-                "stock": stock,
-                "purchase_orders": po,
-            },
-            "latest_run": latest_run,
-            "latest_run_is_current": is_current,
-            "proposal_only": True,
-        }
+        return statuses[0]
 
     async def inventory(self, location_id: str) -> JsonObject:
-        source = await self._latest_import("stock", location_id=location_id)
+        source, master = await asyncio.gather(
+            self._latest_import("stock", location_id=location_id),
+            self._load_master(),
+        )
         if source is None:
             raise NotFoundError("Accepted stock import for location", location_id)
-        master = await self._load_master()
+        return await self._inventory_payload(
+            location_id=location_id,
+            source=source,
+            master=master,
+        )
+
+    async def _inventory_payload(
+        self,
+        *,
+        location_id: str,
+        source: JsonObject,
+        master: LoadedMaster,
+    ) -> JsonObject:
         items = {item.item_id: item for item in master.items}
         rows = await self._store.select_rows(
             "inventory_snapshots",
@@ -2247,21 +2453,149 @@ class PlanningBackend:
             "observed_not_supplier_confirmation": True,
         }
 
+    async def location_view(self, location_id: str) -> JsonObject:
+        """Compose the initial Location page without browser request waterfalls."""
+
+        master = await self._load_master()
+        self._location(master, location_id)
+        status = (
+            await self._planning_statuses((location_id,), master=master)
+        )[0]
+        stock_source = status["sources"].get("stock")
+        latest_run = status.get("latest_run")
+
+        async def load_inventory() -> JsonObject | None:
+            if not isinstance(stock_source, dict):
+                return None
+            return await self._inventory_payload(
+                location_id=location_id,
+                source=stock_source,
+                master=master,
+            )
+
+        async def load_run() -> JsonObject | None:
+            if not isinstance(latest_run, dict):
+                return None
+            run_uses_active_master = str(
+                latest_run.get("master_data_version_id")
+            ) == str(master.version["id"])
+            return await self._planning_run_payload(
+                latest_run,
+                master=master if run_uses_active_master else None,
+            )
+
+        inventory_payload, run_payload = await asyncio.gather(
+            load_inventory(),
+            load_run(),
+        )
+        return {
+            "locations": {
+                "master_data_version_id": master.version["id"],
+                "locations": [
+                    {
+                        "location_id": row.location_id,
+                        "location_name": row.location_name,
+                        "timezone": row.timezone,
+                        "active": row.active,
+                    }
+                    for row in master.locations
+                    if row.active
+                ],
+            },
+            "status": status,
+            "inventory": inventory_payload,
+            "planning_run": run_payload,
+            "proposal_only": True,
+        }
+
     async def overview(self) -> JsonObject:
-        locations_payload = await self.list_locations()
+        master = await self._load_location_master()
+        locations_payload = {
+            "master_data_version_id": master.version["id"],
+            "locations": [
+                {
+                    "location_id": row.location_id,
+                    "location_name": row.location_name,
+                    "timezone": row.timezone,
+                    "active": row.active,
+                }
+                for row in master.locations
+                if row.active
+            ],
+        }
         location_metadata = {
             str(row["location_id"]): row for row in locations_payload["locations"]
         }
-        statuses = [
-            await self.planning_status(str(row["location_id"]))
-            for row in locations_payload["locations"]
-        ]
+        location_ids = tuple(location_metadata)
+        statuses = await self._planning_statuses(location_ids, master=master)
+
+        current_run_ids_by_value: dict[str, None] = {}
+        po_source_ids_by_value: dict[str, None] = {}
+        for status_payload in statuses:
+            run = status_payload.get("latest_run")
+            if status_payload["latest_run_is_current"] and isinstance(run, dict):
+                current_run_ids_by_value[str(run["run_id"])] = None
+            source = status_payload["sources"].get("purchase_orders")
+            if isinstance(source, dict):
+                po_source_ids_by_value[str(source["id"])] = None
+        current_run_ids = tuple(current_run_ids_by_value)
+        po_source_ids = tuple(po_source_ids_by_value)
+
+        async def rows_for_ids(
+            table: str,
+            field: str,
+            values: tuple[str, ...],
+            *,
+            columns: str = "*",
+            extra_filters: dict[str, str] | None = None,
+        ) -> list[JsonObject]:
+            if not values:
+                return []
+            filters = {field: _in_filter(values), **(extra_filters or {})}
+            return await self._store.select_rows(
+                table,
+                columns=columns,
+                filters=filters,
+            )
+
+        netting_rows, recommendation_rows, exception_rows, open_po_rows = (
+            await asyncio.gather(
+                rows_for_ids(
+                    "planning_netting_results", "run_id", current_run_ids
+                ),
+                rows_for_ids(
+                    "planning_recommendations", "run_id", current_run_ids
+                ),
+                rows_for_ids(
+                    "planning_exceptions",
+                    "run_id",
+                    current_run_ids,
+                    extra_filters={"severity": "eq.blocker"},
+                ),
+                rows_for_ids(
+                    "purchase_order_lines",
+                    "import_id",
+                    po_source_ids,
+                    columns="po_line_id,import_id",
+                    extra_filters={"derived_status": "eq.open"},
+                ),
+            )
+        )
+
+        def rows_by_run(rows: list[JsonObject]) -> dict[str, list[JsonObject]]:
+            grouped: dict[str, list[JsonObject]] = {}
+            for row in rows:
+                grouped.setdefault(str(row["run_id"]), []).append(row)
+            return grouped
+
+        netting_by_run = rows_by_run(netting_rows)
+        recommendations_by_run = rows_by_run(recommendation_rows)
+        exceptions_by_run = rows_by_run(exception_rows)
         items_at_risk = 0
         items_requiring_order = 0
         items_risk_not_evaluated = 0
         recommendations_due = 0
         blocking_issues = 0
-        open_pos = 0
         today = date.today()
         location_rows: list[JsonObject] = []
         for status_payload in statuses:
@@ -2274,20 +2608,9 @@ class PlanningBackend:
             earliest_order_required_date: str | None = None
             if isinstance(run, dict) and status_payload["latest_run_is_current"]:
                 run_id = str(run["run_id"])
-                netting, recommendations, exceptions = await asyncio.gather(
-                    self._store.select_rows(
-                        "planning_netting_results",
-                        filters={"run_id": f"eq.{run_id}"},
-                    ),
-                    self._store.select_rows(
-                        "planning_recommendations",
-                        filters={"run_id": f"eq.{run_id}"},
-                    ),
-                    self._store.select_rows(
-                        "planning_exceptions",
-                        filters={"run_id": f"eq.{run_id}", "severity": "eq.blocker"},
-                    ),
-                )
+                netting = netting_by_run.get(run_id, [])
+                recommendations = recommendations_by_run.get(run_id, [])
+                exceptions = exceptions_by_run.get(run_id, [])
                 netting = [_netting_read_model(row) for row in netting]
                 residual_risk = [
                     row
@@ -2332,17 +2655,6 @@ class PlanningBackend:
                     for row in recommendations
                 )
                 blocking_issues += len(exceptions)
-            po_source = status_payload["sources"].get("purchase_orders")
-            if isinstance(po_source, dict):
-                po_rows = await self._store.select_rows(
-                    "purchase_order_lines",
-                    columns="po_line_id",
-                    filters={
-                        "import_id": f"eq.{po_source['id']}",
-                        "derived_status": "eq.open",
-                    },
-                )
-                open_pos += len(po_rows)
             location_rows.append(
                 {
                     "location_id": location_id,
@@ -2360,6 +2672,7 @@ class PlanningBackend:
                     "blockers": status_payload["blockers"],
                 }
             )
+        open_pos = len(open_po_rows)
         latest_run_at = max(
             (
                 str(row["latest_run"]["created_at"])

@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  RESOURCE_FRESH_TIME_MS,
   clearResourceCache,
   invalidateResource,
   primeResource,
@@ -76,7 +77,7 @@ describe('useApiResource cache', () => {
       expect(first.result.current.state.status).toBe('success')
     })
     first.unmount()
-    now += 30_001
+    now += RESOURCE_FRESH_TIME_MS + 1
 
     const second = renderHook(() => useApiResource('test:stale', fetcher))
     expect(second.result.current.state).toMatchObject({
@@ -199,7 +200,7 @@ describe('useApiResource cache', () => {
       expect(first.result.current.state.status).toBe('success')
     })
     first.unmount()
-    now += 30_001
+    now += RESOURCE_FRESH_TIME_MS + 1
 
     const second = renderHook(() => useApiResource('test:error', fetcher))
     await waitFor(() => {

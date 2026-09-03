@@ -705,14 +705,14 @@ fan-out.
 
 ### WP8 — Page-load performance and cached navigation → 2H usability
 
-Priority: **active P0 follow-up**. Tranche 1 is implemented and automatically
-verified; authenticated browser acceptance remains. Detailed evidence, task
-order, risks, and acceptance criteria are in
+Priority: **P0 implementation complete; authenticated acceptance pending**.
+Tranches 1 and 2 are implemented and directly verified. Detailed evidence,
+task order, risks, and acceptance criteria are in
 `docs/plans/ui_performance_optimization_plan.md`.
 
 #### Tranche 1 — immediate revisit UX and connection reuse
 
-- [x] Add a small memory-only resource cache with explicit keys, 30-second
+- [x] Add a small memory-only resource cache with explicit keys, 10-minute
       freshness, in-flight deduplication, stale-while-revalidate behavior, and
       a forced-refresh path. Keep known content visible during refresh.
 - [x] Clear cached domain data on sign-out/Auth loss and explicitly invalidate
@@ -731,14 +731,14 @@ order, risks, and acceptance criteria are in
 
 #### Tranche 2 — query-plan reduction after tranche-1 measurement
 
-- [ ] Replace Overview's sequential per-location status composition with
+- [x] Replace Overview's sequential per-location status composition with
       set-based reads grouped in Python; do not merely parallelize an unbounded
       N+1 pattern.
-- [ ] Reuse active/versioned master data within composed reads and set query-
+- [x] Reuse active/versioned master data within composed reads and set query-
       count regression ceilings.
-- [ ] Evaluate a Location bootstrap read model only if the measured status →
+- [x] Evaluate a Location bootstrap read model only if the measured status →
       latest-run waterfall remains material. Keep one Python planning contract.
-- [ ] Re-measure before adding a database view, RPC, materialized KPI table, or
+- [x] Re-measure before adding a database view, RPC, materialized KPI table, or
       deployment-tier cost.
 
 #### Later only if still measured
@@ -879,7 +879,7 @@ backend logic:
   reuse tranche first, then measured query reduction.
 
 - 2026-09-03 — **WP8 tranche 1 implemented and automatically verified.** The
-  browser now keeps successful route resources in a 30-second session-memory
+  browser now keeps successful route resources in a 10-minute session-memory
   cache, deduplicates in-flight work, preserves known data during revalidation,
   shows background-refresh failures, invalidates after writes, and clears all
   domain data across Auth boundaries. FastAPI now owns one pooled Supabase HTTP
@@ -888,7 +888,22 @@ backend logic:
   TypeScript, and the production build. The route test proves Overview → Data &
   settings → Overview performs only one Overview request and never returns to
   the full loading state. Direct Overview median improved to 1,866 ms but still
-  uses 35 reads; authenticated browser acceptance is pending before tranche 2.
+  uses 35 reads. Direct evidence justified proceeding to query reduction while
+  authenticated browser acceptance remained pending.
+
+- 2026-09-03 — **WP8 tranche 2 implemented and directly verified.** Safe
+  aggregate request metrics record route templates, status, timings, and call
+  counts without identifiers, query strings, tokens, or row data. Overview now
+  uses set-based status/source/run/result reads and is fixed at 10 reads in both
+  two- and six-location tests; five live cycles measured a 727 ms median versus
+  1,866 ms after tranche 1 and roughly 2.45 seconds originally. Location now
+  uses one composed initial browser request and 16 reads instead of four
+  requests/35 reads, with a 797 ms median; its payload is proven equivalent to
+  the independently loaded contracts and POs remain lazy. Data & settings does
+  not justify another endpoint after the shared 10-minute cache and reduced
+  location/status reads. All 98 Python and 157 Vitest tests plus Ruff, strict
+  mypy, ESLint, TypeScript, and the production build pass. Authenticated
+  first-visit/revisit acceptance remains the only WP8 gate.
 
 - 2026-09-01 — **Coverage-v3 backend contract complete.** The pure engine now
   calculates event-aware continuous runways for on-hand, on-hand plus accepted

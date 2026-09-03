@@ -12,6 +12,7 @@ from apps.api.supply_planning_api.errors import ConflictError
 from apps.api.supply_planning_api.repository import CanonicalStore, JsonObject, SchemaState
 from apps.api.supply_planning_api.schemas import CreatePlanningRunRequest
 from apps.api.supply_planning_api.services import (
+    LoadedLocationMaster,
     LoadedMaster,
     PlanningBackend,
     SelectedSources,
@@ -45,6 +46,7 @@ class _RunStore:
     def __init__(self) -> None:
         self.tables: dict[str, list[JsonObject]] = {}
         self.persisted_payload: JsonObject | None = None
+        self.select_calls: list[tuple[str, dict[str, str]]] = []
 
     async def schema_state(self) -> SchemaState:
         return SchemaState(True)
@@ -58,16 +60,35 @@ class _RunStore:
         order: str | None = None,
         limit: int | None = None,
     ) -> list[JsonObject]:
-        del columns, order
+        del columns
+        self.select_calls.append((table, dict(filters or {})))
         rows = [dict(row) for row in self.tables.get(table, [])]
         for key, expression in (filters or {}).items():
             if expression.startswith("eq."):
-                expected = expression[3:]
-                rows = [row for row in rows if str(row.get(key)) == expected]
+                expected_value = expression[3:]
+                rows = [
+                    row for row in rows if str(row.get(key)) == expected_value
+                ]
+            elif expression.startswith("in.(") and expression.endswith(")"):
+                expected_values = {
+                    value.strip().strip('"')
+                    for value in expression[4:-1].split(",")
+                }
+                rows = [
+                    row for row in rows if str(row.get(key)) in expected_values
+                ]
             elif expression == "not.is.null":
                 rows = [row for row in rows if row.get(key) is not None]
             else:
                 raise AssertionError(f"unsupported test filter {key}={expression}")
+        for clause in reversed((order or "").split(",")):
+            if not clause:
+                continue
+            field, direction = clause.split(".", maxsplit=1)
+            rows.sort(
+                key=lambda row: str(row.get(field, "")),
+                reverse=direction == "desc",
+            )
         return rows[:limit] if limit is not None else rows
 
     async def insert_rows(
@@ -173,6 +194,15 @@ class _StatusBackend(PlanningBackend):
         del version_id
         return self._master_fixture
 
+    async def _load_location_master(
+        self, version_id: str | None = None
+    ) -> LoadedLocationMaster:
+        del version_id
+        return LoadedLocationMaster(
+            version=self._master_fixture.version,
+            locations=self._master_fixture.locations,
+        )
+
     async def _latest_planning_import_for_location(
         self,
         location_id: str,
@@ -192,15 +222,46 @@ class _StatusBackend(PlanningBackend):
             "purchase_orders": self.po_import,
         }.get(dataset_type)
 
-    async def _latest_run(self, location_id: str) -> JsonObject | None:
+    async def _latest_planning_imports_for_locations(
+        self, location_ids: tuple[str, ...]
+    ) -> dict[str, JsonObject]:
+        return {location_id: self.planning_import for location_id in location_ids}
+
+    async def _latest_location_imports(
+        self, location_ids: tuple[str, ...]
+    ) -> dict[tuple[str, str], JsonObject]:
         return {
-            "run_id": "run-currentness",
-            "location_id": location_id,
-            "master_data_version_id": MASTER_VERSION_ID,
+            (dataset_type, location_id): source
+            for location_id in location_ids
+            for dataset_type, source in (
+                ("stock", self.stock_import),
+                ("purchase_orders", self.po_import),
+            )
+        }
+
+    async def _latest_runs_for_locations(
+        self, location_ids: tuple[str, ...]
+    ) -> dict[str, JsonObject]:
+        return {
+            location_id: {
+                "run_id": "run-currentness",
+                "location_id": location_id,
+                "master_data_version_id": MASTER_VERSION_ID,
+            }
+            for location_id in location_ids
         }
 
 
 class _OverviewBackend(PlanningBackend):
+    async def _load_location_master(
+        self, version_id: str | None = None
+    ) -> LoadedLocationMaster:
+        del version_id
+        return LoadedLocationMaster(
+            version={"id": MASTER_VERSION_ID},
+            locations=(Location("LOC_A", "Location A", "Europe/Berlin"),),
+        )
+
     async def list_locations(self) -> JsonObject:
         return {
             "locations": [
@@ -230,6 +291,16 @@ class _OverviewBackend(PlanningBackend):
             },
             "latest_run_is_current": True,
         }
+
+    async def _planning_statuses(
+        self,
+        location_ids: tuple[str, ...],
+        *,
+        master: LoadedMaster | LoadedLocationMaster | None,
+        master_blocker: str | None = None,
+    ) -> list[JsonObject]:
+        del master, master_blocker
+        return [await self.planning_status(location_id) for location_id in location_ids]
 
 
 def _sources() -> SelectedSources:
@@ -304,6 +375,91 @@ def _sources() -> SelectedSources:
         purchase_orders_import=source(PO_IMPORT_ID, "po-v1", "po-hash"),
         bundle=bundle,
     )
+
+
+def _overview_backend(location_count: int) -> tuple[PlanningBackend, _RunStore]:
+    settings = Settings.model_validate(
+        {"APP_ENV": "test", "CORS_ORIGINS": "http://localhost:5173"}
+    )
+    store = _RunStore()
+    location_ids = tuple(f"LOC_{index}" for index in range(location_count))
+    store.tables["master_data_versions"] = [
+        {
+            "id": MASTER_VERSION_ID,
+            "environment": "test",
+            "status": "active",
+        }
+    ]
+    store.tables["locations"] = [
+        {
+            "version_id": MASTER_VERSION_ID,
+            "location_id": location_id,
+            "location_name": f"Location {location_id}",
+            "timezone": "Europe/Berlin",
+            "active": True,
+        }
+        for location_id in location_ids
+    ]
+    store.tables["source_imports"] = [
+        {
+            "id": PLANNING_IMPORT_ID,
+            "dataset_type": "planning_input",
+            "location_id": None,
+            "status": "accepted",
+            "created_at": "2026-09-03T08:00:00+00:00",
+            "metadata": {"location_ids": list(location_ids)},
+        },
+        *[
+            {
+                "id": f"stock-{location_id}",
+                "dataset_type": "stock",
+                "location_id": location_id,
+                "status": "accepted",
+                "created_at": "2026-09-03T09:00:00+00:00",
+            }
+            for location_id in location_ids
+        ],
+        *[
+            {
+                "id": f"po-{location_id}",
+                "dataset_type": "purchase_orders",
+                "location_id": location_id,
+                "status": "accepted",
+                "created_at": "2026-09-03T09:00:00+00:00",
+            }
+            for location_id in location_ids
+        ],
+    ]
+    store.tables["planning_runs"] = [
+        {
+            "run_id": f"run-{location_id}",
+            "location_id": location_id,
+            "master_data_version_id": MASTER_VERSION_ID,
+            "created_at": "2026-09-03T10:00:00+00:00",
+        }
+        for location_id in location_ids
+    ]
+    store.tables["planning_run_inputs"] = [
+        {
+            "run_id": f"run-{location_id}",
+            "source_import_id": source_import_id,
+        }
+        for location_id in location_ids
+        for source_import_id in (
+            PLANNING_IMPORT_ID,
+            f"stock-{location_id}",
+            f"po-{location_id}",
+        )
+    ]
+    store.tables["purchase_order_lines"] = [
+        {
+            "po_line_id": f"po-line-{location_id}",
+            "import_id": f"po-{location_id}",
+            "derived_status": "open",
+        }
+        for location_id in location_ids
+    ]
+    return PlanningBackend(cast(CanonicalStore, store), settings), store
 
 
 class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -718,6 +874,58 @@ class BackendPlanningServiceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             result["locations"][0]["sources"]["stock"]["id"], STOCK_IMPORT_ID
+        )
+
+    async def test_overview_query_count_is_constant_across_location_count(self) -> None:
+        two_location_backend, two_location_store = _overview_backend(2)
+        six_location_backend, six_location_store = _overview_backend(6)
+
+        two_location_result = await two_location_backend.overview()
+        six_location_result = await six_location_backend.overview()
+
+        self.assertEqual(10, len(two_location_store.select_calls))
+        self.assertEqual(10, len(six_location_store.select_calls))
+        self.assertEqual(2, two_location_result["kpis"]["locations_total"])
+        self.assertEqual(6, six_location_result["kpis"]["locations_total"])
+        self.assertEqual(2, two_location_result["kpis"]["open_purchase_order_lines"])
+        self.assertEqual(6, six_location_result["kpis"]["open_purchase_order_lines"])
+
+    async def test_location_view_removes_the_browser_status_to_run_waterfall(self) -> None:
+        backend, store = _overview_backend(1)
+
+        result = await backend.location_view("LOC_0")
+
+        self.assertEqual(16, len(store.select_calls))
+        self.assertEqual("LOC_0", result["status"]["location_id"])
+        self.assertEqual("run-LOC_0", result["planning_run"]["run"]["run_id"])
+        self.assertIsNotNone(result["inventory"])
+        self.assertTrue(result["proposal_only"])
+
+    async def test_planning_import_batch_falls_back_for_legacy_metadata(self) -> None:
+        settings = Settings.model_validate(
+            {"APP_ENV": "test", "CORS_ORIGINS": "http://localhost:5173"}
+        )
+        store = _RunStore()
+        store.tables["source_imports"] = [
+            {
+                "id": PLANNING_IMPORT_ID,
+                "dataset_type": "planning_input",
+                "status": "accepted",
+                "created_at": "2026-09-03T08:00:00+00:00",
+                "metadata": {},
+            }
+        ]
+        store.tables["forecast_daily"] = [
+            {"import_id": PLANNING_IMPORT_ID, "location_id": "LOC_A"}
+        ]
+        backend = PlanningBackend(cast(CanonicalStore, store), settings)
+
+        result = await backend._latest_planning_imports_for_locations(("LOC_A",))
+
+        self.assertEqual(PLANNING_IMPORT_ID, result["LOC_A"]["id"])
+        self.assertEqual(
+            ["source_imports", "forecast_daily"],
+            [table for table, _filters in store.select_calls],
         )
 
 

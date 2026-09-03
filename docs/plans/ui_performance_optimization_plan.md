@@ -1,6 +1,6 @@
 # UI page-load performance optimization plan
 
-**Status:** tranche 1 implemented and automatically verified; authenticated browser check pending
+**Status:** tranches 1 and 2 implemented and directly verified; authenticated browser acceptance pending
 **Created:** 2026-09-03
 
 ## Goal
@@ -10,15 +10,15 @@ visited pages, and materially reduce warm first-load latency without changing
 planning calculations, risk semantics, source timestamps, or the proposal-only
 scope.
 
-The first implementation tranche fixes the two confirmed cross-cutting causes:
+The first implementation tranche fixed the two confirmed cross-cutting causes:
 
 1. route data is discarded and fetched from zero on every page mount; and
 2. Auth and PostgREST requests repeatedly create short-lived HTTP clients
    instead of reusing connections.
 
-Backend query-shape changes follow as a separately measured tranche. This keeps
-the first change small enough to verify and avoids prematurely adding database
-views, RPCs, or page-specific persistence contracts.
+The second tranche then reduced backend query fanout and added one composed
+Location read model. It did not require a database view, RPC, materialized
+summary, or new persistence authority.
 
 ## User-visible problem
 
@@ -158,7 +158,7 @@ showing that query count remains a second bottleneck.
       imports, master versions, planning status by location, inventory by
       location, POs by location, and planning run by run id.
 - [x] Store successful results and fetch time in a module-owned, memory-only
-      cache. Use an initial 30-second fresh window; make the value a named UI
+      cache. Use the confirmed 10-minute fresh window; make the value a named UI
       transport policy rather than scattering literals.
 - [x] Deduplicate concurrent requests for the same key, including Strict Mode
       remounts. Do not let one unmount abort a request still used by another
@@ -245,27 +245,29 @@ replaced by guessed timings from jsdom.
 
 ## Tranche 2 — reduce backend round trips
 
-Start only after tranche 1 is measured so the remaining bottleneck is known.
+Tranche 1 measurements confirmed that query fanout remained material.
 
-- [ ] Add per-request query-count/timing instrumentation suitable for tests and
+- [x] Add per-request query-count/timing instrumentation suitable for tests and
       safe aggregate production logs; never log tokens, keys, file contents, or
       private row values.
-- [ ] Reuse one loaded active master within a composed request. Consider a
+- [x] Reuse one loaded active master within a composed request. Consider a
       short version-keyed in-process cache only if explicit activation
       invalidation and multi-instance consistency are documented.
-- [ ] Replace Overview's sequential per-location `planning_status` calls with
+- [x] Replace Overview's sequential per-location `planning_status` calls with
       set-based reads grouped in Python. Parallelizing the current N+1 shape is
       an interim step, not the final query plan.
-- [ ] Design a Location bootstrap/read-model endpoint only if it reduces the
+- [x] Design a Location bootstrap/read-model endpoint only if it reduces the
       measured waterfall without creating a second planning contract. It may
       compose status, location metadata, latest result summary, and inventory;
       the pure engine remains untouched.
-- [ ] Reassess Data & settings after shared locations/versions/imports caching;
+- [x] Reassess Data & settings after shared locations/versions/imports caching;
       do not add a new endpoint if the route is already acceptably fast.
-- [ ] Set query-count regression ceilings for the two-active-location fixture
+- [x] Set query-count regression ceilings for the two-active-location fixture
       and confirm query growth is not linear where set-based reads are possible.
-- [ ] Repeat authenticated browser and direct-backend measurements before
-      deciding whether a database view/RPC is justified.
+- [x] Repeat direct-backend measurements before deciding whether a database
+      view/RPC is justified.
+- [ ] Repeat the authenticated first-visit/revisit browser measurements with the
+      maintainer's real session.
 
 ### Tranche 2 acceptance
 
@@ -276,6 +278,65 @@ Start only after tranche 1 is measured so the remaining bottleneck is known.
   synthetic location count.
 - No materialized summary table or new persistence authority is introduced
   without evidence that batching alone is insufficient.
+
+### Tranche 2 measured result
+
+The backend now emits one safe aggregate request log using only the HTTP method,
+route template, status, elapsed time, and Auth/PostgREST call counts and
+durations. It never logs query strings, tokens, row values, upload contents, or
+location/run ids. Query-count tests use the same repository seam without
+depending on production logs.
+
+Overview loads location metadata once, batches status/source/run inputs, and
+aggregates result rows for all current runs. Its query ceiling is exactly 10
+reads for both the two-location fixture and a six-location synthetic fixture,
+instead of 35 reads for the current two-location data. Location now starts with
+one authenticated `GET /api/v1/locations/{location_id}/view` request. That
+response composes the existing locations, status, inventory, and latest-run
+contracts while sharing the active master load; open POs remain lazy until the
+Orders tab is opened. The current Location route falls from four initial browser
+requests and 35 backend reads to one request and 16 reads.
+
+Five consecutive read-only cycles through the production PostgREST adapter
+produced the following direct backend-to-Supabase evidence:
+
+| Read | Median | Range | Reads per cycle |
+|---|---:|---:|---:|
+| `list_locations` | 168 ms | 167–183 ms | 2 |
+| `planning_status` | 409 ms | 403–675 ms | 6 |
+| composed `location_view` | 797 ms | 776–4,193 ms | 16 |
+| `inventory` | 383 ms | 378–401 ms | 7 |
+| `get_planning_run` | 650 ms | 596–702 ms | 12 |
+| `overview` | 727 ms | 707–873 ms | 10 |
+
+The measurement script first proved that the composed Location payload equals
+the independently loaded existing contracts. It can be repeated read-only with
+`.venv\Scripts\python.exe scripts\measure_ui_performance.py --cycles 5`; it
+prints aggregate timing/counts and no identifiers or row data. Overview is now
+about 61% faster than the tranche-1 1,866 ms median and about 70% faster than the
+original 2.45-second median while performing 71% fewer reads. The composed
+Location read performs 54% fewer reads than the original route and 41% fewer
+than the equivalent independently called post-refactor reads.
+
+One Location sample took 4.19 seconds while the other four were near 0.8
+seconds, demonstrating that an upstream/network stall can still affect an
+uncached first visit. The 10-minute cache prevents ordinary return navigation
+from repeatedly paying that path, but the authenticated browser check is still
+needed to assess deployed Auth, Render, CORS, and rendering time.
+
+Data & settings did not receive another page-specific endpoint. Its gating
+imports and master-version calls are one read each; locations now uses two
+reads, status uses six, and all are shared by the 10-minute resource cache. A
+new contract would add complexity without evidence of a remaining waterfall.
+No database view/RPC is justified at the current measured scale. The batched
+latest-run/source helpers do scan metadata history in a bounded number of
+requests; revisit pagination or a database read model if those history tables
+grow enough to make returned row volume material.
+
+Automated verification after tranche 2 passed 98 Python tests, 157 Vitest tests
+across 13 files, Ruff, strict mypy, ESLint, TypeScript checking, and a Vite
+production build. The remaining acceptance item is the authenticated real-
+browser trace, not a known automated regression.
 
 ## Tranche 3 — payload and deployment follow-up, only if still material
 
@@ -303,10 +364,27 @@ Start only after tranche 1 is measured so the remaining bottleneck is known.
 - A module cache can leak data between users if it survives sign-out. Clearing
   it on every auth loss is a release blocker.
 - Faster parallel queries can overload the same upstream while hiding an N+1
-  pattern. Tranche 2 should reduce reads, not only overlap them.
+  pattern. Tranche 2 therefore reduced reads instead of only overlapping them.
+- The set-based source/run lookups currently group returned metadata history in
+  Python. Query count is constant, but response volume can grow with history;
+  introduce pagination or a database read model only from measured evidence.
 
 ## Progress
 
+- 2026-09-03 — Implemented and directly verified tranche 2. Added privacy-safe
+  per-request aggregate metrics, set-based Overview/status/source reads,
+  request-scoped active-master reuse, fixed query-count regression tests, and a
+  composed Location view that preserves the existing response contracts. Five-
+  cycle direct measurements put Overview at 727 ms/10 reads and Location view
+  at 797 ms/16 reads. The two- and six-location Overview fixtures both use 10
+  reads. Batching is sufficient for now; no database view/RPC or new Data page
+  endpoint was added. Authenticated deployed-browser acceptance remains open.
+- 2026-09-03 — Increased the browser resource fresh window from 30 seconds to
+  10 minutes at maintainer request. Current source data changes only through
+  manual workflows; explicit Refresh still forces the network, successful
+  mutations invalidate affected resources immediately, and Auth changes clear
+  the cache. The longer window therefore improves normal navigation without
+  weakening those correctness boundaries.
 - 2026-09-03 — Implemented tranche 1. Added the session-owned resource cache,
   explicit mutation invalidation, Auth-boundary clearing, visible background-
   refresh errors, app-owned pooled Supabase transport, and regression tests.

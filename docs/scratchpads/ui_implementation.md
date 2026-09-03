@@ -1126,7 +1126,9 @@ in the master backlog track completion.
 ### What changed
 
 - `resourceCache.ts` now owns successful browser resources in memory for a
-  named 30-second fresh window. Keys cover readiness, Overview, locations,
+  named 10-minute fresh window. The maintainer confirmed this on 2026-09-03
+  because current sources change only through manual workflows; explicit
+  Refresh and mutation invalidation remain authoritative. Keys cover readiness, Overview, locations,
   imports, master versions, per-location status/inventory/POs, and run id.
 - Same-key requests share one in-flight promise. Route unmount no longer aborts
   a request that a remount or second subscriber can use.
@@ -1180,7 +1182,76 @@ authenticated trace shows asset execution is material.
 - Run the real authenticated browser sequence for first visit and immediate
   revisit on Overview, Data & settings, and one Location. Capture request count,
   whether known content ever disappears, and time to useful content.
-- If that accepts tranche 1, start tranche 2 with safe query-count/timing
-  instrumentation, then replace Overview's sequential per-location status
-  composition with set-based reads. Re-measure before designing a Location
-  bootstrap endpoint or database view/RPC.
+- Direct measurements justified starting query reduction before that browser
+  session was available. Tranche 2 is now complete below; the browser sequence
+  remains the shared acceptance gate for both tranches.
+
+## Page-load tranche 2 implementation (2026-09-03)
+
+### Implemented query plan
+
+- Added request-scoped metrics using a context variable. The application logs
+  only method, route template, response status, total time, aggregate Auth and
+  PostgREST call counts, and aggregate upstream durations. It does not retain
+  URLs/query strings, tokens, identifiers, row values, or file contents.
+- Location metadata now needs the active version plus the location table (two
+  reads), instead of loading all four master tables. Planning status batches
+  planning-import coverage, location imports, current runs, and run inputs.
+- Overview uses those set-based reads once and groups current run results and PO
+  sources in Python. Tests require exactly 10 reads with both two and six active
+  locations, so adding locations cannot restore the old per-location N+1.
+- `GET /api/v1/locations/{location_id}/view` composes the existing locations,
+  status, inventory, and latest-run payloads. It shares one active master load;
+  if a historical run references another master it still loads that immutable
+  version to preserve explanation semantics. The response does not calculate a
+  second planning result. Open POs stay lazy until the Orders tab is opened.
+- Location initial load is now one browser/Auth request and 16 PostgREST reads,
+  down from four requests and 35 reads. The frontend primes the existing
+  derived cache keys from the composed response, so other consumers retain the
+  same contracts and invalidation behavior.
+- Data & settings keeps its existing reads. Imports and versions are one read
+  each, locations is two, status is six, and recent successes are shared by the
+  10-minute session cache. There was no measured reason to add a separate page
+  endpoint.
+
+### Direct evidence and verification
+
+The reusable read-only probe at `scripts/measure_ui_performance.py` runs the
+production PostgREST adapter, checks that the composed Location payload equals
+independent calls, and prints only timings/counts. Five cycles produced:
+
+| Read | Median | Range | Reads |
+|---|---:|---:|---:|
+| locations | 168 ms | 167–183 ms | 2 |
+| planning status | 409 ms | 403–675 ms | 6 |
+| composed Location view | 797 ms | 776–4,193 ms | 16 |
+| inventory | 383 ms | 378–401 ms | 7 |
+| latest run | 650 ms | 596–702 ms | 12 |
+| Overview | 727 ms | 707–873 ms | 10 |
+
+Run it with
+`.venv\Scripts\python.exe scripts\measure_ui_performance.py --cycles 5`.
+It is read-only but requires the configured Supabase network path.
+Overview is about 61% faster than the tranche-1 median and about 70% faster than
+the original measurement, with 71% fewer reads. The Location view uses 54%
+fewer reads than the original route. One 4.19-second Location outlier confirms
+that an upstream/network stall can still make an uncached first visit slow; the
+10-minute cache prevents return navigation from paying it again.
+
+All automated checks passed after this tranche: 98 Python tests; 157 Vitest
+tests across 13 files; Ruff; strict mypy; ESLint; TypeScript; and the Vite
+production build. Response-equivalence, route/Auth, privacy-safe metrics,
+constant Overview query count, legacy-import fallback, one-request Location
+loading, cache priming, and mutation invalidation have focused coverage.
+
+### Decisions, risks, and next step
+
+- Batching is sufficient at the current scale. Do not add a database view, RPC,
+  materialized summary, or in-process master cache now.
+- Batched latest-source and latest-run helpers make a constant number of calls
+  but currently group returned metadata history in Python. Reassess pagination
+  or a database read model only if history-table row volume becomes material.
+- The remaining acceptance gate is the real authenticated browser sequence for
+  first visit and immediate revisit on all three pages. Capture browser request
+  counts, loading-state continuity, and time to useful content; include deployed
+  Auth, Render, CORS, asset, and rendering time.

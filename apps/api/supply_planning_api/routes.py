@@ -67,6 +67,10 @@ def create_domain_router(
     async def inventory(location_id: str, _user: User) -> JsonResponse:
         return await backend.inventory(location_id)
 
+    @router.get("/locations/{location_id}/view", tags=["planning"])
+    async def location_view(location_id: str, _user: User) -> JsonResponse:
+        return await backend.location_view(location_id)
+
     @router.get("/locations/{location_id}/purchase-orders", tags=["planning"])
     async def purchase_orders(location_id: str, _user: User) -> JsonResponse:
         return await backend.purchase_orders(location_id)

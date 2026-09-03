@@ -14,6 +14,7 @@ from apps.api.supply_planning_api.repository import (
     REQUIRED_SCHEMA_TABLES,
     SupabaseCanonicalStore,
 )
+from apps.api.supply_planning_api.request_metrics import collect_request_metrics
 
 
 def _settings(secret: str = "sb_secret_server-test") -> Settings:
@@ -183,11 +184,12 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
         store = SupabaseCanonicalStore(_settings(), http_client=shared_client)
         verifier = SupabaseIdentityVerifier(_settings(), http_client=shared_client)
 
-        _, _, user = await asyncio.gather(
-            store.select_rows("source_imports", limit=1),
-            store.select_rows("master_data_versions", limit=1),
-            verifier.verify("browser-access-token"),
-        )
+        with collect_request_metrics() as metrics:
+            _, _, user = await asyncio.gather(
+                store.select_rows("source_imports", limit=1),
+                store.select_rows("master_data_versions", limit=1),
+                verifier.verify("browser-access-token"),
+            )
 
         self.assertEqual("user-1", user.user_id)
         self.assertCountEqual(
@@ -199,6 +201,11 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
             seen_paths,
         )
         self.assertFalse(shared_client.is_closed)
+        self.assertEqual(3, metrics.supabase_calls)
+        self.assertEqual(1, metrics.auth_calls)
+        self.assertEqual(2, metrics.postgrest_reads)
+        self.assertEqual(0, metrics.postgrest_writes)
+        self.assertGreaterEqual(metrics.supabase_elapsed_ms, 0)
 
 
 if __name__ == "__main__":

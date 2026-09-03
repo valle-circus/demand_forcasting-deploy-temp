@@ -53,6 +53,29 @@ class ApiFoundationTests(unittest.IsolatedAsyncioTestCase):
             response.json(),
         )
 
+    async def test_request_metrics_log_only_route_template_and_aggregates(self) -> None:
+        application = create_app(
+            settings=self._settings(),
+            supabase_probe=_StubProbe(DependencyState("ready", "Ready.")),
+        )
+        with self.assertLogs(
+            "apps.api.supply_planning_api.main", level="INFO"
+        ) as captured:
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=application),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/api/v1/health?private=value")
+
+        self.assertEqual(200, response.status_code)
+        metric_line = next(
+            line for line in captured.output if "api_request_metrics" in line
+        )
+        self.assertIn("route=/api/v1/health", metric_line)
+        self.assertIn("supabase_calls=0", metric_line)
+        self.assertNotIn("private", metric_line)
+        self.assertNotIn("value", metric_line)
+
     async def test_readiness_reports_sanitized_supabase_state(self) -> None:
         application = create_app(
             settings=self._settings(),

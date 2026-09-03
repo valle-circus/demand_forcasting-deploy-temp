@@ -5,6 +5,7 @@ import {
   configureUnauthorizedHandler,
   activateMasterVersion,
   createPlanningRun,
+  fetchLocationView,
   fetchLocations,
   fetchOverview,
   fetchReadiness,
@@ -15,7 +16,7 @@ import {
   readResource,
   resourceKeys,
 } from './resourceCache'
-import type { PlanningRunResponse } from './types'
+import type { LocationViewResponse, PlanningRunResponse } from './types'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -128,11 +129,23 @@ describe('error translation', () => {
 })
 
 describe('request shape', () => {
-  it('escapes the location id in the path', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({}))
+  it('escapes the location id and primes the composed location resources', async () => {
+    const response = {
+      locations: { master_data_version_id: 'v1', locations: [] },
+      status: { location_id: 'LOC A/1' },
+      inventory: null,
+      planning_run: null,
+      proposal_only: true,
+    } as unknown as LocationViewResponse
+    fetchMock.mockResolvedValue(jsonResponse(response))
 
-    await fetchLocations()
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/locations')
+    await fetchLocationView('LOC A/1')
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/locations/LOC%20A%2F1/view')
+    expect(readResource(resourceKeys.locations).data).toEqual(response.locations)
+    expect(readResource(resourceKeys.planningStatus('LOC A/1')).data).toEqual(
+      response.status,
+    )
   })
 })
 
@@ -144,6 +157,7 @@ describe('mutation cache boundaries', () => {
       resourceKeys.overview,
       resourceKeys.planningStatus('LOC_A'),
       resourceKeys.inventory('LOC_A'),
+      resourceKeys.locationView('LOC_A'),
     ]) {
       primeResource(key, { previous: true })
     }
@@ -167,6 +181,9 @@ describe('mutation cache boundaries', () => {
       true,
     )
     expect(readResource(resourceKeys.inventory('LOC_A')).invalidated).toBe(true)
+    expect(readResource(resourceKeys.locationView('LOC_A')).invalidated).toBe(
+      true,
+    )
   })
 
   it('primes the returned run and invalidates its summaries', async () => {
@@ -176,6 +193,7 @@ describe('mutation cache boundaries', () => {
     } as PlanningRunResponse
     primeResource(resourceKeys.overview, { previous: true })
     primeResource(resourceKeys.planningStatus('LOC_A'), { previous: true })
+    primeResource(resourceKeys.locationView('LOC_A'), { previous: true })
     fetchMock.mockResolvedValue(jsonResponse(response))
 
     await createPlanningRun({
@@ -189,6 +207,9 @@ describe('mutation cache boundaries', () => {
     )
     expect(readResource(resourceKeys.overview).invalidated).toBe(true)
     expect(readResource(resourceKeys.planningStatus('LOC_A')).invalidated).toBe(
+      true,
+    )
+    expect(readResource(resourceKeys.locationView('LOC_A')).invalidated).toBe(
       true,
     )
   })

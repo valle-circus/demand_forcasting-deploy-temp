@@ -293,10 +293,12 @@ The measured page-load correction is planned separately in
       after uploads, activation, and planning runs.
 - [x] Reuse pooled backend HTTP connections for Supabase Auth and PostgREST
       while preserving per-request authorization and existing error behavior.
-- [ ] Measure and then reduce the Overview N+1 and Location status/latest-run
+- [x] Measure and then reduce the Overview N+1 and Location status/latest-run
       waterfall with set-based/composed reads and query-count regression tests.
-- [x] Record repeated direct-backend timing evidence after connection reuse:
-      Overview median 1,866 ms with its 35 reads unchanged.
+- [x] Record repeated direct-backend timing evidence after both performance
+      tranches: Overview moved from 35 reads/1,866 ms after connection reuse to
+      10 reads/727 ms; composed Location uses one browser request and 16 reads
+      with a 797 ms median.
 - [ ] Verify authenticated first visits and immediate revisits for all three
       pages, then investigate deployment cold starts or payload splitting only
       if they remain material.

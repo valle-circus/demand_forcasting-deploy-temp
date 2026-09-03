@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 
 import httpx
+
+from .request_metrics import record_supabase_call
 
 
 class SupabaseHttpClient:
@@ -39,7 +42,17 @@ class SupabaseHttpClient:
         url: str,
         **kwargs: Any,
     ) -> httpx.Response:
-        return await self._get_client().request(method, url, **kwargs)
+        started = perf_counter()
+        try:
+            return await self._get_client().request(method, url, **kwargs)
+        finally:
+            path = httpx.URL(url).path
+            kind = "auth" if path.startswith("/auth/") else "postgrest"
+            record_supabase_call(
+                kind=kind,
+                method=method,
+                elapsed_ms=(perf_counter() - started) * 1_000,
+            )
 
     async def aclose(self) -> None:
         if self._closed:

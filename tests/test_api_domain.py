@@ -40,6 +40,9 @@ class _RouteBackend:
     async def overview(self) -> dict[str, object]:
         return {"kpis": {"locations_ready": 1}, "proposal_only": True}
 
+    async def location_view(self, location_id: str) -> dict[str, object]:
+        return {"status": {"location_id": location_id}, "proposal_only": True}
+
     async def import_master_data(
         self,
         file: SavedUpload,
@@ -112,6 +115,20 @@ class ApiDomainTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("maintainer", me.json()["role"])
         self.assertEqual(1, overview.json()["kpis"]["locations_ready"])
         self.assertEqual(["valid-token", "valid-token"], verifier.tokens)
+
+    async def test_location_view_is_one_authenticated_initial_read(self) -> None:
+        backend = _RouteBackend()
+        verifier = _Verifier()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=self._app(backend, verifier)),
+            base_url="http://test",
+            headers={"Authorization": "Bearer valid-token"},
+        ) as client:
+            response = await client.get("/api/v1/locations/LOC_A/view")
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("LOC_A", response.json()["status"]["location_id"])
+        self.assertEqual(["valid-token"], verifier.tokens)
 
     async def test_xlsx_upload_is_request_scoped_and_cleaned_up(self) -> None:
         backend = _RouteBackend()

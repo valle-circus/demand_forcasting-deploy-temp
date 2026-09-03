@@ -16,17 +16,23 @@ not a task log or a replacement for the detailed engineering brief.
 ## Active memory
 
 - 2026-09-03: **The original no-cache UI decision is superseded; performance
-  tranche 1 is implemented and query-shape reduction is next after browser
-  acceptance.** The frontend now uses a 30-second session-memory cache with
+  tranches 1 and 2 are implemented, with authenticated browser acceptance still
+  open.** The frontend now uses a maintainer-confirmed 10-minute
+  session-memory cache because current source changes are manual, with
   stable keys, in-flight deduplication, stale-while-revalidate behavior,
   explicit mutation invalidation, visible refresh errors, and Auth-boundary
   clearing. FastAPI owns one reusable async Supabase client shared by Auth and
-  PostgREST and closes it on shutdown without caching identity decisions.
-  Automated verification passed with 93 Python and 156 Vitest tests plus Ruff,
-  strict mypy, ESLint, TypeScript, and a production build. The Overview direct
-  median improved from about 2.45 seconds to 1.87 seconds, but its 35 reads are
-  unchanged; reduce the Overview N+1 and Location status-to-run waterfall in
-  tranche 2 after authenticated first/revisit timing. Evidence:
+  PostgREST and closes it on shutdown without caching identity decisions. Safe
+  aggregate request metrics exclude identifiers, query strings, tokens, and row
+  data. Set-based Overview composition is fixed at 10 reads in both two- and
+  six-location tests; five live cycles measured a 727 ms median versus 1,866 ms
+  after tranche 1 and roughly 2.45 seconds originally. The composed Location
+  view shares active master data, preserves the existing response contracts,
+  keeps POs lazy, and uses one browser call/16 reads with a 797 ms median instead
+  of four calls/35 reads. Automated verification passed with 98 Python and 157
+  Vitest tests plus Ruff, strict mypy, ESLint, TypeScript, and a production
+  build. No database view/RPC or new Data page endpoint is currently justified;
+  complete authenticated first/revisit browser timing next. Evidence:
   `docs/plans/ui_performance_optimization_plan.md`,
   `docs/plans/ui_implementation_backlog.md`, and
   `docs/scratchpads/ui_implementation.md`. Status: `active`.

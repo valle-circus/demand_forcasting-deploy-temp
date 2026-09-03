@@ -602,6 +602,14 @@ export interface PlanningStatusResponse {
   proposal_only: true
 }
 
+export interface LocationViewResponse {
+  locations: LocationsResponse
+  status: PlanningStatusResponse
+  inventory: InventoryResponse | null
+  planning_run: PlanningRunResponse | null
+  proposal_only: true
+}
+
 // ---------------------------------------------------------------------------
 // Inventory and purchase orders
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@ import type {
   HealthResponse,
   InventoryResponse,
   IsoDateTime,
+  LocationViewResponse,
   LocationsResponse,
   MasterDataVersion,
   OverviewResponse,
@@ -444,6 +445,28 @@ export async function importMasterData(
   return result
 }
 
+export async function fetchLocationView(
+  locationId: string,
+  signal?: AbortSignal,
+): Promise<LocationViewResponse> {
+  const result = await request<LocationViewResponse>(
+    `/api/v1/locations/${encodeURIComponent(locationId)}/view`,
+    { signal },
+  )
+  primeResource(resourceKeys.locations, result.locations)
+  primeResource(resourceKeys.planningStatus(locationId), result.status)
+  if (result.inventory !== null) {
+    primeResource(resourceKeys.inventory(locationId), result.inventory)
+  }
+  if (result.planning_run !== null) {
+    primeResource(
+      resourceKeys.planningRun(result.planning_run.run.run_id),
+      result.planning_run,
+    )
+  }
+  return result
+}
+
 export async function importPlanningInput(
   file: File,
   options?: UploadOptions,
@@ -458,6 +481,7 @@ export async function importPlanningInput(
   invalidateResourcePrefix('imports:')
   invalidateResource(resourceKeys.overview)
   invalidateResourcePrefix(resourceKeys.planningStatus(''))
+  invalidateResourcePrefix(resourceKeys.locationView(''))
   return result
 }
 
@@ -474,6 +498,7 @@ export async function importStock(
   invalidateResource(resourceKeys.overview)
   invalidateResource(resourceKeys.planningStatus(locationId))
   invalidateResource(resourceKeys.inventory(locationId))
+  invalidateResource(resourceKeys.locationView(locationId))
   return result
 }
 
@@ -502,6 +527,7 @@ export async function importPurchaseOrders(
   invalidateResource(resourceKeys.overview)
   invalidateResource(resourceKeys.planningStatus(locationId))
   invalidateResource(resourceKeys.purchaseOrders(locationId))
+  invalidateResource(resourceKeys.locationView(locationId))
   return result
 }
 
@@ -528,6 +554,7 @@ export async function activateMasterVersion(
   invalidateResource(resourceKeys.overview)
   invalidateResourcePrefix(resourceKeys.planningStatus(''))
   invalidateResourcePrefix(resourceKeys.inventory(''))
+  invalidateResourcePrefix(resourceKeys.locationView(''))
   return result
 }
 
@@ -552,6 +579,7 @@ export async function createPlanningRun(
   })
   primeResource(resourceKeys.planningRun(result.run.run_id), result)
   invalidateResource(resourceKeys.planningStatus(body.location_id))
+  invalidateResource(resourceKeys.locationView(body.location_id))
   invalidateResource(resourceKeys.overview)
   return result
 }

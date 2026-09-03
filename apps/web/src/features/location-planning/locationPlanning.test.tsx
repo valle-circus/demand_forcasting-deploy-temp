@@ -6,17 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SelectedLocationProvider } from '@/app/location/SelectedLocationProvider'
 import { NotFoundError } from '@/lib/errors'
 import type {
+  LocationViewResponse,
   PlanningRun,
   PlanningRunResponse,
   PlanningStatusResponse,
 } from '@/lib/types'
 
 vi.mock('@/lib/apiClient', () => ({
-  fetchLocations: vi.fn(),
-  fetchPlanningStatus: vi.fn(),
-  fetchInventory: vi.fn(),
+  fetchLocationView: vi.fn(),
   fetchPurchaseOrders: vi.fn(),
-  getPlanningRun: vi.fn(),
   createPlanningRun: vi.fn(),
   downloadRunCsv: vi.fn(),
   downloadRunJson: vi.fn(),
@@ -240,6 +238,44 @@ function runResponse(): PlanningRunResponse {
   }
 }
 
+function locationView(
+  overrides: Partial<LocationViewResponse> = {},
+): LocationViewResponse {
+  return {
+    locations: {
+      master_data_version_id: 'v1',
+      locations: [
+        {
+          location_id: 'LOC_A',
+          location_name: 'Kitchen A',
+          timezone: 'Europe/Berlin',
+          active: true,
+        },
+      ],
+    },
+    status: status(),
+    inventory: {
+      source_import: {} as never,
+      items: [
+        {
+          import_id: 'i1',
+          location_id: 'LOC_A',
+          item_id: 'ITEM_PASTA',
+          counted_at: '2026-08-29T07:00:00+00:00',
+          usable_on_hand_units: 2,
+          partial_pack_g: 0,
+          provenance: 'observed',
+          item_name: 'Pasta',
+          pack_size_g: 2000,
+        },
+      ],
+    },
+    planning_run: runResponse(),
+    proposal_only: true,
+    ...overrides,
+  }
+}
+
 function renderPage(path = '/locations/LOC_A') {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -258,50 +294,39 @@ function renderPage(path = '/locations/LOC_A') {
 beforeEach(() => {
   vi.clearAllMocks()
   window.sessionStorage.clear()
-  vi.mocked(api.fetchLocations).mockResolvedValue({
-    master_data_version_id: 'v1',
-    locations: [
-      {
-        location_id: 'LOC_A',
-        location_name: 'Kitchen A',
-        timezone: 'Europe/Berlin',
-        active: true,
-      },
-    ],
-  })
-  vi.mocked(api.fetchPlanningStatus).mockResolvedValue(status())
-  vi.mocked(api.getPlanningRun).mockResolvedValue(runResponse())
-  vi.mocked(api.fetchInventory).mockResolvedValue({
-    source_import: {} as never,
-    items: [
-      {
-        import_id: 'i1',
-        location_id: 'LOC_A',
-        item_id: 'ITEM_PASTA',
-        counted_at: '2026-08-29T07:00:00+00:00',
-        usable_on_hand_units: 2,
-        partial_pack_g: 0,
-        provenance: 'observed',
-        item_name: 'Pasta',
-        pack_size_g: 2000,
-      },
-    ],
-  })
+  vi.mocked(api.fetchLocationView).mockResolvedValue(locationView())
   vi.mocked(api.fetchPurchaseOrders).mockRejectedValue(new NotFoundError('none'))
 })
 
 describe('the run action', () => {
+  it('loads the initial location through one composed request', async () => {
+    renderPage()
+
+    expect(
+      await screen.findByRole('button', { name: /compute recommendation/i }),
+    ).toBeEnabled()
+    expect(api.fetchLocationView).toHaveBeenCalledTimes(1)
+    expect(api.fetchLocationView).toHaveBeenCalledWith(
+      'LOC_A',
+      expect.any(AbortSignal),
+    )
+    expect(api.fetchPurchaseOrders).not.toHaveBeenCalled()
+  })
+
   it('is disabled and says why, in visible text rather than a tooltip', async () => {
-    vi.mocked(api.fetchPlanningStatus).mockResolvedValue(
-      status({
-        ready: false,
-        latest_run: null,
-        blockers: [
-          {
-            code: 'stock_missing',
-            message: 'No accepted current stock import is available.',
-          },
-        ],
+    vi.mocked(api.fetchLocationView).mockResolvedValue(
+      locationView({
+        status: status({
+          ready: false,
+          latest_run: null,
+          blockers: [
+            {
+              code: 'stock_missing',
+              message: 'No accepted current stock import is available.',
+            },
+          ],
+        }),
+        planning_run: null,
       }),
     )
 
@@ -368,8 +393,8 @@ describe('the run action', () => {
 
 describe('a result whose inputs have moved on', () => {
   it('is labelled out of date rather than presented as current', async () => {
-    vi.mocked(api.fetchPlanningStatus).mockResolvedValue(
-      status({ latest_run_is_current: false }),
+    vi.mocked(api.fetchLocationView).mockResolvedValue(
+      locationView({ status: status({ latest_run_is_current: false }) }),
     )
 
     renderPage()
@@ -432,10 +457,14 @@ describe('observed supplier documents', () => {
 describe('what counts as risk after the v2 engine correction', () => {
   function withNetting(overrides: Record<string, unknown>) {
     const base = runResponse()
-    vi.mocked(api.getPlanningRun).mockResolvedValue({
-      ...base,
-      netting_results: [{ ...base.netting_results[0], ...overrides }],
-    } as PlanningRunResponse)
+    vi.mocked(api.fetchLocationView).mockResolvedValue(
+      locationView({
+        planning_run: {
+          ...base,
+          netting_results: [{ ...base.netting_results[0], ...overrides }],
+        } as PlanningRunResponse,
+      }),
+    )
   }
 
   it('does not treat a shortage beyond the decision window as risk', async () => {
@@ -513,12 +542,16 @@ describe('shelf-life evidence in the drawer', () => {
   it('warns when the forecast does not reach the expiry', async () => {
     const user = userEvent.setup()
     const base = runResponse()
-    vi.mocked(api.getPlanningRun).mockResolvedValue({
-      ...base,
-      planning_lines: [
-        { ...base.planning_lines[0], forecast_through_expiry: false },
-      ],
-    } as PlanningRunResponse)
+    vi.mocked(api.fetchLocationView).mockResolvedValue(
+      locationView({
+        planning_run: {
+          ...base,
+          planning_lines: [
+            { ...base.planning_lines[0], forecast_through_expiry: false },
+          ],
+        } as PlanningRunResponse,
+      }),
+    )
 
     renderPage('/locations/LOC_A?tab=proposals')
     // A button, not a row click: the derivation must be keyboard reachable.
@@ -532,16 +565,20 @@ describe('shelf-life evidence in the drawer', () => {
   it('says plainly when no safe order exists rather than inventing one', async () => {
     const user = userEvent.setup()
     const base = runResponse()
-    vi.mocked(api.getPlanningRun).mockResolvedValue({
-      ...base,
-      planning_lines: [
-        {
-          ...base.planning_lines[0],
-          constraint_status: 'no_safe_positive_order',
-          binding_constraint: 'shelf_life',
-        },
-      ],
-    } as PlanningRunResponse)
+    vi.mocked(api.fetchLocationView).mockResolvedValue(
+      locationView({
+        planning_run: {
+          ...base,
+          planning_lines: [
+            {
+              ...base.planning_lines[0],
+              constraint_status: 'no_safe_positive_order',
+              binding_constraint: 'shelf_life',
+            },
+          ],
+        } as PlanningRunResponse,
+      }),
+    )
 
     renderPage('/locations/LOC_A?tab=proposals')
     // A button, not a row click: the derivation must be keyboard reachable.

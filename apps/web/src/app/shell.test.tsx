@@ -157,17 +157,26 @@ describe('navigation', () => {
       }
       const body = url.includes('/locations/')
         ? {
-            location_id: 'LOC_KOELN',
-            ready: false,
-            blockers: [],
-            sources: {
-              master_data_version: null,
-              planning_input: null,
-              stock: null,
-              purchase_orders: null,
+            locations: {
+              master_data_version_id: 'v1',
+              locations: [],
             },
-            latest_run: null,
-            latest_run_is_current: false,
+            status: {
+              location_id: 'LOC_KOELN',
+              ready: false,
+              blockers: [],
+              sources: {
+                master_data_version: null,
+                planning_input: null,
+                stock: null,
+                purchase_orders: null,
+              },
+              latest_run: null,
+              latest_run_is_current: false,
+              proposal_only: true,
+            },
+            inventory: null,
+            planning_run: null,
             proposal_only: true,
           }
         : { master_data_version_id: 'v1', locations: [] }

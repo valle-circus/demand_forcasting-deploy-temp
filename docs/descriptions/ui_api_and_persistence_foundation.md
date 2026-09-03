@@ -69,6 +69,14 @@ the root Python package. Vercel uses `apps/web` as its project root.
   prototype, any valid project user is a maintainer; role tiers are deferred.
 - `routes.py` exposes the identity, location, Overview, imports, master-version
   activation, planning-run, risks, recommendations, and CSV/JSON contracts.
+- `GET /api/v1/locations/{location_id}/view` composes the existing locations,
+  planning-status, inventory, and latest-run read models for the initial
+  Location screen. It shares one active-master load and does not create a new
+  planning/calculation contract; open POs remain a lazy tab-specific read.
+- Every request writes one aggregate performance log containing only method,
+  route template, status, elapsed time, and Auth/PostgREST call counts and
+  durations. Query strings, tokens, identifiers, row values, and upload
+  contents are excluded.
 - `services.py` reuses the Python XLSX/PDF adapters, assembles canonical inputs,
   calls the pure engine, and builds portable read models.
 - The Overview read model returns aggregate actionable-risk KPIs and one
@@ -112,19 +120,24 @@ does not query domain tables directly and receives no elevated credential.
 The original browser resource helper intentionally discarded data on every
 route unmount. Read-only latency investigation on 2026-09-03 showed that this
 caused recently visited pages to pay the complete remote read path again. The
-implemented correction is a 30-second session-scoped memory cache with explicit
+implemented correction is a 10-minute session-scoped memory cache with explicit
 resource keys, in-flight deduplication, background revalidation, mutation
 invalidation, and clearing on Auth loss/user change. A refresh failure remains
 visible beside the previously loaded data, and explicit Refresh/Retry forces a
 network request. Source/import timestamps remain the freshness authority.
 
-FastAPI now owns a reusable async Supabase HTTP client shared by the Auth and
+FastAPI owns a reusable async Supabase HTTP client shared by the Auth and
 PostgREST adapters and closes it during application shutdown. Bearer-token
 verification still runs for every authenticated API request; only connection
-lifetime changed. Repeated direct measurements improved Overview from roughly
-2.45 seconds to a 1.87-second median, but its 35-read query plan is unchanged.
-The next performance tranche therefore reduces query fanout after an
-authenticated browser acceptance check. Detailed scope, evidence, and
+lifetime changed. The second performance tranche also batches Overview source,
+run, status, and result reads and shares loaded master data inside composed
+requests. Overview now performs 10 reads for both two- and six-location test
+fixtures, down from 35 for the original two-location path. Five live direct
+cycles measured a 727 ms median versus 1.87 seconds after connection reuse and
+roughly 2.45 seconds originally. The composed Location read performs 16 reads
+in one initial browser request, measured at a 797 ms median, instead of the old
+four requests/35 reads. No database view, RPC, materialized summary, or new Data
+page endpoint was needed. Detailed evidence and remaining authenticated browser
 acceptance are in `docs/plans/ui_performance_optimization_plan.md`.
 
 ## Environment boundary
@@ -224,9 +237,13 @@ ephemeral local filesystem.
 
 ## Deferred work
 
-- Complete authenticated-browser acceptance for the implemented first page-load
-  tranche in `docs/plans/ui_performance_optimization_plan.md`, then reduce the
-  measured Overview N+1 and Location waterfall with set-based/composed reads.
+- Complete authenticated-browser acceptance for the implemented page-load
+  tranches in `docs/plans/ui_performance_optimization_plan.md`. Direct read-
+  model timing, query-count regression, and response-equivalence checks pass;
+  deployed Auth, CORS, Render, asset, and rendering timings remain unmeasured.
+- Revisit pagination or a database read model for set-based run/source metadata
+  only if history-table response volume becomes material. Current query count
+  is constant across the two- and six-location regression fixtures.
 - Apply migration 005 and verify readiness plus one fresh representative v3
   run; old v2 rows cannot populate the new calculated fields retroactively.
 - Render the cross-ingredient coverage chart from the explicit v3 fields,
