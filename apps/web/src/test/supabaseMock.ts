@@ -24,6 +24,14 @@ export interface FakeSupabase {
         email: string
         password: string
       }) => Promise<{ error: { message: string } | null }>
+      signUp: (credentials: {
+        email: string
+        password: string
+        options?: { emailRedirectTo?: string }
+      }) => Promise<{
+        data: { session: FakeSession | null }
+        error: { message: string } | null
+      }>
       signOut: () => Promise<{ error: null }>
     }
   }
@@ -31,7 +39,15 @@ export interface FakeSupabase {
   emit: (session: FakeSession | null) => void
   /** Fail the next `signInWithPassword` call with this Supabase message. */
   failSignInWith: (message: string) => void
+  /** Fail the next `signUp` call with this Supabase message. */
+  failSignUpWith: (message: string) => void
+  /**
+   * Return a session from the next `signUp`, i.e. the project has email
+   * confirmation switched off.
+   */
+  signUpReturnsSession: () => void
   signInWithPassword: ReturnType<typeof vi.fn>
+  signUp: ReturnType<typeof vi.fn>
 }
 
 export const TEST_SESSION: FakeSession = {
@@ -44,6 +60,8 @@ export function createFakeSupabase(
 ): FakeSupabase {
   let session = initialSession
   let nextSignInError: string | null = null
+  let nextSignUpError: string | null = null
+  let signUpYieldsSession = false
   const subscribers = new Set<AuthCallback>()
 
   const emit = (next: FakeSession | null): void => {
@@ -63,6 +81,24 @@ export function createFakeSupabase(
     return { error: null }
   })
 
+  /**
+   * Mirrors the real default: with email confirmation on, a successful sign-up
+   * returns no session, because the account is not usable until the emailed
+   * link is opened.
+   */
+  const signUp = vi.fn(async () => {
+    if (nextSignUpError !== null) {
+      const message = nextSignUpError
+      nextSignUpError = null
+      return { data: { session: null }, error: { message } }
+    }
+    if (signUpYieldsSession) {
+      emit(TEST_SESSION)
+      return { data: { session: TEST_SESSION }, error: null }
+    }
+    return { data: { session: null }, error: null }
+  })
+
   return {
     client: {
       auth: {
@@ -80,6 +116,7 @@ export function createFakeSupabase(
           }
         },
         signInWithPassword,
+        signUp,
         signOut: async () => {
           emit(null)
           return { error: null }
@@ -90,7 +127,14 @@ export function createFakeSupabase(
     failSignInWith: (message: string) => {
       nextSignInError = message
     },
+    failSignUpWith: (message: string) => {
+      nextSignUpError = message
+    },
+    signUpReturnsSession: () => {
+      signUpYieldsSession = true
+    },
     signInWithPassword,
+    signUp,
   }
 }
 

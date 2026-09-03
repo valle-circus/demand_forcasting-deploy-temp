@@ -29,6 +29,39 @@ authority.
 - `202609010005_event_aware_supply_coverage.sql`: additive v3 event-aware
   coverage runways for usable stock, accepted open POs, and proposed receipts,
   plus `persist_planning_run_v3`.
+- `202609030006_signup_email_domain_gate.sql`: a `before insert` trigger on
+  `auth.users` that refuses accounts outside the approved company email
+  domains. Existing accounts are untouched.
+
+## Self-service sign-up
+
+Sign-up is open but domain-restricted, and the restriction is enforced in three
+places because the browser holds a publishable key and can call Supabase Auth
+without going through this application:
+
+1. the trigger in migration `006`, which stops the account existing;
+2. `ALLOWED_EMAIL_DOMAINS` in the API, checked on every request, which is what
+   actually protects planning data; and
+3. `VITE_ALLOWED_EMAIL_DOMAINS` in the browser, which is only form copy.
+
+Changing the allowed domains means editing all three. The migration's list is
+a constant inside `public.enforce_signup_email_domain()`.
+
+Three project settings have to match, and none of them live in this repository:
+
+- **Authentication → Sign In / Providers → Email**: "Confirm email" enabled.
+  Without it the domain gate is unverified, because anyone could sign up as a
+  colleague's address without owning it.
+- **Authentication → URL Configuration → Redirect URLs**: add
+  `<deployed-origin>/auth/callback` and `http://localhost:5173/auth/callback`.
+  A confirmation link whose redirect is not listed falls back to the site URL.
+- **Authentication → Emails → SMTP**: the built-in sender is rate-limited and
+  restricted in who it will deliver to, so confirmation mail to a colleague
+  needs custom SMTP. Verify one real delivery before relying on it.
+
+A sign-up refused by the trigger surfaces to the browser as an opaque
+"Database error saving new user"; the React form translates that into the
+domain rule.
 
 This is intentionally smaller than the original schema plan. File metadata and
 small validation issue lists live on `source_imports`; `po_id` stays on each PO

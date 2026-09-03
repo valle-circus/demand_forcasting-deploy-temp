@@ -81,7 +81,8 @@ Each of these is a decision, not an omission. Reverse any of them freely.
 
 | Not built | Why |
 |---|---|
-| Self-service sign-up | The brief forbids it, and FastAPI treats every valid project user as a maintainer, so a signup form on a deployed URL would hand out maintainer access. Accounts are created in the Supabase dashboard. |
+| Self-service sign-up | **Built 2026-09-03**, restricted to approved company email domains. FastAPI still treats every valid project user as a maintainer, so an unrestricted form would have handed maintainer access to anyone with the URL. The domain rule is enforced by an `auth.users` trigger and re-checked in `auth.py`; the React copy of it is only form text. Requires "Confirm email" and a working SMTP sender — see `supabase/README.md`. |
+| Password reset, and any role below maintainer | Still not built. Someone who forgets their password needs an administrator in the Supabase dashboard, and every confirmed account on an approved domain can import, run planning, and download. A read-only reviewer role is the obvious next slice. |
 | Demo/preview fixture mode | Proposed while the backend looked unverified. Once readiness came back green it would only add a second code path that could show fake data. Fixtures live in Vitest only. |
 | Field-level master, menu and BOM editors | The brief defers them. They render as visibly disabled *planned* features rather than controls backed by no API. |
 | Data-freshness panel and observed-PO blocks on Overview | Journey doc §5.2 lists them as separate sections. Source freshness is already a column in the location table, and a secondary PO summary adds weight to a page whose job is "what needs attention now". **Worth a second opinion.** |

@@ -6,9 +6,13 @@ import {
   configureUnauthorizedHandler,
 } from '../../lib/apiClient'
 import { clearResourceCache } from '../../lib/resourceCache'
+import {
+  allowedEmailDomainsLabel,
+  emailDomainAllowed,
+} from '../../lib/emailDomains'
 import { browserSupabaseConfigured, getSupabaseClient } from '../../lib/supabase'
 import { AuthContext } from './authContext'
-import type { AuthUser, AuthValue } from './authContext'
+import type { AuthUser, AuthValue, SignUpOutcome } from './authContext'
 
 /**
  * Registered at module scope rather than in an effect so that a request issued
@@ -32,7 +36,34 @@ function signInMessage(raw: string): string {
     return 'That email and password combination was not recognised.'
   }
   if (normalized.includes('email not confirmed')) {
-    return 'This account has not been confirmed yet. Ask an administrator to confirm it in Supabase.'
+    return 'Confirm your email address first. Open the link in the message we sent when you created the account.'
+  }
+  if (normalized.includes('failed to fetch') || normalized.includes('network')) {
+    return 'Supabase could not be reached. Check your connection and try again.'
+  }
+  return raw
+}
+
+/**
+ * The domain rejection arrives from a database trigger, so Supabase reports it
+ * as an opaque "database error saving new user" rather than as something the
+ * person filling in the form can act on.
+ */
+function signUpMessage(raw: string): string {
+  const normalized = raw.toLowerCase()
+  if (
+    normalized.includes('not approved') ||
+    normalized.includes('database error') ||
+    normalized.includes('email address is required')
+  ) {
+    return `Accounts are limited to ${allowedEmailDomainsLabel()} email addresses.`
+  }
+  if (normalized.includes('password')) {
+    // Supabase's own password-policy text is already specific and useful.
+    return raw
+  }
+  if (normalized.includes('rate limit') || normalized.includes('too many')) {
+    return 'Too many attempts. Wait a few minutes and try again.'
   }
   if (normalized.includes('failed to fetch') || normalized.includes('network')) {
     return 'Supabase could not be reached. Check your connection and try again.'
@@ -132,6 +163,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const signUp = useCallback(
+    async (email: string, password: string): Promise<SignUpOutcome> => {
+      const client = getSupabaseClient()
+      if (client === null) {
+        throw new Error(
+          'Supabase authentication is not configured for this build.',
+        )
+      }
+      // Checked again here rather than only in the form, so that every caller
+      // gets the same refusal. Neither place is the actual gate.
+      if (!emailDomainAllowed(email)) {
+        throw new Error(
+          `Accounts are limited to ${allowedEmailDomainsLabel()} email addresses.`,
+        )
+      }
+      setNotice(null)
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: {
+          // Must also be listed under Authentication -> URL Configuration in
+          // Supabase, or the confirmation link falls back to the site URL.
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+      if (error) {
+        throw new Error(signUpMessage(error.message))
+      }
+      return data.session ? 'signed-in' : 'confirmation-sent'
+    },
+    [],
+  )
+
   const signOut = useCallback(async () => {
     setNotice(null)
     clearResourceCache()
@@ -149,8 +213,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<AuthValue>(
-    () => ({ status, user, notice, signIn, signOut, clearNotice }),
-    [status, user, notice, signIn, signOut, clearNotice],
+    () => ({ status, user, notice, signIn, signUp, signOut, clearNotice }),
+    [status, user, notice, signIn, signUp, signOut, clearNotice],
   )
 
   return <AuthContext value={value}>{children}</AuthContext>

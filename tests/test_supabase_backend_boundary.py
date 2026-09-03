@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import unittest
+from typing import cast
 
 import httpx
 from fastapi import HTTPException
+from pydantic import ValidationError
 
-from apps.api.supply_planning_api.auth import SupabaseIdentityVerifier
+from apps.api.supply_planning_api.auth import (
+    AuthenticatedUser,
+    SupabaseIdentityVerifier,
+)
 from apps.api.supply_planning_api.config import Settings
 from apps.api.supply_planning_api.http_client import SupabaseHttpClient
 from apps.api.supply_planning_api.repository import (
@@ -24,6 +29,9 @@ def _settings(secret: str = "sb_secret_server-test") -> Settings:
             "CORS_ORIGINS": "http://localhost:5173",
             "SUPABASE_URL": "https://project.example.supabase.co",
             "SUPABASE_SECRET_KEY": secret,
+            # The tests below assert transport behaviour, so their fixture
+            # address has to be one the sign-up gate admits.
+            "ALLOWED_EMAIL_DOMAINS": "example.test",
         }
     )
 
@@ -39,6 +47,7 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
                 json={
                     "id": "11111111-1111-1111-1111-111111111111",
                     "email": "maintainer@example.test",
+                    "email_confirmed_at": "2026-09-03T09:00:00Z",
                 },
             )
 
@@ -53,6 +62,80 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("/auth/v1/user", seen[0].url.path)
         self.assertEqual("sb_secret_server-test", seen[0].headers["apikey"])
         self.assertEqual("Bearer browser-access-token", seen[0].headers["authorization"])
+
+    async def _verify_user(
+        self,
+        *,
+        email: str,
+        email_confirmed_at: object = "2026-09-03T09:00:00Z",
+        allowed_domains: str = "circuskitchens.com",
+    ) -> AuthenticatedUser:
+        settings = Settings.model_validate(
+            {
+                "APP_ENV": "test",
+                "CORS_ORIGINS": "http://localhost:5173",
+                "SUPABASE_URL": "https://project.example.supabase.co",
+                "SUPABASE_SECRET_KEY": "sb_secret_server-test",
+                "ALLOWED_EMAIL_DOMAINS": allowed_domains,
+            }
+        )
+        payload: dict[str, object] = {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "email": email,
+        }
+        if email_confirmed_at is not None:
+            payload["email_confirmed_at"] = email_confirmed_at
+        verifier = SupabaseIdentityVerifier(
+            settings,
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, json=payload)
+            ),
+        )
+        self.addAsyncCleanup(verifier.aclose)
+        return await verifier.verify("browser-access-token")
+
+    async def test_outside_email_domain_is_refused_despite_valid_session(self) -> None:
+        # The auth.users trigger should stop this account existing at all. The
+        # API repeats the check because the browser can call Supabase Auth
+        # directly, and every account this API accepts is a full maintainer.
+        with self.assertRaises(HTTPException) as captured:
+            await self._verify_user(email="outsider@gmail.com")
+
+        self.assertEqual(403, captured.exception.status_code)
+        self.assertEqual(
+            "email_domain_not_allowed",
+            cast(dict[str, str], captured.exception.detail)["code"],
+        )
+
+    async def test_unconfirmed_email_is_refused(self) -> None:
+        with self.assertRaises(HTTPException) as captured:
+            await self._verify_user(
+                email="colleague@circuskitchens.com",
+                email_confirmed_at=None,
+            )
+
+        self.assertEqual(403, captured.exception.status_code)
+        self.assertEqual(
+            "email_not_confirmed",
+            cast(dict[str, str], captured.exception.detail)["code"],
+        )
+
+    async def test_confirmed_company_address_is_accepted(self) -> None:
+        user = await self._verify_user(email="Colleague@CircusKitchens.com")
+
+        # Mixed case must pass: the domain compares case-insensitively.
+        self.assertEqual("Colleague@CircusKitchens.com", user.email)
+
+    async def test_domain_allowlist_refuses_an_empty_value(self) -> None:
+        # An empty allowlist must not be read as "allow everyone".
+        with self.assertRaises(ValidationError):
+            Settings.model_validate(
+                {
+                    "APP_ENV": "test",
+                    "CORS_ORIGINS": "http://localhost:5173",
+                    "ALLOWED_EMAIL_DOMAINS": "  ",
+                }
+            )
 
     async def test_invalid_supabase_session_is_rejected(self) -> None:
         verifier = SupabaseIdentityVerifier(
@@ -172,7 +255,11 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
             if request.url.path == "/auth/v1/user":
                 return httpx.Response(
                     200,
-                    json={"id": "user-1", "email": "maintainer@example.test"},
+                    json={
+                        "id": "user-1",
+                        "email": "maintainer@example.test",
+                        "email_confirmed_at": "2026-09-03T09:00:00Z",
+                    },
                 )
             return httpx.Response(200, json=[])
 

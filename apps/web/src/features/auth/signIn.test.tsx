@@ -122,16 +122,14 @@ describe('the sign-in gate', () => {
     )
   })
 
-  it('offers no self-service sign-up', async () => {
+  it('offers a route to self-service sign-up', async () => {
     renderApp()
     await screen.findByRole('button', { name: 'Sign in' })
 
-    // Every valid Supabase user is a maintainer to FastAPI, so a public signup
-    // form would hand maintainer access to anyone who found the URL.
-    expect(
-      screen.queryByRole('button', { name: /sign up|create account|register/i }),
-    ).not.toBeInTheDocument()
-    expect(screen.getByText(/no self-service sign-up/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Create one' })).toHaveAttribute(
+      'href',
+      '/sign-up',
+    )
   })
 })
 

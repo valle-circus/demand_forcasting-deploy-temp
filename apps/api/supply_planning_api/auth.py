@@ -31,6 +31,18 @@ def unauthorized_error() -> HTTPException:
     )
 
 
+def forbidden_error(code: str, message: str) -> HTTPException:
+    """
+    A valid Supabase session that this application still refuses. Distinct from
+    `unauthorized_error` on purpose: signing in again would change nothing, so
+    the browser must not clear the session and re-prompt.
+    """
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"code": code, "message": message},
+    )
+
+
 class SupabaseIdentityVerifier:
     """Validate a browser session through Supabase Auth without logging tokens."""
 
@@ -99,8 +111,41 @@ class SupabaseIdentityVerifier:
             ) from exc
         if not isinstance(payload, dict) or not isinstance(payload.get("id"), str):
             raise unauthorized_error()
-        email = payload.get("email")
-        return AuthenticatedUser(
-            user_id=payload["id"],
-            email=email if isinstance(email, str) else None,
-        )
+        raw_email = payload.get("email")
+        email = raw_email if isinstance(raw_email, str) else None
+        self._require_admissible_account(email, payload.get("email_confirmed_at"))
+        return AuthenticatedUser(user_id=payload["id"], email=email)
+
+    def _require_admissible_account(
+        self,
+        email: str | None,
+        email_confirmed_at: Any,
+    ) -> None:
+        """
+        The second half of the sign-up gate.
+
+        Supabase itself blocks the disallowed cases first: the `auth.users`
+        trigger refuses the insert, and project settings withhold a session
+        until the address is confirmed. This repeats both checks because the
+        browser holds a publishable key and can call Supabase Auth directly,
+        so neither of those is a boundary this API controls. Every valid
+        account is a full maintainer here, so the check that actually protects
+        planning data has to sit in front of the data.
+        """
+        if not isinstance(email_confirmed_at, str) or not email_confirmed_at.strip():
+            raise forbidden_error(
+                "email_not_confirmed",
+                "Confirm your email address using the link we sent, then sign in.",
+            )
+        if email is None or "@" not in email:
+            raise forbidden_error(
+                "email_domain_not_allowed",
+                "This account has no email address and cannot use the planning "
+                "application.",
+            )
+        domain = email.rpartition("@")[2].lower()
+        if domain not in self._settings.allowed_email_domains:
+            raise forbidden_error(
+                "email_domain_not_allowed",
+                "This application is limited to approved company email domains.",
+            )

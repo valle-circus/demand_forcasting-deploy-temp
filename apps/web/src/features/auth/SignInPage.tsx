@@ -1,5 +1,5 @@
 import { useId, useState } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useLocation } from 'react-router-dom'
 
 import { useAuth } from '@/app/auth/authContext'
 import { ApiStatusLine } from '@/components/ApiStatusLine'
@@ -17,9 +17,9 @@ const FIELD_CLASS =
 /**
  * The sign-in gate.
  *
- * No self-sign-up, no password reset, no role management: accounts are created
- * by an administrator in Supabase, and the API currently treats every valid
- * project user as a maintainer.
+ * Sign-up is self-service but restricted to approved company email domains,
+ * because the API still treats every valid project user as a maintainer. There
+ * is no password reset and no role management yet.
  */
 export function SignInPage() {
   const { status, notice, signIn } = useAuth()
@@ -143,9 +143,11 @@ export function SignInPage() {
               </Button>
             </form>
 
-            <p className="mt-4 text-xs text-muted-foreground">
-              Accounts are created by an administrator. There is no self-service
-              sign-up.
+            <p className="mt-4 text-sm text-muted-foreground">
+              No account yet?{' '}
+              <Link to="/sign-up" className="underline underline-offset-4">
+                Create one
+              </Link>
             </p>
           </>
         )}
