@@ -12,7 +12,7 @@ interface RedirectState {
 }
 
 const FIELD_CLASS =
-  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none'
+  'h-10 w-full rounded-lg border border-input bg-card px-3 text-sm focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none'
 
 /**
  * The sign-in gate.
@@ -60,7 +60,7 @@ export function SignInPage() {
         <BrandMark />
 
         {status === 'unconfigured' ? (
-          <div role="status" className="mt-6 rounded-lg border border-border p-4">
+          <div role="status" className="mt-6 rounded-xl border border-border bg-card p-4">
             <h1 className="text-base font-medium">
               Authentication is not configured
             </h1>

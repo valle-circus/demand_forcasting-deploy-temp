@@ -9,7 +9,12 @@
  * step — a domain added here alone will pass the form and then fail at sign-up.
  */
 
-const FALLBACK_DOMAINS = ['circuskitchens.com'] as const
+/**
+ * Order matters: the first entry is the address people should be nudged
+ * towards. `circus-group.com` is the company alias everyone is expected to use;
+ * `circuskitchens.com` stays valid so existing accounts keep working.
+ */
+const FALLBACK_DOMAINS = ['circus-group.com', 'circuskitchens.com'] as const
 
 function parse(configured: string | undefined): readonly string[] {
   const source =
@@ -34,6 +39,16 @@ export function emailDomainAllowed(email: string): boolean {
     return false
   }
   return allowedEmailDomains.includes(trimmed.slice(separator + 1))
+}
+
+/**
+ * The single address to ask someone for, e.g. "@circus-group.com".
+ *
+ * Used in the calm state of the form. The other domains still work, so the
+ * error state uses `allowedEmailDomainsLabel` and states the full rule.
+ */
+export function preferredEmailDomainLabel(): string {
+  return `@${allowedEmailDomains[0]}`
 }
 
 /** e.g. "@circuskitchens.com" or "@a.com or @b.com", for form copy. */

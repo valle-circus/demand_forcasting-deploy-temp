@@ -30,7 +30,7 @@ export function FreshnessStamp({
       <dt className="text-muted-foreground">{sourceLabel}</dt>
       <dd>
         {sourceAt === null ? (
-          <span className="text-faint">not stated in the file</span>
+          <span className="text-muted-foreground">not stated in the file</span>
         ) : (
           <>
             {formatDateTime(sourceAt, timeZone)}

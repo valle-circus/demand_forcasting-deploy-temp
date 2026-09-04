@@ -6,7 +6,7 @@ const DOT = {
   ready: 'bg-success',
   warning: 'bg-warning',
   error: 'bg-danger',
-  pending: 'bg-faint',
+  pending: 'bg-neutral',
 } as const
 
 /**

@@ -33,6 +33,12 @@ interface UploadCardProps {
   onImported: () => void
   /** Replaces the derived header status, e.g. "Draft ready" for step 1. */
   statusOverride?: { tone: StatusTone; label: string }
+  /**
+   * Whether this is the step the maintainer should do next. Only that card's
+   * action gets the accent: four accent buttons on one page means the page has
+   * no primary action at all.
+   */
+  isNextStep: boolean
   /** Extra input this dataset needs, e.g. the purchase-order cutoff. */
   extraControls?: ReactNode
   /**
@@ -72,6 +78,7 @@ export function UploadCard({
   upload,
   onImported,
   statusOverride,
+  isNextStep,
   extraControls,
   completionSlot,
 }: UploadCardProps) {
@@ -120,13 +127,20 @@ export function UploadCard({
     <section
       id={`step-${String(definition.step)}`}
       aria-labelledby={`step-${String(definition.step)}-title`}
-      className="scroll-mt-24 rounded-lg border border-border bg-card"
+      className="scroll-mt-24 rounded-xl border border-border bg-card"
     >
-      <header className="flex items-start justify-between gap-3 px-4 pt-4">
-        <div className="flex min-w-0 items-baseline gap-2.5">
+      <header className="flex items-start justify-between gap-3 px-5 pt-5">
+        <div className="flex min-w-0 items-start gap-3">
+          {/* A plain ordinal, weighted rather than filled. A tinted circle here
+              sat next to the tinted status pill on the same line, and two chip
+              shapes in one card header is what makes a page look busy. */}
           <span
             aria-hidden="true"
-            className="text-xs font-medium text-faint tabular"
+            className={`w-3 shrink-0 pt-0.5 text-[13px] tabular ${
+              isNextStep
+                ? 'font-semibold text-foreground'
+                : 'font-medium text-faint'
+            }`}
           >
             {definition.step}
           </span>
@@ -149,7 +163,7 @@ export function UploadCard({
         )}
       </header>
 
-      <div className="space-y-3 p-4">
+      <div className="space-y-4 p-5">
         {prerequisite.blocked ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-surface px-3 py-2.5">
             <p className="text-xs text-muted-foreground">
@@ -194,9 +208,11 @@ export function UploadCard({
               }}
             />
 
-            {/* The action sits directly under the file it acts on. */}
+            {/* The action sits directly under the file it acts on, and only
+                the next step in the sequence spends the accent. */}
             <Button
               size="lg"
+              variant={isNextStep ? 'default' : 'outline'}
               className="w-full"
               disabled={busy || files.length === 0}
               onClick={() => void handleUpload()}
@@ -261,7 +277,7 @@ export function UploadCard({
 
         {/* One line about what is in use; everything else is behind Details. */}
         {current !== null && (
-          <div className="border-t border-border pt-3">
+          <div className="border-t border-border pt-4">
             <p className="text-xs text-muted-foreground tabular">
               {current.source_version} · {formatCount(current.record_count, 'record')}
             </p>

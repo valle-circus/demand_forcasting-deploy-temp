@@ -20,7 +20,7 @@ export function ErrorState({ error, onRetry, title }: ErrorStateProps) {
   return (
     <div
       role="alert"
-      className="rounded-lg border border-border bg-surface px-4 py-4"
+      className="rounded-xl border border-border bg-card px-5 py-4"
     >
       <h2 className="text-sm font-medium text-danger">
         {title ??

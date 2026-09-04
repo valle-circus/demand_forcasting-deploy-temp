@@ -422,25 +422,20 @@ describe('boundaries stated on the page', () => {
     expect(screen.getByText(/not edited here/i)).toBeInTheDocument()
   })
 
-  it('shows unbuilt editors as planned rather than as controls that would fail', async () => {
+  it('says where unmaintainable data actually comes from, without advertising unbuilt editors', async () => {
     freshWorkspace()
     renderPage()
 
     await screen.findByRole('heading', { name: 'Maintained data' })
 
-    for (const title of [
-      'Items and policies',
-      'Menu calendar',
-      'Bill of materials',
-    ]) {
-      const heading = screen.getByRole('heading', { name: title })
-      expect(heading).toBeInTheDocument()
-      // No control at all beats a disabled one that implies it might work.
-      expect(
-        within(heading.closest('div')?.parentElement ?? document.body).queryByRole(
-          'button',
-        ),
-      ).not.toBeInTheDocument()
-    }
+    // What the maintainer needs is the boundary — where each kind of data is
+    // actually changed. Three dashed cards labelled "Planned" stated a roadmap
+    // instead, which is not something anyone can act on.
+    expect(
+      screen.getByText(
+        /item policies, the menu calendar and the bill of materials/i,
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/^Planned$/)).not.toBeInTheDocument()
   })
 })

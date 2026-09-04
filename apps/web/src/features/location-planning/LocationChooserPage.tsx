@@ -62,7 +62,7 @@ export function LocationChooserPage() {
           <li key={location.location_id}>
             <Link
               to={`/locations/${encodeURIComponent(location.location_id)}`}
-              className="block rounded-lg border border-border px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="block rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
               <span className="block text-sm font-medium">
                 {location.location_name}

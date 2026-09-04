@@ -10,8 +10,29 @@ import { SideNavigation } from '@/components/SideNavigation'
 import { Button } from '@/components/ui/button'
 import { useAuth } from './auth/authContext'
 
-function UserMenu() {
+function UserMenu({ layout = 'bar' }: { layout?: 'bar' | 'stacked' }) {
   const { user, signOut } = useAuth()
+
+  if (layout === 'stacked') {
+    return (
+      <div className="flex flex-col gap-2">
+        <span
+          className="truncate text-xs text-muted-foreground"
+          title={user?.email ?? undefined}
+        >
+          {user?.email ?? 'Signed in'}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => void signOut()}
+        >
+          Sign out
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="flex items-center gap-3">
@@ -85,7 +106,7 @@ export function AppShell() {
   }, [drawerOpen])
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-canvas">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-foreground focus:px-3 focus:py-2 focus:text-sm focus:text-background"
@@ -105,18 +126,22 @@ export function AppShell() {
               <SideNavigation />
             </div>
           </div>
-          <div className="border-t border-border px-3 py-3">
+          {/* Who is signed in belongs with the rest of the persistent chrome.
+              It used to sit alone in a full-width bar whose left half was
+              empty, which cost a band of vertical space on every screen. */}
+          <div className="space-y-3 border-t border-border px-3 py-3">
+            <UserMenu layout="stacked" />
             <ApiStatusLine />
           </div>
         </aside>
 
         <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur sm:px-6">
+          {/* Small screens only: on desktop the sidebar carries all of this. */}
+          <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-border bg-canvas/85 px-4 py-2.5 backdrop-blur sm:px-6 lg:hidden">
             <Button
               ref={menuButtonRef}
               variant="ghost"
               size="icon"
-              className="lg:hidden"
               aria-expanded={drawerOpen}
               aria-controls="primary-navigation-drawer"
               onClick={() => {
@@ -126,9 +151,7 @@ export function AppShell() {
               <Menu aria-hidden="true" />
               <span className="sr-only">Open navigation</span>
             </Button>
-            <div className="lg:hidden">
-              <BrandMark />
-            </div>
+            <BrandMark />
             <div className="ml-auto">
               <UserMenu />
             </div>
@@ -138,7 +161,7 @@ export function AppShell() {
             id="main-content"
             ref={mainRef}
             tabIndex={-1}
-            className="px-4 py-6 focus:outline-none sm:px-6"
+            className="px-4 py-8 focus:outline-none sm:px-6 lg:px-8"
           >
             <Outlet />
           </main>
@@ -167,7 +190,7 @@ export function AppShell() {
               role="dialog"
               aria-modal="true"
               aria-label="Primary navigation"
-              className="absolute inset-y-0 left-0 flex w-64 max-w-[85%] flex-col justify-between border-r border-border bg-background"
+              className="absolute inset-y-0 left-0 flex w-64 max-w-[85%] flex-col justify-between border-r border-border bg-canvas"
               // Small travel and a fast exit: leaving should get out of the way.
               initial={{ opacity: 0, x: -12 }}
               animate={{ opacity: 1, x: 0 }}

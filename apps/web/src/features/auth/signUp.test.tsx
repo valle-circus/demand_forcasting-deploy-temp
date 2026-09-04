@@ -83,6 +83,25 @@ describe('self-service sign-up', () => {
     expect(call.options?.emailRedirectTo).toContain('/auth/callback')
   })
 
+  it('accepts the circus-group alias and asks for it by default', async () => {
+    const user = userEvent.setup()
+    renderApp()
+
+    // The alias colleagues are told to use, so it is the one the calm state of
+    // the form names. circuskitchens.com stays valid for existing accounts and
+    // is named in the error state instead.
+    expect(
+      await screen.findByText(/use your @circus-group\.com address/i),
+    ).toBeInTheDocument()
+
+    await fillForm(user, 'colleague@circus-group.com')
+    await user.click(screen.getByRole('button', { name: 'Create account' }))
+
+    await screen.findByRole('heading', { name: 'Check your email' })
+    const call = fake.signUp.mock.calls[0][0] as { email: string }
+    expect(call.email).toBe('colleague@circus-group.com')
+  })
+
   it('refuses an outside email domain without calling Supabase', async () => {
     const user = userEvent.setup()
     renderApp()
@@ -91,7 +110,9 @@ describe('self-service sign-up', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(
-      await screen.findByText(/use your @circuskitchens\.com address/i),
+      await screen.findByText(
+        /use your @circus-group\.com or @circuskitchens\.com address/i,
+      ),
     ).toBeInTheDocument()
     // The real gate is the auth.users trigger, but there is no reason to spend
     // a request discovering what the form already knows.
@@ -139,7 +160,7 @@ describe('self-service sign-up', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /limited to @circuskitchens\.com email addresses/i,
+      /limited to @circus-group\.com or @circuskitchens\.com email addresses/i,
     )
   })
 

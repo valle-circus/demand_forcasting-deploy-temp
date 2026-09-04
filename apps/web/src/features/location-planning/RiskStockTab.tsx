@@ -109,7 +109,7 @@ export function RiskStockTab({
         </Toggle>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -305,7 +305,7 @@ function StatusCell({
     return (
       <>
         <StatusBadge {...DISPOSITION[disposition]} />
-        <span className="mt-0.5 block text-xs text-faint">
+        <span className="mt-0.5 block text-xs text-subtle">
           short {formatDate(row.with_open_po_first_uncovered_date)} without the
           proposal
         </span>
@@ -318,7 +318,7 @@ function StatusCell({
       <>
         <StatusBadge {...DISPOSITION[disposition]} />
         {row.first_stockout_within_horizon_date !== null && (
-          <span className="mt-0.5 block text-xs text-faint">
+          <span className="mt-0.5 block text-xs text-subtle">
             short {formatDate(row.first_stockout_within_horizon_date)} even with
             the proposal
           </span>
@@ -334,7 +334,7 @@ function StatusCell({
   return (
     <>
       <StatusBadge tone="ready" label="Covered" />
-      <span className="mt-0.5 block text-xs text-faint">
+      <span className="mt-0.5 block text-xs text-subtle">
         without the proposal
       </span>
     </>

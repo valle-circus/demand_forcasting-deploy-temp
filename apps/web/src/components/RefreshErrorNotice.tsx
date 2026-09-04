@@ -14,7 +14,7 @@ export function RefreshErrorNotice({
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface px-4 py-2.5 text-xs text-warning"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-xs text-warning"
     >
       <span>Showing previously loaded data. Refresh failed: {errorMessage(error)}</span>
       <button

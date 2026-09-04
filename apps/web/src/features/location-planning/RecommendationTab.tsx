@@ -103,7 +103,7 @@ export function RecommendationTab({
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>

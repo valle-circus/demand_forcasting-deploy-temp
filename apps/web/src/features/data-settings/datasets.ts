@@ -36,7 +36,7 @@ export const DATASETS: readonly DatasetDefinition[] = [
     scope: 'global',
     accept: '.xlsx',
     multiple: false,
-    fileDescription: 'Phase2_Master_Data_Template_v1.xlsx',
+    fileDescription: 'the master data workbook',
     purpose:
       'Items, item policies, locations and delivery rules. Everything else is validated against this.',
     updateBehaviour:
@@ -50,7 +50,7 @@ export const DATASETS: readonly DatasetDefinition[] = [
     scope: 'global',
     accept: '.xlsx',
     multiple: false,
-    fileDescription: 'Phase2_Planning_Input_Template_v1.xlsx',
+    fileDescription: 'the forecast workbook',
     purpose:
       'Daily demand, the menu calendar, and the bill of materials for every dish.',
     updateBehaviour:
@@ -64,7 +64,7 @@ export const DATASETS: readonly DatasetDefinition[] = [
     scope: 'location',
     accept: '.xlsx',
     multiple: false,
-    fileDescription: 'Apicbase Stock Report export',
+    fileDescription: 'the Apicbase stock export',
     purpose:
       'On-hand quantities for one location, used as the opening balance of the projection.',
     updateBehaviour:
@@ -79,7 +79,7 @@ export const DATASETS: readonly DatasetDefinition[] = [
     scope: 'location',
     accept: '.pdf',
     multiple: true,
-    fileDescription: 'Cumulative Transgourmet Bestelldetails PDFs',
+    fileDescription: 'the Transgourmet order PDFs',
     uploadInstruction:
       'Select all still-relevant Transgourmet PDFs together, including files from previous order days. This upload replaces the previous PO snapshot, so files from earlier uploads are not carried forward. Exact duplicate files in this batch are ignored.',
     purpose:

@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         alias="CORS_ORIGINS",
     )
     allowed_email_domains_csv: str = Field(
-        default="circuskitchens.com",
+        default="circus-group.com,circuskitchens.com",
         alias="ALLOWED_EMAIL_DOMAINS",
     )
     supabase_url: str | None = Field(default=None, alias="SUPABASE_URL")
