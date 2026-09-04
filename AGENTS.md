@@ -20,9 +20,12 @@ to Snowflake.
 
 ## Temporary GitHub deployment mirror
 
+- Work on the currently checked-out branch. Do not create, switch, rename, or
+  delete branches, and do not create a worktree, unless the user explicitly
+  requests it. The user decides whether a branch or pull request is needed.
 - The authoritative repository is
   `https://github.com/circus-kitchens/demand_forcasting.git`. Use it for fetches,
-  code review, and pull requests.
+  code review, and any pull request the user explicitly requests.
 - Until Vercel and Render have access to the organization repository, the
   private repository
   `https://github.com/valle-circus/demand_forcasting-deploy-temp.git` is only a
@@ -33,8 +36,9 @@ to Snowflake.
   to both. Verify this before relying on it with `git remote -v` and
   `git config --get-all remote.origin.pushurl`; this local configuration is not
   inherited by a new clone.
-- Create and merge pull requests only in `circus-kitchens/demand_forcasting`.
-  Never create or merge a duplicate pull request in the temporary mirror.
+- Do not independently create a pull request. If the user requests one, create
+  and merge it only in `circus-kitchens/demand_forcasting`; never create or
+  merge a duplicate pull request in the temporary mirror.
 - A pull request merged in GitHub creates a server-side commit that is not
   automatically copied to the mirror. After merging in the organization, run
   `git switch main`, `git pull --ff-only origin main`, and `git push origin main`

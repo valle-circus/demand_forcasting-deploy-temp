@@ -6,8 +6,12 @@ files ever differ.
 
 ## Temporary GitHub deployment mirror
 
-- `circus-kitchens/demand_forcasting` is authoritative and is the only place to
-  open and merge pull requests.
+- Work on the currently checked-out branch. Do not create, switch, rename, or
+  delete branches, and do not create a worktree, unless the user explicitly
+  requests it. The user decides whether a branch or pull request is needed.
+- `circus-kitchens/demand_forcasting` is authoritative. Do not independently
+  create a pull request; if the user requests one, this is the only repository
+  where it may be opened and merged.
 - `valle-circus/demand_forcasting-deploy-temp` is temporarily used only by
   Vercel and Render. Do not open or merge pull requests there.
 - This checkout normally fetches from the organization repository and pushes to
