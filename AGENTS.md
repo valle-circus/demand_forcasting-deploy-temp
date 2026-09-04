@@ -18,6 +18,35 @@ to Snowflake.
 5. If the task spans several sessions or has dependent milestones, create or
    update a checklist plan in `docs/plans/`.
 
+## Temporary GitHub deployment mirror
+
+- The authoritative repository is
+  `https://github.com/circus-kitchens/demand_forcasting.git`. Use it for fetches,
+  code review, and pull requests.
+- Until Vercel and Render have access to the organization repository, the
+  private repository
+  `https://github.com/valle-circus/demand_forcasting-deploy-temp.git` is only a
+  deployment mirror. Do not treat it as a second source of truth.
+- In the established Windows checkout, `origin` fetches from the organization
+  repository and has two push URLs: the organization repository first and the
+  temporary mirror second. One local `git push` therefore pushes the same refs
+  to both. Verify this before relying on it with `git remote -v` and
+  `git config --get-all remote.origin.pushurl`; this local configuration is not
+  inherited by a new clone.
+- Create and merge pull requests only in `circus-kitchens/demand_forcasting`.
+  Never create or merge a duplicate pull request in the temporary mirror.
+- A pull request merged in GitHub creates a server-side commit that is not
+  automatically copied to the mirror. After merging in the organization, run
+  `git switch main`, `git pull --ff-only origin main`, and `git push origin main`
+  so local `main` and both repositories converge on the organization merge.
+- Multiple push URLs are not atomic. Read the complete push output; if one
+  destination fails, resolve it and retry before claiming the mirror is current.
+- Do not force-push, delete, transfer, or rename either repository as routine
+  cleanup. When organization deployment access is restored, reconnect Vercel
+  and Render to the authoritative repository, verify the deployed commit, then
+  remove the temporary push URL and mirror under an explicitly approved cleanup
+  task. Update this section and `MEMORY.md` at that time.
+
 ## Project boundaries
 
 - This repository implements the Phase 2 supply-planning calculation. Phase 1

@@ -15,6 +15,17 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-09-04: **The organization repository is authoritative and a personal
+  repository is a temporary deployment-only mirror.** Fetch, review, and merge
+  through `circus-kitchens/demand_forcasting`; create no pull requests in
+  `valle-circus/demand_forcasting-deploy-temp`. The established checkout has two
+  `origin` push URLs so one local push updates both, but this configuration is
+  local and non-atomic. After a GitHub-side organization merge, fast-forward
+  local `main` from `origin` and push it so the mirror receives the merge
+  commit. When Vercel and Render can access the organization repository, point
+  both services back to it before explicitly removing the temporary mirror.
+  Evidence: `AGENTS.md`, `CLAUDE.md`, and local `.git/config`. Status: `active`.
+
 - 2026-09-03: **The original no-cache UI decision is superseded; performance
   tranches 1 and 2 are implemented, with authenticated browser acceptance still
   open.** The frontend now uses a maintainer-confirmed 10-minute
