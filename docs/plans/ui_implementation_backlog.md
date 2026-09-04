@@ -185,10 +185,13 @@ Two reasons, in order of weight:
    separated by `#E7E7E9` hairlines. That, not padding, is why the UI reads as
    crowded.
 
-Status stops being an outlined pill with coloured text and becomes a **tinted
-fill with dark text**, taken from the brand's own system pairs
-(`#CEF5CA`/`#114E0B`, `#F8E4E4`/`#8C1F18`). Charts get a single-hue blue ramp
-of their own so they stop borrowing `--info`.
+Status uses an outlined white pill with coloured text and a matching dot for
+routine ready, warning, running, and neutral states. Only genuinely blocking
+states use a **tinted fill with dark text**, taken from the brand's own system
+pair. This supersedes the initial all-filled treatment after maintainer review
+found that repeating tinted backgrounds made every pill look strongly
+highlighted. Charts retain a single-hue blue ramp of their own so they do not
+borrow status colours.
 
 The semantic status *table* in D5 is unchanged in meaning — ready / warning /
 blocked / running / neutral — only its values and its rendering change.
@@ -833,11 +836,12 @@ system review**; what shipped is under **Visual system implemented**.
       blue accent, canvas `#FAFAFA` over `#FFFFFF` surfaces, brand ink
       `#1A1A1A`, a new `--circus-sunken` and `--circus-subtle`, and `--faint`
       demoted to placeholders only.
-- [x] Added status *pairs* (soft fill + dark text) and a chart ramp
+- [x] Added status colour pairs and a chart ramp
       (`--chart-in-stock` / `-on-order` / `-proposal` / `-secondary` /
       `-target`) that is independent of the status colours.
-- [x] Rewrote `StatusBadge` as a tinted pill with a matching dot; dropped
-      `animate-pulse` from the running tone in favour of a hollow ring.
+- [x] Reworked `StatusBadge` so routine states are outlined and only blocking
+      states retain a tinted fill; running uses a hollow ring rather than
+      `animate-pulse`.
 - [x] Repointed `CoverageChart` off `bg-info/55` onto the chart ramp, and
       `StockProjectionChart` onto the same tokens. `--circus-info` is gone.
 - [x] Fixed the two defects found while reviewing: `Select` rendering the raw

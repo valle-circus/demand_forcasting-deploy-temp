@@ -18,6 +18,19 @@ to Snowflake.
 5. If the task spans several sessions or has dependent milestones, create or
    update a checklist plan in `docs/plans/`.
 
+## Git actions require explicit user authorization
+
+- Editing files, implementing a feature, fixing a bug, running tests, or
+  finishing a task does **not** authorize any Git write or GitHub action.
+- Do not stage, commit, push, pull, merge, rebase, cherry-pick, tag, create or
+  change branches/worktrees, or open/merge/close a pull request unless the user
+  explicitly requests that specific action.
+- A previous request for one Git action is not continuing permission for later
+  Git actions. Wait for a new explicit request when another action is needed.
+- Read-only inspection such as `git status`, `git diff`, and `git log` is
+  allowed. After file edits, leave the changes uncommitted and report them to
+  the user unless the user explicitly asks for a commit or push.
+
 ## Temporary GitHub deployment mirror
 
 - Work on the currently checked-out branch. Do not create, switch, rename, or
@@ -40,9 +53,9 @@ to Snowflake.
   and merge it only in `circus-kitchens/demand_forcasting`; never create or
   merge a duplicate pull request in the temporary mirror.
 - A pull request merged in GitHub creates a server-side commit that is not
-  automatically copied to the mirror. After merging in the organization, run
-  `git switch main`, `git pull --ff-only origin main`, and `git push origin main`
-  so local `main` and both repositories converge on the organization merge.
+  automatically copied to the mirror. Only when the user explicitly requests
+  synchronization, run the requested pull/push steps so local `main` and both
+  repositories converge on the organization merge.
 - Multiple push URLs are not atomic. Read the complete push output; if one
   destination fails, resolve it and retry before claiming the mirror is current.
 - Do not force-push, delete, transfer, or rename either repository as routine

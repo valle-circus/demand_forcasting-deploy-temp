@@ -496,6 +496,11 @@ All three pages use the same server-calculated readiness model:
 | **Stale calculation** | A completed run exists, but one or more newer accepted input versions exist. | Result remains viewable but is not labelled current. |
 | **No run yet** | Inputs may be ready, but no result exists for the location. | Clear first-run action. |
 
+Status pills use a quiet white surface and neutral outline for routine ready,
+warning, running, and informational states. Only genuinely blocking states use
+a tinted background, so strong colour remains a meaningful escalation rather
+than decoration repeated throughout tables.
+
 Provenance labels should use plain language with a tooltip for the canonical
 value: **Observed**, **Manual**, **Proposal/default**, **Unavailable**, and
 **Known empty**. Risk is displayed with icon, text, and colour; colour alone is

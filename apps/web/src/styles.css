@@ -55,7 +55,8 @@
   --circus-accent-text: #2c4ec7; /* links and accent text — 6.9:1 */
   --circus-accent-soft: #ebeffc; /* active nav, selected row — 6.1:1 */
 
-  /* Status — a soft fill with dark text, from the brand's own system pairs.
+  /* Status colours. Routine badges use these for text and dots on an outlined
+     white pill; the soft pair is reserved for genuinely blocking emphasis.
      Status only: never decoration, never a chart series. */
   --circus-success: #166534;
   --circus-success-soft: #e3f3e4; /* 6.2:1 */

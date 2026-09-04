@@ -1,26 +1,21 @@
 import type { ImportStatus } from '@/lib/types'
 
 /**
- * A status pill: a tinted fill, a dark label, and a matching dot.
+ * A compact status pill with a text label and matching dot.
  *
- * Colour never carries the status on its own — it survives greyscale, colour
- * blindness, and a photocopied screenshot of the screen. The fill is what makes
- * it readable at a glance: an outlined pill reduces the colour to a 1px stroke
- * at 12px, so every status ends up weighing the same.
- *
- * The fills come from the brand's own system pairs and are deliberately not the
- * accent hue — the accent means "act on this", and a status must never compete
- * with it.
+ * Routine states stay outlined so dense tables remain calm. Only a genuinely
+ * blocking state receives a tinted fill. Colour is never the only carrier of
+ * meaning: every state also has a plain-language label and dot treatment.
  */
 
 export type StatusTone = 'ready' | 'warning' | 'blocked' | 'running' | 'neutral'
 
 const TONE: Record<StatusTone, string> = {
-  ready: 'bg-success-soft text-success',
-  warning: 'bg-warning-soft text-warning',
-  blocked: 'bg-danger-soft text-danger',
-  running: 'bg-neutral-soft text-neutral',
-  neutral: 'bg-neutral-soft text-neutral',
+  ready: 'border-border bg-card text-success',
+  warning: 'border-border bg-card text-warning',
+  blocked: 'border-danger-soft bg-danger-soft text-danger',
+  running: 'border-border bg-card text-neutral',
+  neutral: 'border-border bg-card text-neutral',
 }
 
 export function StatusBadge({
@@ -32,7 +27,7 @@ export function StatusBadge({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${TONE[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${TONE[tone]}`}
     >
       {/* Hollow while work is in flight, filled once it has settled. A ring
           rather than a pulse: nothing in this app loops. */}

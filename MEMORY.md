@@ -20,8 +20,12 @@ not a task log or a replacement for the detailed engineering brief.
   through `circus-kitchens/demand_forcasting`; create no pull requests in
   `valle-circus/demand_forcasting-deploy-temp`. Agents work on the currently
   checked-out branch and must not create or switch branches/worktrees or open a
-  pull request unless the user explicitly requests it. The established checkout
-  has two `origin` push URLs so one local push updates both, but this
+  pull request unless the user explicitly requests it. Agents must also never
+  stage, commit, push, pull, merge, rebase, cherry-pick, or tag unless the user
+  explicitly requests that specific action; file-editing or task-completion
+  requests do not imply Git authorization, and each later Git action requires a
+  new explicit request. The established checkout has two `origin` push URLs so
+  one explicitly requested local push updates both, but this
   configuration is local and non-atomic. After a GitHub-side organization
   merge, fast-forward local `main` from `origin` and push it so the mirror
   receives the merge commit. When Vercel and Render can access the organization
