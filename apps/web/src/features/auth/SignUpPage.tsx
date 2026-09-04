@@ -7,12 +7,13 @@ import { BrandMark } from '@/components/BrandMark'
 import { Button } from '@/components/ui/button'
 import {
   allowedEmailDomainsLabel,
+  preferredEmailDomainLabel,
   emailDomainAllowed,
 } from '@/lib/emailDomains'
 import { errorMessage } from '@/lib/errors'
 
 const FIELD_CLASS =
-  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none'
+  'h-10 w-full rounded-lg border border-input bg-card px-3 text-sm focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none'
 
 /**
  * Supabase's own default floor is six characters. Eight is required here
@@ -114,7 +115,7 @@ export function SignUpPage() {
         <BrandMark />
 
         {status === 'unconfigured' ? (
-          <div role="status" className="mt-6 rounded-lg border border-border p-4">
+          <div role="status" className="mt-6 rounded-xl border border-border bg-card p-4">
             <h1 className="text-base font-medium">
               Authentication is not configured
             </h1>
@@ -180,7 +181,7 @@ export function SignUpPage() {
                     id={`${emailId}-hint`}
                     className="mt-1 text-sm text-muted-foreground"
                   >
-                    Use your {allowedEmailDomainsLabel()} address.
+                    Use your {preferredEmailDomainLabel()} address.
                   </p>
                 ) : (
                   <p id={`${emailId}-error`} className="mt-1 text-sm text-danger">
