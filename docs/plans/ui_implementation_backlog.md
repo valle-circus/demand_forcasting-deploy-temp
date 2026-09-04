@@ -161,6 +161,48 @@ combobox is unjustified below ~20.
 
 ---
 
+
+### D9 — Brand palette: Circus blue, not the skill's placeholder green *(confirmed 2026-09-04)*
+
+D5 fixed the *structure* of the visual direction and still stands. This decides
+the *values*, which D5 left to the `circus-ui` skill — and the skill shipped
+example hexes, not brand ones.
+
+The accent becomes **`#2D62FF`**, Circus Group's own
+`--base-color-brand--blue`, replacing the placeholder emerald `#0B8459`. The
+canvas becomes `#FAFAFA` (`--circus-white`) with cards lifted to `#FFFFFF`,
+which is what D5 asked for in the first place — *"`stone-50` page, `white`
+surfaces"* — and which the skill's tokens had inverted.
+
+Two reasons, in order of weight:
+
+1. **Green is overloaded.** Today it is both the brand accent (primary action,
+   active nav item, pressed toggle) and the success status (Covered, Accepted,
+   Ready). One hue means "click this" and "this is fine" on the same screen.
+   Blue as the accent frees green to only ever mean good — which is also how
+   Circus's own system uses it.
+2. **There is no figure/ground.** Canvas, sidebar and cards are all `#FFFFFF`
+   separated by `#E7E7E9` hairlines. That, not padding, is why the UI reads as
+   crowded.
+
+Status stops being an outlined pill with coloured text and becomes a **tinted
+fill with dark text**, taken from the brand's own system pairs
+(`#CEF5CA`/`#114E0B`, `#F8E4E4`/`#8C1F18`). Charts get a single-hue blue ramp
+of their own so they stop borrowing `--info`.
+
+The semantic status *table* in D5 is unchanged in meaning — ready / warning /
+blocked / running / neutral — only its values and its rendering change.
+
+Evidence, contrast maths and a before/after specimen:
+https://claude.ai/code/artifact/07471639-7a5a-4de3-a404-5c1ef65d7ee2
+
+**Typeface:** stays Geist for now. Circus uses Inter for body and PolySans for
+display; Inter is a free swap but PolySans is a licensed retail font, and
+whether the marketing licence covers an internal tool is unresolved. Not a
+blocker — revisit as a separate decision.
+
+---
+
 ## 3. Screen blueprints
 
 ### 3.1 Application shell
@@ -778,6 +820,100 @@ only calculation authority.
 
 ---
 
+### WP9 — Visual system: brand palette, density and hierarchy → D9, 2H usability
+
+**Complete 2026-09-04** on branch `ui_visual_system`, three commits. Implements
+D9 and closes the maintainer's report that the UI is crowded and does not read
+as a modern business tool. Full findings in the scratchpad under **Visual
+system review**; what shipped is under **Visual system implemented**.
+
+**Tranche 1 — tokens and status** (`c862a0a`)
+
+- [x] Replaced the `--circus-*` block in `styles.css` with the D9 values: brand
+      blue accent, canvas `#FAFAFA` over `#FFFFFF` surfaces, brand ink
+      `#1A1A1A`, a new `--circus-sunken` and `--circus-subtle`, and `--faint`
+      demoted to placeholders only.
+- [x] Added status *pairs* (soft fill + dark text) and a chart ramp
+      (`--chart-in-stock` / `-on-order` / `-proposal` / `-secondary` /
+      `-target`) that is independent of the status colours.
+- [x] Rewrote `StatusBadge` as a tinted pill with a matching dot; dropped
+      `animate-pulse` from the running tone in favour of a hollow ring.
+- [x] Repointed `CoverageChart` off `bg-info/55` onto the chart ramp, and
+      `StockProjectionChart` onto the same tokens. `--circus-info` is gone.
+- [x] Fixed the two defects found while reviewing: `Select` rendering the raw
+      location id, and `text-faint` carrying essential content in
+      `RiskStockTab`'s `StatusCell`.
+
+**Tranche 2 — density and rhythm** (`d2d889c`)
+
+- [x] Table: `px-4 py-3` cells for 44px rows, header set as 11px caps on
+      `--sunken`, first and last cell aligned to the card gutter.
+- [x] Card padding 16px → 20px; controls to 8px radius, cards to 12px, so a
+      control no longer shares a radius with its container.
+- [x] Default `Button` height 32px → 36px, `lg` stays 40px for touch.
+- [x] Replaced uniform `space-y-*` on all three pages with a real rhythm: 40px
+      below the page header, 32px between sections, 16px within a group.
+- [x] KPI tiles: value to 30px, label to 13px.
+- [ ] **Sticky table header — not done, and not cheap.** The table sits in an
+      `overflow-x-auto` wrapper, and overflow on one axis computes to `auto` on
+      the other, so `position: sticky` would anchor to a container that never
+      scrolls vertically. This is the same root cause as the `InfoHint`
+      clipping fixed on 2026-09-01. It needs the wrapper restructured, not a
+      class; deferred rather than half-done.
+
+**Tranche 3 — structure** (`de05ef8`)
+
+- [x] Overview: the alert strip, the KPI row and the table now carry three
+      distinct weights — a lifted card with a tone rail, plain white tiles, and
+      a bordered table — instead of one repeated `rounded-lg border`.
+- [x] Location planning: the five stacked metadata strips are one card, with
+      the stale warning folded into it; the `RunAction` cutoff input sits
+      beside the button instead of stacking four ragged-left lines under it.
+- [x] Data & settings: only the next actionable step keeps the accent button
+      and the accent step marker, everything else is outline; the step ordinal
+      became a real marker; internal template filenames are out of the dropzone
+      copy; the three `PlannedFeatureCard`s are gone.
+- [x] Shell: the desktop top bar is removed and the sidebar footer carries who
+      is signed in; the "P2" brand mark is replaced.
+
+**Deviations from the review, and why**
+
+- **Tabs stay centred.** The maintainer asked for that twice on 2026-09-01
+  (see **Tabs centred**); it is a decision, not a defect.
+- **The purchase-order upload instruction stays long.** The review flagged it
+  as a paragraph of helper text, but `datasets.test.ts` pins three specific
+  claims in it and commit `b09f8d3` added it deliberately: it is what stops a
+  maintainer losing PO lines by uploading only the newest file. Load-bearing,
+  left alone.
+- **`PlannedFeatureCard` removed and its test rewritten.** The old test
+  asserted that unbuilt editors are *shown* as planned. The boundary it was
+  really protecting — where item policies, the menu calendar and the BOM come
+  from — is now one sentence in the section those cards sat under, and the test
+  checks for that instead. Reversible; `git show de05ef8` has the cards.
+- No typeface change (see D9). No dark mode.
+
+**Verification**
+
+- [x] `pnpm check` green: ESLint, TypeScript, 168 Vitest tests, production
+      build.
+- [x] Contrast measured in the browser from the resolved tokens, not from the
+      source hexes. Everything clears AA on the surface it actually sits on:
+      ink 16.7:1, muted 5.3 / 4.8 (card / sunken), subtle 6.4, accent-text 6.9,
+      white-on-accent 4.9, input outline 3.2, and the four status pairs at
+      8.3 / 6.6 / 7.4 / 7.1.
+- [x] **One real regression caught this way**: the new 11px table header at
+      `--muted` on `--sunken` measured 4.22:1. Fixed in the token, not at the
+      call site — `--circus-muted` darkened `#6E7482` → `#666B78`, which holds
+      4.5:1 on white, canvas and sunken alike.
+- [x] Sign-in and first-run states checked live at 1440px and 375px; no console
+      errors beyond the expected `ERR_CONNECTION_REFUSED` with no local API.
+- [ ] **Authenticated pass still owed.** Overview, Location planning and Data &
+      settings could not be seen against real data — signing in needs
+      credentials. The three screens are covered by 168 tests and by the token
+      verification above, but nobody has looked at them.
+
+---
+
 ## 6. Contract observations for Codex (frontend-blocking? no)
 
 Documented per the brief's rule rather than worked around with a parallel
@@ -866,6 +1002,47 @@ backend logic:
 
 ## 8. Dated progress
 
+
+- 2026-09-04 — **WP9 implemented and verified.** Branch `ui_visual_system`,
+  three commits. The accent is now Circus Group's own `#2D62FF`, the canvas is
+  tinted with cards lifted to white, status is a tinted pill from the brand's
+  system pairs, and charts have an ordered ramp instead of borrowing `--info`.
+  Tables opened from 8px cells to 44px rows with an 11px caps header; radius
+  now separates controls (8px) from containers (12px); each page has a real
+  40 / 32 / 16 rhythm instead of one uniform gap. Data & settings spends the
+  accent once — only the next actionable step — and the "P2" mark, the template
+  filenames in the dropzone copy and the three "Planned" cards are gone. Both
+  review defects are fixed: the pickers show the kitchen name rather than
+  `LOC_DEMO_BERLIN_001`, and decision-changing sub-lines moved off `--faint`.
+  `pnpm check` green with 168 tests. Contrast was measured from the resolved
+  tokens in the running app rather than from the source hexes, which caught one
+  regression this work introduced — the new table header at 4.22:1 — fixed by
+  darkening `--circus-muted` to `#666B78` so it holds AA on white, canvas and
+  sunken alike. Sticky headers were dropped rather than half-shipped: the
+  `overflow-x-auto` wrapper makes `position: sticky` anchor to a container that
+  never scrolls vertically. The centred tabs and the purchase-order upload
+  instruction were left alone on evidence — both are prior maintainer decisions,
+  and the latter is pinned by tests because it prevents PO data loss. **The
+  three authenticated screens have not been looked at against real data**;
+  that pass still needs a signed-in session.
+
+- 2026-09-04 — **Visual system reviewed; the palette was a placeholder.**
+  Maintainer reported the UI as crowded and not reading as a modern business
+  tool, and asked where the colour palette came from. It came from the
+  `circus-ui` skill's *example* token block, whose own text says to replace the
+  accent with real brand values. Read Circus Group's live stylesheet: the brand
+  accent is `--base-color-brand--blue: #2d62ff`, the ground is
+  `--circus-white: #fafafa`, ink is `#1a1a1a`, and green is reserved for
+  `system--success-green`. So the app was not only off-brand — green meant both
+  "primary action" and "success" on the same screen. Also established that the
+  crowding is a figure/ground problem (canvas, sidebar and cards all `#FFFFFF`
+  behind `#E7E7E9` hairlines), not a padding problem, and that D5 had originally
+  specified the correct tinted-canvas arrangement before the skill's inverted
+  tokens were adopted. Two real defects found: `Select` renders the raw location
+  id instead of the kitchen name, and `RiskStockTab` puts decision-changing text
+  on `--faint` at 2.8:1. Recorded as **D9** and **WP9**; the `circus-ui` skill
+  was corrected in the same pass so example hexes cannot ship again. Full audit
+  in the scratchpad under **Visual system review**.
 - 2026-09-03 — **Page-load performance diagnosed and planned.** With two active
   locations, read-only direct probes measured 35 Supabase reads and about
   2.45 seconds for Overview. A Location visit also initiates 35 reads across

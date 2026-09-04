@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
-@import '@fontsource-variable/geist';
+@import '@fontsource-variable/inter';
 
 /* Declared so shadcn's generated `dark:` utilities compile. No `.dark` token
    block exists and nothing ever adds the class: a half-done dark mode is worse
@@ -9,36 +9,69 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ---------------------------------------------------------------------------
-   Circus internal-app tokens.
+   Circus internal-app tokens. See backlog D9.
 
-   shadcn's semantic variables are mapped onto the Circus palette rather than
-   overridden at call sites, so every generated component inherits the brand
-   without utility soup. Note that shadcn's `--accent` means "subtle hover or
-   selected surface", not the brand accent — the brand accent is `--primary`.
+   These are the real Circus Group brand values, read from the custom properties
+   in the live circus-group.com stylesheet on 2026-09-04 and re-derived where UI
+   contrast required it. They are not placeholders — an earlier revision shipped
+   the `circus-ui` skill's emerald *example* accent by mistake. If a value here
+   is ever wrong, fix it here, never at the call site.
+
+   The accent is brand blue. It must never also carry a status: green means
+   "good" and nothing else, so a maintainer never sees one hue meaning both
+   "click this" and "this is fine".
+
+   shadcn's semantic variables are mapped onto these rather than overridden at
+   call sites, so every generated component inherits the brand. Note that
+   shadcn's `--accent` means "subtle hover or selected surface", not the brand
+   accent — the brand accent is `--primary`.
    --------------------------------------------------------------------------- */
 
 :root {
-  /* Neutrals — the app is basically these. */
-  --circus-bg: #ffffff;
-  --circus-surface: #fafafa;
-  --circus-border: #e7e7e9;
-  --circus-border-strong: #d3d4d8;
-  --circus-border-control: #8e8f96;
-  --circus-text: #0b0b0c;
-  --circus-muted: #6b6c72;
-  --circus-faint: #9a9ba1;
+  /* Neutrals. The canvas is tinted and cards lift off it in white: white cards
+     on a white page behind a hairline is why a dense tool reads as crowded. */
+  --circus-canvas: #fafafa; /* app ground — brand --circus-white */
+  --circus-white: #ffffff; /* cards, panels, popovers, inputs */
+  --circus-surface: #f4f5f6; /* sunken: table heads, inset strips, hover */
+  --circus-border: #e4e6ea; /* hairlines inside a surface */
+  --circus-border-strong: #cdd1d8; /* card and table edges */
+  --circus-border-control: #8a8f9a; /* input and checkbox outlines — 3.2:1 */
+  --circus-text: #1a1a1a; /* brand ink — 16.7:1 on the canvas */
+  --circus-subtle: #5a5f6b; /* sub-lines that change a decision — 6.4:1 */
+  /* Labels and column heads. Dark enough to hold 4.5:1 on the sunken surface
+     too (4.8:1), not only on white (5.3:1) — the table header sits there. */
+  --circus-muted: #666b78;
+  --circus-faint: #9aa0ac; /* placeholders and disabled ONLY — 2.6:1 */
 
   /* Accent — actions and selection only. Roughly one per screen. */
-  --circus-accent: #0b8459;
-  --circus-accent-hover: #076b4a;
-  --circus-accent-text: #076b4a;
-  --circus-accent-soft: #e6f6ef;
+  /* The action colour is ink, not a hue. A saturated blue across button fills
+     is the "marketing accent used as UI" mistake — it reads cheap at size. */
+  --circus-action: #1a1a1a;
+  --circus-action-hover: #333333;
+  /* Identity: links, active nav, selection, focus. Brand blue taken down in
+     chroma and lightness so it reads considered rather than default-web. */
+  --circus-accent: #2c4ec7; /* 6.9:1 on white, and with white text */
+  --circus-accent-hover: #233fa3;
+  --circus-accent-text: #2c4ec7; /* links and accent text — 6.9:1 */
+  --circus-accent-soft: #ebeffc; /* active nav, selected row — 6.1:1 */
 
-  /* Status — status only, never decoration, never a chart series. */
-  --circus-success: #0e9f6e;
-  --circus-warning: #b45309;
-  --circus-danger: #c0342c;
-  --circus-info: #1d4ed8;
+  /* Status — a soft fill with dark text, from the brand's own system pairs.
+     Status only: never decoration, never a chart series. */
+  --circus-success: #166534;
+  --circus-success-soft: #e3f3e4; /* 6.2:1 */
+  --circus-warning: #8a5205;
+  --circus-warning-soft: #fcf0dc; /* 5.7:1 */
+  --circus-danger: #a02420;
+  --circus-danger-soft: #fce7e5; /* 6.4:1 */
+  --circus-neutral: #4a4f5a;
+  --circus-neutral-soft: #f0f1f3; /* 7.2:1 */
+
+  /* Charts own an ordered ramp so they never borrow a status colour. */
+  --chart-in-stock: #2c4ec7;
+  --chart-on-order: #8fa5e8;
+  --chart-proposal: #d5def9; /* hatched, outlined in --circus-accent */
+  --chart-secondary: #576d68; /* brand slate green — comparison series */
+  --chart-target: #1a1a1a;
 
   /* Motion. Entering eases out, exiting eases in and runs faster. */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -48,14 +81,16 @@
   --dur-base: 240ms;
   --dur-slow: 320ms;
 
-  /* shadcn semantic mapping. */
-  --background: var(--circus-bg);
+  /* shadcn semantic mapping. `--background` is the *component* ground (cards,
+     inputs, popovers), which is white. The page ground is `--circus-canvas`,
+     applied by the shell as `bg-canvas`. */
+  --background: var(--circus-white);
   --foreground: var(--circus-text);
-  --card: var(--circus-bg);
+  --card: var(--circus-white);
   --card-foreground: var(--circus-text);
-  --popover: var(--circus-bg);
+  --popover: var(--circus-white);
   --popover-foreground: var(--circus-text);
-  --primary: var(--circus-accent);
+  --primary: var(--circus-action);
   --primary-foreground: #ffffff;
   --secondary: var(--circus-surface);
   --secondary-foreground: var(--circus-text);
@@ -69,8 +104,9 @@
   --input: var(--circus-border-control);
   --ring: var(--circus-accent);
 
-  /* 10px cards and panels; 6px controls. */
-  --radius: 0.625rem;
+  /* 12px cards and panels; 8px controls. A control must not share a radius
+     with the container it sits in, or the two read as one kind of object. */
+  --radius: 0.5rem;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -80,7 +116,7 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -101,22 +137,34 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* Circus-specific, available as utilities such as `text-accent-text`. */
+  /* Circus-specific, available as utilities such as `bg-canvas`. */
+  --color-canvas: var(--circus-canvas);
   --color-surface: var(--circus-surface);
   --color-border-strong: var(--circus-border-strong);
+  --color-subtle: var(--circus-subtle);
   --color-faint: var(--circus-faint);
   --color-accent-text: var(--circus-accent-text);
   --color-accent-soft: var(--circus-accent-soft);
   --color-success: var(--circus-success);
+  --color-success-soft: var(--circus-success-soft);
   --color-warning: var(--circus-warning);
+  --color-warning-soft: var(--circus-warning-soft);
   --color-danger: var(--circus-danger);
-  --color-info: var(--circus-info);
+  --color-danger-soft: var(--circus-danger-soft);
+  --color-neutral: var(--circus-neutral);
+  --color-neutral-soft: var(--circus-neutral-soft);
+
+  --color-chart-in-stock: var(--chart-in-stock);
+  --color-chart-on-order: var(--chart-on-order);
+  --color-chart-proposal: var(--chart-proposal);
+  --color-chart-secondary: var(--chart-secondary);
+  --color-chart-target: var(--chart-target);
 
   --radius-sm: 4px;
   --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 10px;
-  --radius-2xl: 14px;
+  --radius-lg: 8px; /* controls: button, input, select, toggle */
+  --radius-xl: 12px; /* cards, panels, table containers */
+  --radius-2xl: 16px;
 }
 
 /* Base is 14px, not 16px: these are dense tools read at desk distance. The
@@ -128,8 +176,24 @@ body {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   line-height: 1.5;
-  background: var(--background);
+  background: var(--circus-canvas);
   color: var(--foreground);
+  /* Inter's stylistic sets: open 4/6/9 and the single-storey `a`. They are what
+     separates Inter-as-shipped from Inter-as-used by people who set type. */
+  font-feature-settings:
+    'cv02',
+    'cv03',
+    'cv04',
+    'cv11';
+}
+
+/* Headings are set tighter than body: at 24px and up, default tracking reads
+   loose and slightly amateur. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.021em;
+  text-wrap: balance;
 }
 
 button {

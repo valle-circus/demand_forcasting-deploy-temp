@@ -60,7 +60,7 @@ export function OpenPoTab({
 
   return (
     <div className="space-y-3">
-      <p className="rounded-lg border border-border bg-surface px-4 py-2.5 text-xs text-muted-foreground">
+      <p className="rounded-xl border border-border bg-surface px-4 py-2.5 text-xs text-muted-foreground">
         Read from imported PDFs, not confirmed by the supplier. Upload newer
         documents to refresh.
       </p>
@@ -82,7 +82,7 @@ export function OpenPoTab({
           No lines match this filter.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

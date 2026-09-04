@@ -1255,3 +1255,240 @@ loading, cache priming, and mutation invalidation have focused coverage.
   first visit and immediate revisit on all three pages. Capture browser request
   counts, loading-state continuity, and time to useful content; include deployed
   Auth, Render, CORS, asset, and rendering time.
+
+## Visual system review — the palette was a placeholder (2026-09-04)
+
+Maintainer report: the UI still looks crowded, paddings and margins too small,
+visual structure poor, "not modern and sophisticated". Also asked where the
+colour palette came from and whether it can be more modern while staying on
+brand.
+
+### Where the palette came from
+
+`apps/web/src/styles.css` implements the `circus-ui` skill's **example** token
+block verbatim, including the emerald accent `#0B8459`. The skill's own text
+says of that block: *"Replace the accent hexes below with the exact brand values
+if the design team has them."* Nobody did, so a placeholder shipped as the
+product's identity.
+
+### What Circus Group actually uses
+
+Read directly from the custom properties in the live stylesheet at
+`circus-group.com` on 2026-09-04. These are the brand's own variable names:
+
+| Brand variable | Value | Meaning |
+|---|---|---|
+| `--base-color-brand--blue` | `#2d62ff` | **the brand accent** |
+| `--color--1a1a1a` | `#1a1a1a` | body ink |
+| `--circus-white` | `#fafafa` | page ground |
+| `--light-white` / `--color--eeeff1` | `#eeeff1` | secondary surface |
+| `--color--576d68` | `#576d68` | slate green, tertiary |
+| `--base-color-system--success-green` | `#cef5ca` | success fill |
+| `--base-color-system--success-green-dark` | `#114e0b` | success text |
+| `--base-color-system--error-red` | `#f8e4e4` | error fill |
+| `--base-color-system--error-red-dark` | `#3b0b0b` | error text |
+| `--color--error` | `#f2655c` | error mark |
+| `--color--circus-live` | `#ff3636` | live/broadcast — **not for tools** |
+| `--color--focus` | `#d0e6e1` | focus mint |
+
+Type: **PolySans** display, **Inter** body. The app is on Geist.
+
+Two conclusions. First, the accent is blue, not green. Second — and this is the
+substantive one, not the cosmetic one — **green currently means two
+incompatible things at once**: it is the brand accent (Compute recommendation,
+active nav item, pressed Toggle, dropzone hover) *and* it is the success status
+(Covered, Accepted, Ready). A maintainer scanning the Risk & stock table sees
+one hue for "click this" and "this is fine". Moving the accent to the brand
+blue separates them and frees green to only ever mean good.
+
+### Why it reads as crowded
+
+Not padding. **There is no figure/ground.** The canvas, the sidebar and every
+card are all `#FFFFFF`, separated by `#E7E7E9` hairlines, with almost every
+string set at 12-14px. Nothing recedes, so everything competes.
+
+Note that D5 originally specified exactly the right thing — *"`stone-50` page,
+`white` surfaces, `stone-200` hairlines"*. That intent was lost when the
+`circus-ui` tokens were adopted, because the skill maps `--circus-bg: #ffffff`
+and `--circus-surface: #fafafa`, i.e. the inverse. Restoring the tint is a
+one-line change with more effect than any amount of extra padding.
+
+### Audit — everything found
+
+**Cross-cutting**
+
+- Uniform block spacing: `space-y-6` on Overview, `space-y-5` on Location
+  planning give the page header, alert strip, KPI row and table the same gap,
+  so nothing groups with anything.
+- Only two type steps in real use (12px and 14px) plus a couple of 24px
+  numbers. No 16px tier, so the pages are a flat field of small text.
+- `--radius-lg` is 10px and buttons use `rounded-lg`, so controls and cards
+  share a radius and read as the same kind of object.
+- Default `Button` height is `h-8` (32px), under the 40px touch target the
+  shop-floor requirement asks for.
+- `StatusBadge` is a grey outline with coloured text: the colour is a 1px
+  stroke and a 6px dot, and every status weighs the same.
+
+**Overview** (`features/overview/OverviewPage.tsx`)
+
+- Alert strip, KPI tiles and the table all use identical
+  `rounded-lg border border-border` — one visual weight for three roles.
+- KPI values are colour-coded *and* the pills are coloured *and* the status
+  text is coloured. Warning/danger is doing three jobs at once.
+- `TableCell` is `p-2`: 8px of horizontal padding, so the first column nearly
+  touches the card edge. Rows land near 36px against the 44px target. The
+  header is 14px regular — the same weight as data — and not sticky.
+
+**Location planning** (`features/location-planning/LocationPlanningPage.tsx`)
+
+- Five stacked strips of metadata before any content: title, location select
+  plus badges, `FreshnessStrip`, `BlockerList`, the stale warning, then tabs.
+  This is the single biggest density problem in the app.
+- `RunAction` stacks up to four right-aligned ragged-left lines under the
+  primary button.
+- Risk & stock does three jobs: coverage chart, table, per-row projection
+  chart on expand.
+- Three `InfoHint` triggers in one header row — a sign the column labels are
+  not carrying their weight.
+- `CoverageChart` paints "on order" with `bg-info/55`, a status colour used as
+  a chart series. In stock, on order, proposed is an ordered sequence and
+  wants its own single-hue ramp.
+
+**Data & settings** (`features/data-settings/DataSettingsPage.tsx`)
+
+- Four full-width accent buttons, plus "Activate master data and continue" —
+  five primary actions on one screen. Nothing reads as the next step.
+- The page's premise is "import the four sources in order" but the step number
+  is a 12px `text-faint` digit.
+- Dropzone copy exposes internal template filenames
+  (`Phase2_Master_Data_Template_v1.xlsx`).
+- Three `PlannedFeatureCard`s advertise unbuilt features inside a working tool.
+
+**Shell** (`app/AppShell.tsx`, `components/BrandMark.tsx`)
+
+- The sticky top bar carries only an email and Sign out; its whole left side is
+  empty on desktop.
+- The brand mark is **"P2"** — an internal phase code used as the logo.
+
+### Two real defects found while reviewing
+
+1. **The location picker renders the raw ID.** The page `<h1>` says "Demo
+   Kitchen Berlin" while the `Select` beneath it says `LOC_DEMO_BERLIN_001`.
+   Base UI's `Select.Value` renders the *value*, not the selected item's label,
+   unless `items` is supplied on `Select.Root`. Affects the Location planning
+   header and the Data & settings location scope picker.
+2. **`text-faint` carries essential content.** `RiskStockTab`'s `StatusCell`
+   renders "short 08 Sept 2026 without the proposal" in `#9A9BA1` — 2.8:1 on
+   white, failing WCAG AA. That line changes an ordering decision; it cannot
+   sit at placeholder contrast. `--faint` is for placeholders only.
+
+Minor: the `running` tone in `StatusBadge` uses `animate-pulse`, which loops
+indefinitely. The one permitted looping animation is the loading skeleton.
+
+### Not changed: the centred tabs
+
+Flagged in review as the only centred element on a left-aligned page. Left
+alone deliberately — the maintainer asked for centred tabs twice (see **Tabs
+centred**, 2026-09-01), and that is a maintainer decision, not a defect. Still
+reversible by removing `mx-auto` from the `TabsList`.
+
+### Proposed token set
+
+Full swatches, contrast maths and a before/after specimen:
+https://claude.ai/code/artifact/07471639-7a5a-4de3-a404-5c1ef65d7ee2
+
+Contrast checked against the surface each token actually sits on: accent
+`#2D62FF` 4.9:1 with white text, `--accent-strong` `#1E4BD8` 6.9:1 as link
+text, `--muted` `#6E7482` 4.7:1, `--secondary` `#5A5F6B` 6.4:1, and every
+status pair between 6.6:1 and 8.3:1.
+
+### Skill corrected
+
+`circus-ui` was updated in the same pass so the placeholder cannot ship again:
+real brand values, the accent/success collision named explicitly, the
+canvas-vs-surface rule, tinted status pairs, a chart ramp separate from status,
+and a standing instruction that example hexes are never shipped unverified.
+
+## Visual system implemented (2026-09-04)
+
+Branch `ui_visual_system`, three commits, `pnpm check` green throughout
+(ESLint, TypeScript, 168 Vitest tests, production build).
+
+### The token migration, and the one trap in it
+
+`--circus-surface` used to mean `#FAFAFA`, the tinted inset. The canvas is now
+that value, so `surface` was re-pointed to `#F2F3F5` and keeps its "sunken"
+role. That is why ~20 existing `bg-surface` call sites needed **no** change:
+they all meant "an inset strip", and they still do, just with enough contrast
+to be visible against the new canvas. What did change is the set of containers
+that should *lift* — KPI tiles, table wrappers, the top alert, `BlockerList`,
+`ErrorState` — which gained `bg-card`.
+
+`--background` deliberately stays white. It is the *component* ground (inputs,
+popovers, outline buttons, cards), not the page ground; the shell paints the
+page with the new `bg-canvas`. Mapping `--background` to the canvas instead
+would have tinted every input and outline button on a white card.
+
+Radius now differentiates: `--radius-lg` 8px for controls, `--radius-xl` 12px
+for containers. Every feature-level `rounded-lg` was a container, so they all
+moved to `rounded-xl`; the vendored controls keep `rounded-lg` and shrank from
+10px to 8px for free.
+
+`--circus-info` was deleted. It only existed to be misused as a chart series.
+
+### The regression the browser caught
+
+Source hexes are not the thing to check — the *resolved* token on the *actual*
+surface is. Measuring in the running app found one failure introduced by this
+work: the new 11px uppercase table header is `--muted` on `--sunken`, which
+came out at **4.22:1**. Below AA, and 11px bold does not qualify as large text.
+
+Fixed in the token rather than at the call site: `--circus-muted` darkened
+`#6E7482` → `#666B78`, which holds 4.80:1 on sunken, 5.33:1 on white and
+5.11:1 on canvas. Every other `text-muted-foreground` on a tinted strip — the
+`UploadCard` prerequisite box, the step marker, the freshness labels — was
+carrying the same flaw and is fixed by the same change.
+
+Measured after the fix, from the running app:
+
+| Pair | Ratio |
+|---|---|
+| ink on canvas | 16.67 |
+| muted on card / canvas / sunken | 5.33 / 5.11 / 4.80 |
+| subtle on card | 6.39 |
+| accent-text on card | 6.88 |
+| white on accent | 4.88 |
+| input outline on card | 3.24 |
+| success / warning / danger / neutral pill | 8.28 / 6.63 / 7.40 / 7.14 |
+
+### Sticky table headers: dropped, with a reason
+
+The table lives in an `overflow-x-auto` wrapper. Overflow on one axis computes
+to `auto` on the other, so the wrapper is a scroll container and a sticky
+`thead` would anchor to something that never scrolls vertically. Same root
+cause as the `InfoHint` clipping fixed on 2026-09-01. It needs the wrapper
+restructured; deferred rather than shipped half-working.
+
+### Two things the review got wrong, caught by reading before cutting
+
+1. **The purchase-order upload instruction.** Flagged as a three-line paragraph
+   of helper text. It is not: `datasets.test.ts` pins three specific claims in
+   it and `b09f8d3` added it on purpose. It is what stops a maintainer losing
+   PO lines by uploading only the newest file. Left alone.
+2. **The centred tabs.** Flagged as the only centred element on a left-aligned
+   page. The maintainer asked for centred twice (**Tabs centred**, 2026-09-01).
+   Left alone.
+
+One thing the review got right but that needed a replacement rather than a
+deletion: the three `PlannedFeatureCard`s were carrying a real boundary — where
+item policies, the menu calendar and the BOM actually come from. Deleting them
+outright would have dropped that. The sentence is now in the section they sat
+under, and `dataSettings.test.tsx` checks for the boundary instead of the
+roadmap.
+
+### Not verified
+
+The three authenticated screens have not been looked at against real data —
+signing in needs credentials. Tests and the token measurements cover the
+mechanics; nobody has seen Overview, Location planning or Data & settings
+rendered with the new system.

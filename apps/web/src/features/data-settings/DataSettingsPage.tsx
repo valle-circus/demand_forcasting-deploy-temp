@@ -36,7 +36,6 @@ import { resourceKeys } from '@/lib/resourceCache'
 import { refreshError, useApiResource } from '@/lib/useApiResource'
 import { ActivateMasterDialog } from './ActivateMasterDialog'
 import { MasterVersionList } from './MasterVersionList'
-import { PlannedFeatureCard } from './PlannedFeatureCard'
 import { UploadCard } from './UploadCard'
 import { DATASETS, currentImport, importHistory, prerequisiteFor } from './datasets'
 
@@ -151,6 +150,21 @@ export function DataSettingsPage() {
     }
   }
 
+  // The one step to do next: the lowest-numbered step that is unblocked and has
+  // no usable import yet. While a master draft is waiting, the next action is
+  // activating it rather than another upload, so no card claims the accent.
+  const nextStep =
+    latestDraft !== null
+      ? null
+      : (DATASETS.find((definition) => {
+          const scopeKey = definition.scope === 'location' ? locationId : null
+          const existing = currentImport(allImports, definition.key, scopeKey)
+          return (
+            !prerequisiteFor(definition.key, readiness).blocked &&
+            (existing === null || existing.status === 'rejected')
+          )
+        })?.step ?? null)
+
   function statusForStepOne() {
     if (activeVersion !== null) {
       return { tone: 'ready' as const, label: 'Active' }
@@ -162,7 +176,7 @@ export function DataSettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-8">
+    <div className="mx-auto max-w-[1280px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
@@ -190,11 +204,15 @@ export function DataSettingsPage() {
             disabled={locationList.length === 0}
           >
             <SelectTrigger id="location-scope" className="w-full">
-              <SelectValue
-                placeholder={
-                  locationList.length === 0 ? 'None yet' : 'Choose a location'
+              {/* Base UI renders the raw value unless told otherwise, which
+                  leaks the location id where the kitchen name belongs. */}
+              <SelectValue>
+                {(value: unknown) =>
+                  locationList.find((entry) => entry.location_id === value)
+                    ?.location_name ??
+                  (locationList.length === 0 ? 'None yet' : 'Choose a kitchen')
                 }
-              />
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {locationList.map((entry) => (
@@ -207,26 +225,28 @@ export function DataSettingsPage() {
         </div>
       </header>
 
-      <RefreshErrorNotice error={refreshFailure} onRetry={refreshAll} />
+      <div className="mt-6 space-y-4 empty:mt-0">
+        <RefreshErrorNotice error={refreshFailure} onRetry={refreshAll} />
 
-      {locationsError !== null && (
-        <ErrorState
-          error={locationsError}
-          onRetry={refreshAll}
-          title="Locations could not be loaded"
-        />
-      )}
+        {locationsError !== null && (
+          <ErrorState
+            error={locationsError}
+            onRetry={refreshAll}
+            title="Locations could not be loaded"
+          />
+        )}
 
-      {activationError !== null && (
-        <div
-          role="alert"
-          className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-danger"
-        >
-          {activationError}
-        </div>
-      )}
+        {activationError !== null && (
+          <div
+            role="alert"
+            className="rounded-xl border border-border bg-card px-5 py-4 text-sm text-danger"
+          >
+            {activationError}
+          </div>
+        )}
+      </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="mt-8 grid gap-5 lg:grid-cols-2">
         {DATASETS.map((definition) => {
           const scoped = definition.scope === 'location'
           const scopeKey = scoped ? locationId : null
@@ -247,6 +267,7 @@ export function DataSettingsPage() {
               knownImportIds={knownImportIds}
               upload={(files, options) => uploaders[definition.key](files, options)}
               onImported={refreshAll}
+              isNextStep={definition.step === nextStep}
               statusOverride={
                 definition.key === 'master_data' ? statusForStepOne() : undefined
               }
@@ -282,7 +303,7 @@ export function DataSettingsPage() {
                       onChange={(event) => {
                         setPoAsOf(event.target.value)
                       }}
-                      className="h-9 w-full rounded-md border border-input bg-background px-2.5 text-xs tabular focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      className="h-9 w-full rounded-lg border border-input bg-card px-2.5 text-xs tabular focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     />
                     <p className="mt-1 text-xs text-muted-foreground">
                       Decides which lines still count as open.
@@ -295,14 +316,18 @@ export function DataSettingsPage() {
         })}
       </div>
 
-      <section className="space-y-4">
+      <section className="mt-12 space-y-4">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">
             Maintained data
           </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Stock and supplier lines are corrected at the source, not edited
-            here.
+          {/* The boundary, stated once. This used to be three dashed cards
+              labelled "Planned", which put a roadmap in a working tool without
+              telling the maintainer anything they could act on. */}
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Item policies, the menu calendar and the bill of materials come from
+            the master workbook. Stock and supplier lines are corrected at the
+            source, not edited here.
           </p>
         </div>
 
@@ -313,20 +338,6 @@ export function DataSettingsPage() {
           onActivate={setPendingActivation}
         />
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <PlannedFeatureCard
-            title="Items and policies"
-            description="Lead times, pack sizes, safety stock, MOQ."
-          />
-          <PlannedFeatureCard
-            title="Menu calendar"
-            description="Adjust a week without re-importing everything."
-          />
-          <PlannedFeatureCard
-            title="Bill of materials"
-            description="Ingredient quantities per portion."
-          />
-        </div>
       </section>
 
       {pendingActivation !== null && (

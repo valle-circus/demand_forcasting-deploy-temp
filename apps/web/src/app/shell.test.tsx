@@ -249,7 +249,9 @@ describe('session cache ownership', () => {
     await screen.findByText(/nothing here orders anything/i)
     primeResource('private:test', { value: 'user data' })
 
-    await user.click(screen.getByRole('button', { name: /sign out/i }))
+    // Two in the DOM by design: the sidebar carries it from `lg` up and the
+    // compact header below that, and CSS hides whichever does not apply.
+    await user.click(screen.getAllByRole('button', { name: /sign out/i })[0])
 
     await screen.findByRole('heading', { name: /sign in/i })
     expect(readResource('private:test').hasData).toBe(false)

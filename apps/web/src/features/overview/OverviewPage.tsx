@@ -49,7 +49,7 @@ export function OverviewPage() {
       return (
         <div className="mx-auto max-w-[1280px]">
           <h1 className="text-3xl font-semibold tracking-tight">Overview</h1>
-          <div className="mt-6 rounded-lg border border-border px-6 py-10 text-center">
+          <div className="mt-6 rounded-xl border border-border bg-card px-6 py-10 text-center">
             <h2 className="text-base font-medium">Nothing to show yet</h2>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
               Import the master workbook and activate it to set up your
@@ -57,7 +57,7 @@ export function OverviewPage() {
             </p>
             <Link
               to="/data"
-              className="mt-4 inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+              className="mt-5 inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
             >
               Go to data &amp; settings
             </Link>
@@ -77,7 +77,7 @@ export function OverviewPage() {
   const locations = [...overview.locations].sort(byUrgency)
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-6">
+    <div className="mx-auto max-w-[1280px]">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">Overview</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -85,13 +85,18 @@ export function OverviewPage() {
         </p>
       </header>
 
-      <RefreshErrorNotice error={state.refreshError} onRetry={refetch} />
+      {/* Deliberately three different gaps. A single `space-y-*` gives the
+          header, the summary and the table the same distance, and then nothing
+          on the page reads as grouped with anything else. */}
+      <div className="mt-10 space-y-4">
+        <RefreshErrorNotice error={state.refreshError} onRetry={refetch} />
+        <TopAlertStrip alert={alert} total={overview.locations.length} />
+        <KpiRow overview={overview} />
+      </div>
 
-      <TopAlertStrip alert={alert} total={overview.locations.length} />
-
-      <KpiRow overview={overview} />
-
-      <LocationTable locations={locations} />
+      <div className="mt-8">
+        <LocationTable locations={locations} />
+      </div>
     </div>
   )
 }
@@ -111,7 +116,7 @@ function TopAlertStrip({
 }) {
   if (alert === null) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
+      <div className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-5 py-4 text-sm">
         <StatusBadge tone="ready" label="All clear" />
         <span className="text-muted-foreground">
           {total === 1
@@ -125,7 +130,9 @@ function TopAlertStrip({
   const presentation = STATE_PRESENTATION[alert.state]
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3">
+    <div
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-4"
+    >
       <div className="flex items-center gap-2.5">
         <StatusBadge {...presentation} />
         <span className="text-sm font-medium">{alert.headline}</span>
@@ -136,7 +143,7 @@ function TopAlertStrip({
             ? '/data'
             : `/locations/${encodeURIComponent(alert.location.location_id)}`
         }
-        className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-background px-3 text-xs font-medium transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border-strong bg-card px-3.5 text-xs font-medium transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         {alert.action}
         <ArrowRight aria-hidden="true" className="size-3.5" />
@@ -157,7 +164,7 @@ function KpiRow({ overview }: { overview: OverviewResponse }) {
   const known = hasCurrentResult(overview)
 
   return (
-    <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
       <Kpi
         label="Kitchens ready to plan"
         value={`${String(kpis.locations_ready)} of ${String(kpis.locations_total)}`}
@@ -205,15 +212,19 @@ function Kpi({
 }) {
   const body = (
     <>
-      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      <span className="flex items-start gap-1 text-[13px] text-muted-foreground">
         {label}
         {hint !== undefined && <InfoHint label={label}>{hint}</InfoHint>}
       </span>
+      {/* `mt-auto` pins every value to the bottom of its tile, so the numbers
+          share a baseline no matter how many lines the label above wraps to.
+          30px, and the status tokens are the calmer brand pairs now, so a
+          non-zero count reads as noteworthy rather than as an alarm. */}
       <span
         className={[
-          'mt-1 block text-2xl font-semibold tabular',
+          'mt-auto block pt-3 text-3xl leading-none font-semibold tracking-tight tabular',
           value === null
-            ? 'text-faint'
+            ? 'text-muted-foreground'
             : tone === 'blocked'
               ? 'text-danger'
               : tone === 'warning'
@@ -226,14 +237,17 @@ function Kpi({
     </>
   )
 
+  const shell =
+    'flex h-full flex-col rounded-xl border border-border bg-card px-5 py-4'
+
   return (
     <li>
       {to === undefined ? (
-        <div className="rounded-lg border border-border px-4 py-3">{body}</div>
+        <div className={shell}>{body}</div>
       ) : (
         <Link
           to={to}
-          className="block rounded-lg border border-border px-4 py-3 transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className={`${shell} transition-colors hover:border-border-strong hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none`}
         >
           {body}
         </Link>
@@ -252,7 +266,7 @@ function LocationTable({ locations }: { locations: OverviewLocationRow[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="overflow-x-auto rounded-xl border border-border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

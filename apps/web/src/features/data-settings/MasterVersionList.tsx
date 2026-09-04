@@ -33,7 +33,7 @@ export function MasterVersionList({
   }
 
   return (
-    <ul className="divide-y divide-border rounded-lg border border-border">
+    <ul className="divide-y divide-border rounded-xl border border-border bg-card">
       {versions.map((version) => {
         const active = version.status === 'active'
         return (

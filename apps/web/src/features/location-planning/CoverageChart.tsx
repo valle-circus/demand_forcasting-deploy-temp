@@ -39,11 +39,11 @@ export function CoverageChart({
 
   if (context.requires_fresh_schema_v3_run || !context.available_for_all_items) {
     return (
-      <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+      <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center">
         <p className="text-sm text-muted-foreground">
           Compute a fresh recommendation to see supply coverage.
         </p>
-        <p className="mt-1 text-xs text-faint">
+        <p className="mt-1 text-xs text-muted-foreground">
           This result predates the coverage calculation. Its coverage values are
           absent, not zero.
         </p>
@@ -123,20 +123,20 @@ function Legend() {
   return (
     <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
       <li className="flex items-center gap-1.5">
-        <span className="h-2.5 w-4 rounded-sm bg-primary" />
+        <span className="h-2.5 w-4 rounded-sm bg-chart-in-stock" />
         In stock
       </li>
       <li className="flex items-center gap-1.5">
-        <span className="h-2.5 w-4 rounded-sm bg-info/55" />
+        <span className="h-2.5 w-4 rounded-sm bg-chart-on-order" />
         On order
       </li>
       <li className="flex items-center gap-1.5">
         {/* Outlined and striped, never a solid fill: this has not been ordered. */}
-        <span className="h-2.5 w-4 rounded-sm border border-dashed border-primary bg-[repeating-linear-gradient(45deg,color-mix(in_oklch,var(--circus-accent),transparent_55%)_0_3px,transparent_3px_6px)]" />
+        <span className="h-2.5 w-4 rounded-sm border border-dashed border-chart-in-stock bg-[repeating-linear-gradient(45deg,var(--chart-proposal)_0_3px,var(--circus-white)_3px_6px)]" />
         Proposal — not ordered
       </li>
       <li className="flex items-center gap-1.5">
-        <span className="h-3 w-0.5 bg-foreground" />
+        <span className="h-3 w-0.5 bg-chart-target" />
         Needs to cover
       </li>
     </ul>
@@ -169,17 +169,17 @@ function CoverageBar({ row, scaleMax }: { row: CoverageRow; scaleMax: number }) 
           <div className="absolute inset-0 flex overflow-hidden rounded-sm">
             <Segment
               widthPercent={share(row.onHandDays)}
-              className="bg-primary text-primary-foreground"
+              className="bg-chart-in-stock text-white"
               label={String(row.onHandDays)}
             />
             <Segment
               widthPercent={share(row.openPo.days)}
-              className="bg-info/55 text-foreground"
+              className="bg-chart-on-order text-foreground"
               label={`+${String(row.openPo.days)}`}
             />
             <Segment
               widthPercent={share(row.proposal.days)}
-              className="border-y border-r border-dashed border-primary bg-[repeating-linear-gradient(45deg,color-mix(in_oklch,var(--circus-accent),transparent_55%)_0_4px,transparent_4px_8px)] text-accent-text"
+              className="border-y border-r border-dashed border-chart-in-stock bg-[repeating-linear-gradient(45deg,var(--chart-proposal)_0_4px,var(--circus-white)_4px_8px)] text-accent-text"
               label={`+${String(row.proposal.days)}`}
             />
           </div>
@@ -189,7 +189,7 @@ function CoverageBar({ row, scaleMax }: { row: CoverageRow; scaleMax: number }) 
               aria-hidden="true"
               // Full-height marker with a cap, so "how far must this reach"
               // survives being next to a long bar.
-              className="absolute -top-1 -bottom-1 w-0.5 bg-foreground"
+              className="absolute -top-1 -bottom-1 w-0.5 bg-chart-target"
               style={{ left: percent(row.protectionHorizonDays) }}
             />
           )}
@@ -244,7 +244,7 @@ function CoverageCard({
   return (
     <div
       role="presentation"
-      className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-64 rounded-lg border border-border bg-background p-3 shadow-lg group-hover:block group-focus-visible:block"
+      className="pointer-events-none absolute bottom-full left-0 z-20 mb-2 hidden w-64 rounded-xl border border-border bg-background p-3 shadow-lg group-hover:block group-focus-visible:block"
     >
       <p className="mb-2 font-medium">{row.name}</p>
       <dl className="space-y-1">
@@ -317,12 +317,12 @@ function CardRow({
     <div className="flex justify-between gap-3">
       <dt className="text-muted-foreground">
         {label}
-        {note !== undefined && <span className="text-faint"> ({note})</span>}
+        {note !== undefined && <span className="text-muted-foreground"> ({note})</span>}
       </dt>
       <dd className="text-right tabular">
         {value}
         {through !== null && (
-          <span className="block text-faint">to {formatDateShort(through)}</span>
+          <span className="block text-muted-foreground">to {formatDateShort(through)}</span>
         )}
       </dd>
     </div>

@@ -38,7 +38,7 @@ export function ImportIssueList({ issues }: { issues: ValidationIssue[] }) {
           </p>
           <p className="mt-0.5 text-muted-foreground">{issue.remedy}</p>
           {issue.record_ref !== null && (
-            <p className="mt-0.5 text-faint tabular">
+            <p className="mt-0.5 text-subtle tabular">
               {humanizeCode(issue.code)} · {issue.record_ref}
             </p>
           )}

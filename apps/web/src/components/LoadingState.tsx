@@ -9,7 +9,7 @@ export function LoadingState({ label = 'Loading' }: { label?: string }) {
       {[0, 1, 2].map((row) => (
         <div
           key={row}
-          className="h-20 animate-pulse rounded-lg border border-border bg-surface"
+          className="h-20 animate-pulse rounded-xl border border-border bg-surface"
         />
       ))}
     </div>

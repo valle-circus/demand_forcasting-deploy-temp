@@ -36,13 +36,29 @@ export function RunAction({
   const [showCutoff, setShowCutoff] = useState(false)
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <Button size="lg" disabled={blocked || running} onClick={onRun}>
-        {running ? 'Calculating' : 'Compute recommendation'}
-      </Button>
+    // The cutoff sits beside the button rather than under it. Stacked, this
+    // corner became a column of right-aligned ragged-left text four lines deep.
+    <div className="flex flex-col items-end gap-2">
+      <div className="flex items-center gap-2">
+        {/* Behind a disclosure: the cutoff is almost always "now", but
+            reproducing an earlier run needs the exact instant it used. */}
+        {showCutoff && (
+          <input
+            type="datetime-local"
+            value={cutoff}
+            aria-label="Plan as of"
+            aria-describedby="cutoff-help"
+            onChange={(event) => {
+              onCutoffChange(event.target.value)
+            }}
+            className="h-10 rounded-lg border border-input bg-card px-2.5 text-xs tabular focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          />
+        )}
+        <Button size="lg" disabled={blocked || running} onClick={onRun}>
+          {running ? 'Calculating' : 'Compute recommendation'}
+        </Button>
+      </div>
 
-      {/* Behind a disclosure: the cutoff is almost always "now", but
-          reproducing an earlier run needs the exact instant it used. */}
       <button
         type="button"
         onClick={() => {
@@ -55,20 +71,9 @@ export function RunAction({
       </button>
 
       {showCutoff && (
-        <div className="flex flex-col items-end gap-1">
-          <input
-            type="datetime-local"
-            value={cutoff}
-            aria-label="Plan as of"
-            onChange={(event) => {
-              onCutoffChange(event.target.value)
-            }}
-            className="h-8 rounded-md border border-input bg-background px-2 text-xs tabular focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          />
-          <p className="max-w-xs text-right text-xs text-muted-foreground">
-            The forecast must start on or after this time.
-          </p>
-        </div>
+        <p id="cutoff-help" className="text-xs text-muted-foreground">
+          The forecast must start on or after this time.
+        </p>
       )}
 
       {running && (
@@ -100,7 +105,7 @@ export function BlockerList({ status }: { status: PlanningStatusResponse }) {
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface px-4 py-3">
+    <div className="rounded-xl border border-border bg-card px-5 py-4">
       <p className="text-sm font-medium text-warning">
         {status.blockers.length === 1
           ? 'One thing is missing before this can run'
@@ -115,7 +120,7 @@ export function BlockerList({ status }: { status: PlanningStatusResponse }) {
       </ul>
       <Link
         to="/data"
-        className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-medium transition-colors hover:bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="mt-3 inline-flex h-9 items-center rounded-lg border border-border-strong bg-card px-3.5 text-xs font-medium transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         Go to data &amp; settings
       </Link>

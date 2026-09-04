@@ -19,7 +19,7 @@ import { formatDateShort, toNumber } from '@/lib/formatting'
 import type { IsoDate, ProjectionDay } from '@/lib/types'
 
 const config = {
-  stockKg: { label: 'Usable stock', color: 'var(--circus-accent)' },
+  stockKg: { label: 'Usable stock', color: 'var(--chart-in-stock)' },
 } satisfies ChartConfig
 
 interface Point {
@@ -117,8 +117,8 @@ export function StockProjectionChart({
         <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="stockFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--circus-accent)" stopOpacity={0.18} />
-              <stop offset="100%" stopColor="var(--circus-accent)" stopOpacity={0.02} />
+              <stop offset="0%" stopColor="var(--chart-in-stock)" stopOpacity={0.18} />
+              <stop offset="100%" stopColor="var(--chart-in-stock)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
 
@@ -144,12 +144,12 @@ export function StockProjectionChart({
             <ReferenceLine
               key={`arrival-${point.date}`}
               x={point.label}
-              stroke="var(--circus-info)"
+              stroke="var(--chart-on-order)"
               strokeDasharray="3 3"
               label={{
                 value: `On order +${point.arrivingKg.toFixed(1)} kg`,
                 position: 'insideTopRight',
-                fill: 'var(--circus-info)',
+                fill: 'var(--chart-on-order)',
                 fontSize: 10,
               }}
             />
@@ -159,21 +159,24 @@ export function StockProjectionChart({
             <ReferenceLine
               key={`proposed-${point.date}`}
               x={point.label}
-              stroke="var(--circus-accent)"
+              stroke="var(--chart-in-stock)"
               strokeDasharray="3 3"
               label={{
                 value: `Proposed +${point.proposedKg.toFixed(1)} kg`,
                 position: 'insideTopLeft',
-                fill: 'var(--circus-accent-text)',
+                fill: 'var(--circus-accent-hover)',
                 fontSize: 10,
               }}
             />
           ))}
 
+          {/* The zero line is an axis, not an alarm. In danger red it read as a
+              red x-axis under every chart, including charts that never run
+              short — the dashed "Runs out" marker is what carries the warning. */}
           <ReferenceLine
             y={0}
-            stroke="var(--circus-danger)"
-            strokeWidth={1.5}
+            stroke="var(--circus-border-strong)"
+            strokeWidth={1}
           />
 
           {shortageInView && (
@@ -218,7 +221,7 @@ export function StockProjectionChart({
             type="linear"
             dataKey="stockKg"
             name="Usable stock"
-            stroke="var(--circus-accent)"
+            stroke="var(--chart-in-stock)"
             strokeWidth={2}
             fill="url(#stockFill)"
             dot={false}
@@ -232,7 +235,7 @@ export function StockProjectionChart({
         // engine cannot say what time of day — but not worth a sentence.
         <p className="mt-1 text-xs text-muted-foreground">
           Reaches zero {formatDateShort(shortageDate)}
-          <span className="text-faint"> · whole days only</span>
+          <span className="text-muted-foreground"> · whole days only</span>
         </p>
       )}
     </div>

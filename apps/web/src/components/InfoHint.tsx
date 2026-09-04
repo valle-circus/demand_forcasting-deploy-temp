@@ -64,7 +64,7 @@ export function InfoHint({
         onBlur={() => {
           setOpen(false)
         }}
-        className="inline-grid size-4 place-items-center rounded-full text-faint transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="inline-grid size-4 place-items-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <Info aria-hidden="true" className="size-3.5" />
       </button>

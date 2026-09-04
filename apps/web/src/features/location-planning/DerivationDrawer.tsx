@@ -94,13 +94,13 @@ export function DerivationDrawer({
                       className={[
                         'flex items-baseline justify-between gap-4 py-1.5',
                         isTotal ? 'border-t border-border font-medium' : '',
-                        step.absent === true ? 'text-faint' : '',
+                        step.absent === true ? 'text-muted-foreground' : '',
                       ].join(' ')}
                     >
                       <span className="flex items-baseline gap-1.5">
                         {step.label}
                         {step.provenance !== undefined && (
-                          <span className="text-faint">
+                          <span className="text-muted-foreground">
                             {provenanceLabel(step.provenance)}
                           </span>
                         )}

@@ -126,7 +126,7 @@ export function LocationPlanningPage() {
     refreshError(purchaseOrders.state)
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-5">
+    <div className="mx-auto max-w-[1280px]">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
@@ -142,8 +142,16 @@ export function LocationPlanningPage() {
                   }
                 }}
               >
-                <SelectTrigger className="h-8 w-48">
-                  <SelectValue />
+                <SelectTrigger className="h-8 w-52">
+                  {/* Base UI renders the raw value unless told otherwise, which
+                      leaks the location id where the kitchen name belongs. */}
+                  <SelectValue>
+                    {(value: unknown) =>
+                      locationList.find(
+                        (entry) => entry.location_id === value,
+                      )?.location_name ?? locationId
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {locationList.map((entry) => (
@@ -173,27 +181,32 @@ export function LocationPlanningPage() {
         />
       </header>
 
-      <RefreshErrorNotice error={refreshFailure} onRetry={refreshAll} />
+      {/* One block of provenance instead of four stacked strips. The stale
+          warning lives inside it rather than in a box of its own: the header
+          badge, this line and the primary action were all restating it. */}
+      <div className="mt-6 rounded-xl border border-border bg-card px-5 py-3">
+        <FreshnessStrip status={planningStatus} />
+        {currency === 'stale' && (
+          <p className="mt-2 border-t border-border pt-2 text-xs text-warning">
+            Newer data has been imported since this was calculated. Compute
+            again before acting on it.
+          </p>
+        )}
+      </div>
 
-      <FreshnessStrip status={planningStatus} />
-
-      <BlockerList status={planningStatus} />
-
-      {currency === 'stale' && (
-        <p className="rounded-lg border border-border bg-surface px-4 py-2.5 text-xs text-warning">
-          Newer data has been imported since this was calculated. Compute again
-          before acting on it.
-        </p>
-      )}
+      <div className="mt-4 space-y-4 empty:mt-0">
+        <RefreshErrorNotice error={refreshFailure} onRetry={refreshAll} />
+        <BlockerList status={planningStatus} />
+      </div>
 
       {result === null ? (
-        <p className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+        <p className="mt-8 rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
           {planningStatus.ready
             ? 'No result yet. Compute a recommendation to see risk and proposals.'
             : 'No result yet.'}
         </p>
       ) : (
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <TabsList className="mx-auto flex">
             <TabsTrigger value="risk">
               Risk &amp; stock
@@ -206,7 +219,7 @@ export function LocationPlanningPage() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="risk" className="mt-4">
+          <TabsContent value="risk" className="mt-5">
             <RiskStockTab
               netting={result.netting_results}
               coverageContext={result.coverage_context}
@@ -216,7 +229,7 @@ export function LocationPlanningPage() {
             />
           </TabsContent>
 
-          <TabsContent value="orders" className="mt-4">
+          <TabsContent value="orders" className="mt-5">
             {purchaseOrders.state.status === 'error' ? (
               isNotFound(purchaseOrders.state.error) ? (
                 <p className="text-sm text-muted-foreground">
@@ -238,7 +251,7 @@ export function LocationPlanningPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="proposals" className="mt-4">
+          <TabsContent value="proposals" className="mt-5">
             <RecommendationTab run={result} inventory={inventoryData} />
           </TabsContent>
         </Tabs>
