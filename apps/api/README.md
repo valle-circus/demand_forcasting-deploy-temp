@@ -30,11 +30,11 @@ and stock plus the proposal. The frontend can therefore show policy inputs,
 provenance, field lineage, and a coverage chart without reimplementing
 calculations.
 
-Before connected writes, apply all five files in `supabase/migrations/` in
-filename order. If 001–004 already exist in the project, run only
-`202609010005_event_aware_supply_coverage.sql` as a forward migration in the
-Supabase SQL Editor. Configure a safe Supabase Auth user plus the server values
-in `.env`; readiness stays degraded until the required tables and v3 RPC are
-visible. Existing v2 rows remain readable but do not gain computed coverage
-retroactively, so test the new contract with a fresh run. The local test suite
-uses fakes and does not prove the remote project.
+Before connected writes, apply all eight files in `supabase/migrations/` in
+filename order. For the current project, deploy the workspace-aware API first
+so authenticated domain routes fail closed, then apply the forward-only
+`202609040008_user_workspace_isolation.sql` migration and run
+`supabase/verify_user_workspace_isolation.sql`. Configure a safe Supabase Auth
+user plus the server values in `.env`; readiness stays degraded until all
+authorization tables and transaction RPCs are visible. The local test suite
+uses fakes and does not prove the remote project or two-account browser path.

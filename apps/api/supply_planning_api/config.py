@@ -62,9 +62,9 @@ class Settings(BaseSettings):
         """
         An empty or wildcard allowlist is refused rather than read as "allow
         everyone". Self-service sign-up means anyone who reaches the deployed
-        URL can create a Supabase account, and every valid account is a
-        maintainer to this API, so a blank value here would silently publish
-        planning data.
+        URL can attempt to create a Supabase account. The allowlist is the
+        account-admission boundary; workspace membership remains the separate
+        planning-data authorization boundary.
         """
         domains = [item.strip() for item in value.split(",") if item.strip()]
         if not domains:

@@ -97,7 +97,7 @@ class SupabaseBackendBoundaryTests(unittest.IsolatedAsyncioTestCase):
     async def test_outside_email_domain_is_refused_despite_valid_session(self) -> None:
         # The auth.users trigger should stop this account existing at all. The
         # API repeats the check because the browser can call Supabase Auth
-        # directly, and every account this API accepts is a full maintainer.
+        # directly. Workspace authorization remains a separate request gate.
         with self.assertRaises(HTTPException) as captured:
             await self._verify_user(email="outsider@gmail.com")
 

@@ -565,15 +565,16 @@ engine remains unaware of HTTP and Supabase.
 
 ## 10. Supabase schema assessment and minimal workflow model
 
-### 10.1 What the five migrations now provide
+### 10.1 What the eight migrations now provide
 
 Migrations 001 and 002 define the tables. Migration 003 adds immutable-version
 guards and narrow transaction RPCs used by the FastAPI repository. Migration
 004 adds the corrected actionable-risk and shelf-life derivation contract plus
 the v2 planning persistence RPC. Migration 005 adds event-aware scenario
-coverage plus the v3 planning persistence RPC. The maintainer reports 001–004
-applied through the SQL Editor; 005 must be applied before the next connected
-v3 planning run:
+coverage plus the v3 planning persistence RPC. Migrations 006 and 007 enforce
+the approved signup domains. Migration 008 adds the private workspace,
+membership, role, location-grant, backfill, and same-workspace constraints.
+Migration 008 is implemented locally but must still be applied and reconciled:
 
 | Tables | Implemented backend capability |
 |---|---|
@@ -602,11 +603,18 @@ The schema files are:
 - `supabase/migrations/202608300004_actionable_risk_and_shelf_life.sql` —
   additive v2 risk/MHD derivation columns and `persist_planning_run_v2`; and
 - `supabase/migrations/202609010005_event_aware_supply_coverage.sql` —
-  additive v3 coverage columns and `persist_planning_run_v3`.
+  additive v3 coverage columns and `persist_planning_run_v3`; and
+- `supabase/migrations/202609030006_signup_email_domain_gate.sql` plus
+  `202609040007_allow_circus_group_signup_domain.sql` — confirmed company-domain
+  account admission; and
+- `supabase/migrations/202609040008_user_workspace_isolation.sql` — private
+  workspaces, memberships/roles, required workspace scope, safe legacy
+  backfill, location relationship checks, and workspace-local activation.
 
 `supabase/seed.sql` contains one clearly synthetic location/item/import/run/risk
-example for UI development. It is not operational evidence and must never be
-seeded into production.
+example in a distinct seed workspace. It is not operational evidence, is not
+automatically granted to newly signed-up users, and must never be seeded into
+production.
 
 ### 10.2 Deliberately simplified for the prototype
 
@@ -704,9 +712,9 @@ These do not block the high-level plan, but a designer/engineer should resolve
 them before polishing screens:
 
 - actual location count and naming, which affects selector/search behavior;
-- whether production should replace prototype admin-created email/password
-  accounts and the all-authenticated-users-are-maintainers policy with SSO/
-  role tiers;
+- whether production should replace approved-domain email/password accounts
+  with SSO, and whether explicit shared-workspace membership needs a UI beyond
+  the implemented private-workspace owner/admin/planner role contract;
 - approved stock/forecast/PO freshness thresholds and who may override a
   warning;
 - whether raw uploads require private retention for replay/audit;
@@ -720,13 +728,14 @@ them before polishing screens:
 
 ## 13. Suggested implementation order
 
-1. Apply migration 005; Supabase/Auth and migrations 001–004 are already
-   configured in the development environment.
-2. Create one fresh v3 planning run and verify `coverage_context` plus the
-   per-item coverage fields through FastAPI.
-3. Keep the implemented three-route React shell, completed Overview, Data &
+1. Deploy the workspace-aware API so authenticated domain requests fail closed
+   during the short migration window.
+2. Apply migration 008, run the read-only reconciliation SQL, and verify API
+   readiness.
+3. Run the full two-account isolation matrix before reopening testing.
+4. Keep the implemented three-route React shell, completed Overview, Data &
    settings workflow, Location view, and v2 risk/MHD semantics.
-4. Add the cross-ingredient coverage chart from the v3 fields above; do not
+5. Add the cross-ingredient coverage chart from the v3 fields above; do not
    introduce TypeScript planning arithmetic.
 6. Add field-level master/menu editing only as a separately scoped follow-up;
    workbook draft import and activation are sufficient for the first UI slice.

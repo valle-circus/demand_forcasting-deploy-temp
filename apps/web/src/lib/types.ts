@@ -50,7 +50,9 @@ export interface ReadinessResponse {
 export interface UserResponse {
   user_id: string
   email: string | null
-  role: 'maintainer'
+  workspace_id: string
+  role: 'owner' | 'admin' | 'planner' | 'viewer'
+  system_role: 'user' | 'system_admin'
 }
 
 // ---------------------------------------------------------------------------

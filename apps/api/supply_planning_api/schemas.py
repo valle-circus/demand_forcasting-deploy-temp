@@ -22,7 +22,9 @@ class ErrorResponse(BaseModel):
 class UserResponse(BaseModel):
     user_id: str
     email: str | None
-    role: Literal["maintainer"] = "maintainer"
+    workspace_id: UUID
+    role: Literal["owner", "admin", "planner", "viewer"]
+    system_role: Literal["user", "system_admin"]
 
 
 class CreatePlanningRunRequest(BaseModel):

@@ -15,6 +15,24 @@ not a task log or a replacement for the detailed engineering brief.
 
 ## Active memory
 
+- 2026-09-04: **Planning data is private by default; approved-domain Auth is no
+  longer sufficient authorization.** The local implementation resolves every
+  verified user to one active default workspace membership, scopes all 18
+  planning relations by required `workspace_id`, applies explicit owner/admin,
+  planner, viewer and location grants, and checks reads, writes, direct IDs,
+  audit actors and child locations in `WorkspaceScopedStore`. Migration 008
+  provisions separate empty private workspaces for existing/future accounts,
+  backfills existing data from recorded actors, adds same-workspace constraints
+  and validation triggers, and makes active master versions workspace-local.
+  Approved-domain self-service signup remains open; it does not share data.
+  Browser cache entries are cleared and namespaced on account changes. The
+  migration, deployment, reconciliation and two-account live matrix are still
+  required before the promotion blocker is closed. Evidence:
+  `docs/scratchpads/user_data_isolation.md`,
+  `supabase/migrations/202609040008_user_workspace_isolation.sql`,
+  `apps/api/supply_planning_api/authorization.py`, and
+  `tests/test_user_data_isolation.py`. Status: `active`.
+
 - 2026-09-04: **The organization repository is authoritative and a personal
   repository is a temporary deployment-only mirror.** Fetch, review, and merge
   through `circus-kitchens/demand_forcasting`; create no pull requests in

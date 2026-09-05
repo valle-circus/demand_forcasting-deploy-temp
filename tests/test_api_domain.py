@@ -8,6 +8,7 @@ import httpx
 from fastapi import FastAPI
 
 from apps.api.supply_planning_api.auth import AuthenticatedUser, IdentityVerifier
+from apps.api.supply_planning_api.authorization import AccessResolver, AccessScope
 from apps.api.supply_planning_api.config import Settings
 from apps.api.supply_planning_api.main import create_app
 from apps.api.supply_planning_api.services import Backend
@@ -29,6 +30,28 @@ class _Verifier:
         return AuthenticatedUser(
             user_id="11111111-1111-1111-1111-111111111111",
             email="maintainer@example.test",
+        )
+
+
+class _AccessResolver:
+    async def resolve(self, user: AuthenticatedUser) -> AccessScope:
+        return AccessScope(
+            user_id=user.user_id,
+            email=user.email,
+            workspace_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            workspace_role="owner",
+        )
+
+
+class _PlannerAccessResolver:
+    async def resolve(self, user: AuthenticatedUser) -> AccessScope:
+        return AccessScope(
+            user_id=user.user_id,
+            email=user.email,
+            workspace_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            workspace_role="planner",
+            readable_location_ids=frozenset({"LOC_A"}),
+            writable_location_ids=frozenset({"LOC_A"}),
         )
 
 
@@ -79,12 +102,14 @@ class ApiDomainTests(unittest.IsolatedAsyncioTestCase):
         self,
         backend: _RouteBackend,
         verifier: _Verifier,
+        access_resolver: AccessResolver | None = None,
     ) -> FastAPI:
         return create_app(
             settings=self._settings(),
             supabase_probe=cast(ReadinessProbe, _ReadyProbe()),
             backend=cast(Backend, backend),
             identity_verifier=cast(IdentityVerifier, verifier),
+            access_resolver=access_resolver or cast(AccessResolver, _AccessResolver()),
         )
 
     async def test_domain_endpoint_rejects_missing_session(self) -> None:
@@ -112,7 +137,16 @@ class ApiDomainTests(unittest.IsolatedAsyncioTestCase):
             overview = await client.get("/api/v1/overview")
 
         self.assertEqual(200, me.status_code)
-        self.assertEqual("maintainer", me.json()["role"])
+        self.assertEqual(
+            {
+                "user_id": "11111111-1111-1111-1111-111111111111",
+                "email": "maintainer@example.test",
+                "workspace_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "role": "owner",
+                "system_role": "user",
+            },
+            me.json(),
+        )
         self.assertEqual(1, overview.json()["kpis"]["locations_ready"])
         self.assertEqual(["valid-token", "valid-token"], verifier.tokens)
 
@@ -171,6 +205,48 @@ class ApiDomainTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(422, response.status_code)
         self.assertEqual("validation_failed", response.json()["error"]["code"])
         self.assertIsNone(backend.upload_path)
+
+    async def test_planner_cannot_upload_workspace_wide_master_data(self) -> None:
+        backend = _RouteBackend()
+        verifier = _Verifier()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=self._app(
+                    backend,
+                    verifier,
+                    cast(AccessResolver, _PlannerAccessResolver()),
+                )
+            ),
+            base_url="http://test",
+            headers={"Authorization": "Bearer valid-token"},
+        ) as client:
+            response = await client.post(
+                "/api/v1/imports/master-data",
+                files={"file": ("master.xlsx", b"synthetic-xlsx")},
+            )
+
+        self.assertEqual(403, response.status_code)
+        self.assertEqual("workspace_admin_required", response.json()["error"]["code"])
+        self.assertIsNone(backend.upload_path)
+
+    async def test_planner_cannot_read_an_unassigned_location(self) -> None:
+        backend = _RouteBackend()
+        verifier = _Verifier()
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(
+                app=self._app(
+                    backend,
+                    verifier,
+                    cast(AccessResolver, _PlannerAccessResolver()),
+                )
+            ),
+            base_url="http://test",
+            headers={"Authorization": "Bearer valid-token"},
+        ) as client:
+            response = await client.get("/api/v1/locations/LOC_B/view")
+
+        self.assertEqual(403, response.status_code)
+        self.assertEqual("location_access_denied", response.json()["error"]["code"])
 
     async def test_unexpected_error_is_sanitized_and_keeps_cors_header(self) -> None:
         backend = _FailingRouteBackend()

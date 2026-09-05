@@ -1,6 +1,6 @@
 # Supabase prototype persistence
 
-The five migrations establish the temporary prototype store for:
+The eight forward migrations establish the temporary prototype store for:
 
 - versioned application-maintained master data and planning rules; and
 - canonical source imports/inputs, planning runs, netting summaries,
@@ -32,6 +32,12 @@ authority.
 - `202609030006_signup_email_domain_gate.sql`: a `before insert` trigger on
   `auth.users` that refuses accounts outside the approved company email
   domains. Existing accounts are untouched.
+- `202609040007_allow_circus_group_signup_domain.sql`: keeps the database gate
+  aligned with the two approved company domains.
+- `202609040008_user_workspace_isolation.sql`: provisions one empty private
+  workspace per user, adds workspace/location membership and role contracts,
+  scopes all planning relations, backfills existing rows by audit actor, and
+  rejects cross-workspace or cross-location write relationships.
 
 ## Self-service sign-up
 
@@ -63,6 +69,10 @@ A sign-up refused by the trigger surfaces to the browser as an opaque
 "Database error saving new user"; the React form translates that into the
 domain rule.
 
+After migration 008, every successful new account receives its own empty
+private planning workspace. The approved email domain only admits the account;
+it never joins that account to another user's workspace or locations.
+
 This is intentionally smaller than the original schema plan. File metadata and
 small validation issue lists live on `source_imports`; `po_id` stays on each PO
 line; KPI/materialized-summary tables are deferred. Split them only when real
@@ -72,19 +82,33 @@ Raw XLSX/PDF bytes do not belong in Postgres. If approved retention is needed,
 use a private object bucket and keep only its reference in import metadata.
 
 `seed.sql` contains a clearly synthetic location/item/import/run/risk example
-for local or disposable development environments. It is not operational data
-and must not be included in production.
+in a distinct seed workspace for local or disposable development databases.
+It is not automatically granted to a newly signed-up user; add an explicit
+disposable membership only when a UI fixture needs it. It is not operational
+data and must not be included in production.
 
 `tests/test_supabase_schema.py` statically checks required workflow tables,
-RLS/revokes, transaction/immutability functions, run/import traceability, and
-seed column references. A real
+workspace columns/constraints, RLS/revokes, transaction/immutability functions,
+run/import traceability, and seed column references. A real
 `supabase db reset` remains the authoritative syntax/application check.
 
 When applying migrations manually in the Supabase SQL Editor, paste and run
 each unapplied file in filename order. Do not edit or rerun older applied
-migrations to introduce the v3 fields. Existing v2 runs remain readable after
-005, but their new coverage columns are intentionally `null`; create a fresh
-v3 run before testing the coverage chart.
+migrations. Migration 008 is deliberately fail-closed: it aborts if existing
+root records cannot be attributed from `created_by` or if existing location
+relationships are inconsistent. Review the error and repair provenance rather
+than inventing an owner.
+
+Deploy the workspace-aware API before applying 008. That creates a short,
+intentional maintenance window in which authenticated domain routes fail
+closed because the new tables are absent. Apply 008 immediately afterward,
+verify `/api/v1/readiness`, then run the two-account isolation matrix. Do not
+apply 008 while leaving the old unscoped API serving users.
+
+After 008 commits, run `supabase/verify_user_workspace_isolation.sql`. Its
+account/workspace summary must show the pre-existing planning rows only in the
+original owner's workspace, every anomaly count must be zero, and every
+browser-role privilege flag must be false.
 
 ## Validate locally
 

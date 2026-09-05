@@ -128,9 +128,9 @@ class SupabaseIdentityVerifier:
         trigger refuses the insert, and project settings withhold a session
         until the address is confirmed. This repeats both checks because the
         browser holds a publishable key and can call Supabase Auth directly,
-        so neither of those is a boundary this API controls. Every valid
-        account is a full maintainer here, so the check that actually protects
-        planning data has to sit in front of the data.
+        so neither of those is a boundary this API controls. This admits an
+        identity only; the request must still resolve a current workspace and
+        role before it can reach planning data.
         """
         if not isinstance(email_confirmed_at, str) or not email_confirmed_at.strip():
             raise forbidden_error(

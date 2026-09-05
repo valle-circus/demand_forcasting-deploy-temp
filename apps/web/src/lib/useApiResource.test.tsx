@@ -7,6 +7,7 @@ import {
   invalidateResource,
   primeResource,
   readResource,
+  setResourceCacheOwner,
 } from './resourceCache'
 import { useApiResource } from './useApiResource'
 
@@ -21,6 +22,16 @@ function deferred<T>() {
 }
 
 describe('useApiResource cache', () => {
+  it('never exposes one authenticated account cache to another account', () => {
+    setResourceCacheOwner('user-a')
+    primeResource('planning:overview', { location: 'A' })
+
+    setResourceCacheOwner('user-b')
+
+    expect(readResource('planning:overview').hasData).toBe(false)
+    setResourceCacheOwner(null)
+  })
+
   it('renders a recent result immediately after a route-style remount', async () => {
     const fetcher = vi.fn(async () => ({ label: 'known result' }))
     const first = renderHook(() => useApiResource('test:remount', fetcher))

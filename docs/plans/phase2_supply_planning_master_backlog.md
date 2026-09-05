@@ -96,6 +96,18 @@ the checkboxes below remain the milestone authority.
 The measured page-load correction is planned separately in
 `docs/plans/ui_performance_optimization_plan.md` and tracked under 2I/WP8.
 
+> **Critical promotion blocker — user data isolation (2026-09-04):** the
+> deployed application authenticates approved-domain accounts but currently
+> authorizes every accepted account as the same full maintainer over one shared
+> environment. A separate colleague account reproduced the owner's Overview
+> without uploading anything. Live audit confirmed that all existing imports,
+> master versions and runs belonged to the pre-existing owner account, while
+> API reads ignore the authenticated user and server-authority queries have no
+> workspace/location membership predicate. No real operational data or further
+> multi-user testing is allowed until 2B passes. Investigation, design and the
+> required two-user acceptance matrix are in
+> `docs/scratchpads/user_data_isolation.md`.
+
 #### 2A — repository, API and deployment foundation
 
 - [x] Preserve `src/supply_planning` as the calculation/application package and
@@ -115,14 +127,63 @@ The measured page-load correction is planned separately in
 - [ ] Select/create the actual Supabase, Render, and Vercel projects; enter
       environment values; apply migrations; and verify deployed CORS/readiness.
 
-#### 2B — authenticated maintainer boundary
+#### 2B — authenticated maintainer and user-data-isolation boundary
 
-- [ ] Choose the internal Supabase Auth method and define maintainer roles.
 - [x] Verify Supabase user access tokens in FastAPI for every domain endpoint.
-- [x] Add least-privilege authorization tests; reserve the server secret for
-      controlled API operations after authorization.
-- [ ] Define session-expiry, access-removal, audit-user, and non-production
-      preview behavior.
+      This proves authentication only; it does not prove user authorization.
+- [x] Keep browser roles denied from domain tables and reserve the server secret
+      for the API. Existing tests cover this browser/server privilege boundary,
+      not cross-user isolation.
+- [ ] **Immediate containment:** disable self-service sign-up or switch to
+      admin invitation/allowlisting, keep the deployment synthetic-only, and
+      stop additional external testing until isolation is deployed.
+- [x] Define the private-by-default workspace contract: a new user receives a
+      private workspace, owns one or more locations, and joins another
+      workspace/location only through explicit membership.
+- [x] Define and implement the minimal `owner/admin` and `planner` roles;
+      reserve master activation, membership management, and intentionally
+      global data maintenance for admins.
+- [ ] Add workspace ownership/membership schema, including `workspace_id` on
+      root master/import/run aggregates and database constraints that prevent
+      cross-workspace location or child-row references.
+- [ ] Backfill every existing master, location, import, normalized input, run
+      and output row to the current owner's private workspace; give the
+      colleague account an empty private workspace and preserve audit actors,
+      timestamps, hashes and calculation values.
+      Read-only preflight is clean: 10 imports, two master versions and six
+      runs have no missing root actors, ownership-chain mismatches, or
+      location-relationship mismatches. Applying/reconciling migration 008 is
+      still open.
+- [ ] Make active-master uniqueness, content-hash deduplication, latest-source
+      selection and latest-run selection workspace-local.
+- [x] Resolve every authenticated request to an explicit `AccessScope` and pass
+      it through all API/backend/repository methods; remove read routes that
+      authenticate `_user` and then discard the identity.
+- [x] Enforce workspace and permitted-location scope on Overview, location
+      lists/views, inventory, POs, imports, master versions, planning runs,
+      risks, recommendations and CSV/JSON downloads, including direct lookups
+      by a known exact ID.
+- [x] Enforce the same scope on writes: reject unauthorized stock/PO uploads,
+      multi-location planning rows, run requests and master activation.
+- [ ] Add membership-aware database defense in depth. Prefer user-JWT/RLS for
+      scoped reads and narrow elevated transaction RPCs that verify the actor,
+      workspace, role and location; do not rely on frontend filtering or the
+      current RLS browser denial alone.
+- [x] Partition browser resource-cache keys by authenticated user as well as
+      clearing them on Auth loss/user change.
+- [x] Add a two-account automated negative-access suite proving that user A
+      cannot list, read, upload, run, activate or export user B's data even
+      when A knows exact location/import/run IDs.
+      The repository/store boundary covers all 18 planning relations and the
+      HTTP integration covers known import/run-export IDs; live browser proof
+      remains separately required below.
+- [ ] Define session/access-removal behavior and ensure revoked membership is
+      re-checked server-side on every request.
+- [ ] Apply and reconcile the development migration/backfill, then run the
+      complete two-user acceptance matrix in separate clean browser profiles
+      across Overview, Location planning, Data & settings and downloads.
+- [ ] Update the authoritative UI/persistence description and remove this
+      promotion blocker only after automated and live deployed isolation proof.
 
 #### 2C — source-import and canonical-input persistence
 
@@ -388,9 +449,9 @@ walkthrough, but it does not affect the dated template-driven V1 policy.
 | Apicbase stock XLSX normalization | Implemented for the observed standard report; unresolved rows are visible |
 | Live Snowflake input dependency for local V1 | None |
 | Snowflake result persistence | Later; ownership/schema open; portable Supabase prototype tables scaffolded |
-| Supabase prototype store | Migrations 001–004 and Auth are verified in development; additive event-aware-coverage migration 005 must be applied before the next v3 run |
-| Maintainer UI | Connected Auth shell, Overview, Location planning, and Data & settings implemented by Claude; coverage-v3 chart adoption and realistic multi-item QA remain |
-| Current repository check | Coverage-v3 focused engine/API/schema tests, Ruff, and strict mypy pass; full-suite result is recorded in dated progress; `apps/web` was not edited by Codex |
+| Supabase prototype store | Migrations 001–007 are live; private-workspace migration 008 is implemented and its live read-only preflight is clean, but application/reconciliation remain |
+| Maintainer UI | Connected three-page workflow plus user-scoped cache are implemented locally; workspace-aware API/web deployment and two-account live acceptance remain |
+| Current repository check | 114 Python and 175 web tests pass; focused Ruff/strict mypy, ESLint, TypeScript, and the production web build pass. Repository-wide Ruff/mypy still report unrelated pre-existing adapter/style debt |
 
 ## Source of truth for local V1
 

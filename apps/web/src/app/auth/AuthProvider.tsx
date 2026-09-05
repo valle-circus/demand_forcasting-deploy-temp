@@ -5,7 +5,10 @@ import {
   configureAuthTokenProvider,
   configureUnauthorizedHandler,
 } from '../../lib/apiClient'
-import { clearResourceCache } from '../../lib/resourceCache'
+import {
+  clearResourceCache,
+  setResourceCacheOwner,
+} from '../../lib/resourceCache'
 import {
   allowedEmailDomainsLabel,
   emailDomainAllowed,
@@ -87,17 +90,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     let active = true
-    let activeUserId: string | null = null
-
     const applySession = (session: Awaited<ReturnType<typeof client.auth.getSession>>['data']['session']) => {
       const nextUserId = session?.user.id ?? null
-      if (
-        nextUserId === null ||
-        (activeUserId !== null && activeUserId !== nextUserId)
-      ) {
-        clearResourceCache()
-      }
-      activeUserId = nextUserId
+      setResourceCacheOwner(nextUserId)
       setUser(
         session ? { id: session.user.id, email: session.user.email ?? null } : null,
       )

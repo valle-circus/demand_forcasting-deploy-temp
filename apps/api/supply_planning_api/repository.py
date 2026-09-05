@@ -13,6 +13,10 @@ type JsonObject = dict[str, Any]
 
 CANONICAL_TABLES = frozenset(
     {
+        "app_user_profiles",
+        "workspaces",
+        "workspace_memberships",
+        "user_location_access",
         "source_imports",
         "master_data_versions",
         "locations",

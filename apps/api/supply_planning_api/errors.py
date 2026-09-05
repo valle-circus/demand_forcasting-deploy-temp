@@ -35,6 +35,15 @@ class NotFoundError(ApiError):
         )
 
 
+class ForbiddenError(ApiError):
+    def __init__(
+        self,
+        code: str = "forbidden",
+        message: str = "You do not have permission to perform this action.",
+    ) -> None:
+        super().__init__(403, code, message)
+
+
 class ConflictError(ApiError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(409, code, message)

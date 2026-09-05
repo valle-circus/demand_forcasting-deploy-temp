@@ -19,6 +19,27 @@ WORKFLOW_TABLES = {
     "planning_projection_days",
 }
 
+WORKSPACE_SCOPED_TABLES = {
+    "master_data_versions",
+    "locations",
+    "items",
+    "item_policy_overrides",
+    "delivery_rules",
+    "source_imports",
+    "forecast_daily",
+    "menu_calendar",
+    "bom_lines",
+    "inventory_snapshots",
+    "purchase_order_lines",
+    "planning_runs",
+    "planning_run_inputs",
+    "planning_lines",
+    "planning_recommendations",
+    "planning_exceptions",
+    "planning_netting_results",
+    "planning_projection_days",
+}
+
 
 def _schema_sql() -> str:
     return "\n".join(
@@ -95,6 +116,12 @@ def _required_table_columns(schema_sql: str) -> dict[str, set[str]]:
             normalized = definition.lower()
             if "not null" in normalized and "default" not in normalized:
                 result.setdefault(table, set()).add(column.lower())
+        for column in re.findall(
+            r"\balter column\s+([a-z_][a-z0-9_]*)\s+set not null",
+            match.group("body"),
+            re.IGNORECASE,
+        ):
+            result.setdefault(table, set()).add(column.lower())
     return result
 
 
@@ -152,10 +179,44 @@ class SupabaseSchemaTests(unittest.TestCase):
         self.assertIn("source_import_id", columns["planning_run_inputs"])
         self.assertIn("source_import_id", columns["master_data_versions"])
 
+    def test_every_planning_relation_has_a_required_workspace_boundary(self) -> None:
+        schema = _schema_sql()
+        columns = _table_columns(schema)
+        required = _required_table_columns(schema)
+
+        for table in WORKSPACE_SCOPED_TABLES:
+            self.assertIn("workspace_id", columns[table], table)
+            self.assertIn("workspace_id", required[table], table)
+
+    def test_private_workspace_authorization_boundary_exists(self) -> None:
+        schema = _schema_sql().lower()
+        for table in (
+            "workspaces",
+            "app_user_profiles",
+            "workspace_memberships",
+            "user_location_access",
+        ):
+            self.assertIn(f"create table public.{table}", schema)
+            self.assertIn(
+                f"alter table public.{table} enable row level security;",
+                schema,
+            )
+            self.assertIn(
+                f"revoke all on public.{table} from anon, authenticated;",
+                schema,
+            )
+        self.assertIn("provision_private_workspace_for_user_v1", schema)
+        self.assertIn("master_data_versions_one_active_per_workspace_environment", schema)
+        self.assertIn("inventory_snapshots_validate_source_location", schema)
+        self.assertIn("planning_lines_validate_run_location", schema)
+        self.assertIn("actor cannot manage master data in this workspace", schema)
+        self.assertIn("and version.status = 'active'", schema)
+
     def test_daily_projection_matches_engine_output_contract(self) -> None:
         columns = _table_columns(_schema_sql())
         self.assertEqual(
             {
+                "workspace_id",
                 "run_id",
                 "location_id",
                 "item_id",

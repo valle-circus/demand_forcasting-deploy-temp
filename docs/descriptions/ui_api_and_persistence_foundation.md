@@ -1,10 +1,10 @@
 # UI, API and prototype persistence foundation
 
 **Status:** backend vertical slice and connected three-page React UI are
-implemented. The 2026-09-01 backend v3 adds event-aware per-item coverage for
-the next Location chart. Migration 005 and a fresh connected v3 run remain to
-be applied/verified in the development Supabase project; deployed-environment
-configuration remains open.
+implemented. A private-by-default workspace authorization boundary is
+implemented locally as of 2026-09-04, but migration 008, deployment, backfill
+reconciliation, and two-account live acceptance remain required before the
+multi-user blocker is closed.
 
 ## Purpose and decision
 
@@ -65,8 +65,9 @@ the root Python package. Vercel uses `apps/web` as its project root.
 - Unexpected HTTP failures are logged server-side and returned inside the CORS
   boundary as a sanitized `internal_error` envelope. Browser clients therefore
   do not misreport an escaped backend exception as a CORS configuration error.
-- Every other `/api/v1` route requires a Supabase access token. In this private
-  prototype, any valid project user is a maintainer; role tiers are deferred.
+- Every other `/api/v1` route requires a Supabase access token and resolves the
+  verified user to exactly one active default workspace membership on every
+  request. Authentication alone never grants planning-data access.
 - `routes.py` exposes the identity, location, Overview, imports, master-version
   activation, planning-run, risks, recommendations, and CSV/JSON contracts.
 - `GET /api/v1/locations/{location_id}/view` composes the existing locations,
@@ -102,8 +103,44 @@ the root Python package. Vercel uses `apps/web` as its project root.
 - `repository.py` keeps PostgREST persistence behind a protocol so Snowflake
   can later replace result/input storage without changing the browser or engine.
 
+### User, workspace, and location authorization
+
+Each approved-domain account receives a new empty private workspace. Existing
+planning records are backfilled from their immutable `created_by` audit actor;
+the migration aborts rather than guessing if any master version, source import,
+or run cannot be attributed. A user's private workspace may contain multiple
+locations, while access to another workspace requires an explicit membership.
+
+The minimal role contract is:
+
+- `owner` and `admin`: administer workspace-wide master/planning inputs and all
+  locations in that workspace;
+- `planner`: read and calculate only explicitly assigned locations; and
+- `viewer`: read only explicitly assigned locations.
+
+All 18 planning relations carry a required `workspace_id`. Same-workspace
+foreign keys cover root and child relationships; database triggers also reject
+audit actors without the required membership, stock/PO rows that do not match
+their import location, and result rows that do not match their run location.
+The API additionally requires the audit actor to equal the authenticated user.
+Active-master uniqueness is workspace/environment-local.
+
+FastAPI constructs a new `PlanningBackend` around a `WorkspaceScopedStore` for
+each authenticated request. That store injects the resolved workspace into
+every read and write, applies location grants, rejects explicit cross-workspace
+filters/payloads, and namespaces deterministic run/result IDs by workspace.
+Direct import/run lookups and CSV/JSON exports therefore inherit the same
+unavoidable scope. Browser table access remains denied; the server secret is
+still the only PostgREST authority.
+
+The browser cache is both cleared and internally namespaced when the Supabase
+user changes. Under the current exactly-one-default-workspace contract, the
+verified user ID is the browser-visible workspace ownership key. Future
+workspace switching must extend this key with the selected workspace before a
+switching UI is introduced.
+
 The readiness endpoint returning `degraded/not_configured` is expected until
-all five migrations are applied and server environment variables are
+all eight migrations are applied and server environment variables are
 configured. Render process health remains healthy during that setup, while
 authenticated domain actions fail closed.
 
@@ -207,11 +244,21 @@ to `planning_netting_results` plus the service-role-only
 the dated demand and receipt events; neither SQL nor React reconstructs them.
 The v3 schema leaves old v2 rows readable with `null` coverage fields.
 
-The maintainer reports migrations 001–004 applied manually through the
-Supabase SQL Editor and has already verified Auth plus the earlier connected
-workflow. Migration 005 must now be pasted and run there as one additional
-forward migration before the next v3 planning run. Never rewrite the already-
-applied files.
+`202609040008_user_workspace_isolation.sql` adds private workspaces,
+memberships, optional per-location grants, required workspace discriminators,
+same-workspace constraints, write-validation triggers, and workspace-local
+master activation. It provisions existing and future Auth users independently;
+approved-domain self-service sign-up remains open and each new account starts
+with no copied planning data.
+
+Migrations 001–007 are already represented by the connected environment.
+Migration 008 is a forward-only change and must be applied without rewriting
+the older files. For the safest rollout, deploy the workspace-aware API first,
+which deliberately fails authenticated domain requests closed while the new
+authorization tables are missing; immediately apply migration 008, verify
+readiness/backfill counts, and only then reopen testing. Applying the database
+change while the old unscoped API remains live would leave the known exposure
+in place until that API is replaced.
 
 ## Upload and retention boundary
 
@@ -236,6 +283,11 @@ policy. Do not store raw files as Postgres binary columns or on Render's
 ephemeral local filesystem.
 
 ## Deferred work
+
+- Apply migration 008, reconcile every backfilled row to its expected private
+  workspace, deploy the scoped API/web build, and pass the two-account negative
+  matrix in `docs/scratchpads/user_data_isolation.md`. Until then, the live
+  environment must still be treated as cross-user unsafe.
 
 - Complete authenticated-browser acceptance for the implemented page-load
   tranches in `docs/plans/ui_performance_optimization_plan.md`. Direct read-

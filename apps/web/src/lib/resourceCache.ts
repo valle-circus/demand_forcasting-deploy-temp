@@ -43,9 +43,29 @@ interface LoadResourceOptions<T> {
 }
 
 const entries = new Map<string, CacheEntry>()
+let activeOwner = 'anonymous'
+
+function ownedKey(key: string): string {
+  return `${activeOwner}\u0000${key}`
+}
+
+/**
+ * Partition every in-memory resource by the authenticated account. The API's
+ * current contract resolves each account to exactly one default workspace, so
+ * the user ID is also the browser-visible workspace ownership boundary.
+ */
+export function setResourceCacheOwner(userId: string | null): void {
+  const nextOwner = userId ?? 'anonymous'
+  if (nextOwner === activeOwner) {
+    return
+  }
+  clearResourceCache()
+  activeOwner = nextOwner
+}
 
 function cacheEntry(key: string): CacheEntry {
-  const existing = entries.get(key)
+  const storageKey = ownedKey(key)
+  const existing = entries.get(storageKey)
   if (existing !== undefined) {
     return existing
   }
@@ -60,7 +80,7 @@ function cacheEntry(key: string): CacheEntry {
     revision: 0,
     listeners: new Set(),
   }
-  entries.set(key, created)
+  entries.set(storageKey, created)
   return created
 }
 
@@ -150,7 +170,7 @@ export function loadResource<T>({
 }
 
 export function invalidateResource(key: string): void {
-  const entry = entries.get(key)
+  const entry = entries.get(ownedKey(key))
   if (entry === undefined) {
     return
   }
@@ -164,9 +184,16 @@ export function invalidateResource(key: string): void {
 }
 
 export function invalidateResourcePrefix(prefix: string): void {
-  for (const key of entries.keys()) {
-    if (key.startsWith(prefix)) {
-      invalidateResource(key)
+  const ownedPrefix = ownedKey(prefix)
+  for (const [key, entry] of entries) {
+    if (key.startsWith(ownedPrefix)) {
+      entry.revision += 1
+      entry.invalidated = true
+      entry.error = null
+      entry.controller?.abort()
+      entry.controller = null
+      entry.inFlight = null
+      notify(entry)
     }
   }
 }

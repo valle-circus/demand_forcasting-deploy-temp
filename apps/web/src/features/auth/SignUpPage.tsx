@@ -16,8 +16,9 @@ const FIELD_CLASS =
   'h-10 w-full rounded-lg border border-input bg-card px-3 text-sm focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:outline-none'
 
 /**
- * Supabase's own default floor is six characters. Eight is required here
- * because every account this form creates is a full maintainer.
+ * Supabase's own default floor is six characters. Eight is required here for
+ * this internal application even though every account starts in an empty
+ * private workspace.
  */
 const MINIMUM_PASSWORD_LENGTH = 8
 

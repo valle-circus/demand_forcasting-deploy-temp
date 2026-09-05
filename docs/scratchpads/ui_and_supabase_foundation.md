@@ -31,6 +31,9 @@
 - [x] Build Data & settings and the first Location planning slice.
 - [x] Apply migration 004 and verify the v2 planning persistence/read journey.
 - [x] Finish the v2 Location presentation and Overview.
+- [ ] Resolve the critical cross-user data-isolation blocker documented in
+  `docs/scratchpads/user_data_isolation.md` before using real operational data
+  or inviting further testers.
 - [ ] Apply migration 005 and verify one fresh v3 coverage persistence/read
   journey, then have Claude render the coverage chart.
 - [ ] Add versioned master/menu editing after the existing workbook workflow is
@@ -82,9 +85,16 @@
 - 2026-08-28: Keep a small `supabase/seed.sql` with synthetic, proposal-labelled
   imports/master/run/risk rows so UI work has reproducible shapes before real
   uploads exist. Never seed those rows into production.
-- 2026-08-29: Treat any valid Supabase project user as a maintainer for the
-  private prototype. The browser uses Supabase only for Auth and sends the
-  access token to FastAPI; domain tables remain denied to browser roles.
+- 2026-08-29 (**superseded 2026-09-04**): The private-prototype shortcut treated
+  any valid Supabase project user as a maintainer. The browser uses Supabase
+  only for Auth and sends the access token to FastAPI; domain tables remain
+  denied to browser roles. A live two-account test proved that this authenticates
+  users but exposes one shared workspace, so it must not continue.
+- 2026-09-04: User data is private by default. Each user receives a private
+  workspace and may own multiple locations; access to another workspace or
+  location requires explicit membership. Global/shared data is admin-only and
+  must be intentional. See `docs/scratchpads/user_data_isolation.md` and master
+  backlog section 2B.
 - 2026-08-29: Use server-only PostgREST behind `CanonicalStore`. Migration 003
   provides narrow atomic functions for imports, activation, and full planning
   result persistence plus immutable finalized-source/active-master guards.
@@ -171,8 +181,9 @@
 
 ## Open questions / unknowns
 
-- Whether production should replace prototype admin-created email/password
-  accounts and the any-authenticated-user maintainer policy with SSO/role tiers.
+- Which internal Auth method should follow the mandatory removal of the
+  any-authenticated-user maintainer policy? Auth method selection cannot delay
+  private workspace/location enforcement.
 - What retention period, if any, is approved for uploaded source files?
 - Will production master data ultimately remain in Supabase or move to
   Snowflake with the results?

@@ -15,6 +15,12 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from . import __version__
 from .auth import IdentityVerifier, SupabaseIdentityVerifier
+from .authorization import (
+    AccessResolver,
+    AccessScope,
+    SupabaseAccessResolver,
+    WorkspaceScopedStore,
+)
 from .config import Settings, get_settings
 from .errors import ApiError
 from .http_client import SupabaseHttpClient
@@ -126,6 +132,7 @@ def create_app(
     store: CanonicalStore | None = None,
     backend: Backend | None = None,
     identity_verifier: IdentityVerifier | None = None,
+    access_resolver: AccessResolver | None = None,
     supabase_http_client: SupabaseHttpClient | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
@@ -140,7 +147,15 @@ def create_app(
         resolved_settings,
         resolved_store,
     )
-    resolved_backend = backend or PlanningBackend(resolved_store, resolved_settings)
+    resolved_access_resolver = access_resolver or SupabaseAccessResolver(resolved_store)
+
+    def backend_for_scope(scope: AccessScope) -> Backend:
+        if backend is not None:
+            return backend
+        return PlanningBackend(
+            WorkspaceScopedStore(resolved_store, scope),
+            resolved_settings,
+        )
     resolved_verifier = identity_verifier or SupabaseIdentityVerifier(
         resolved_settings,
         http_client=resolved_http_client,
@@ -238,8 +253,9 @@ def create_app(
 
     application.include_router(
         create_domain_router(
-            backend=resolved_backend,
+            backend_factory=backend_for_scope,
             verifier=resolved_verifier,
+            access_resolver=resolved_access_resolver,
             settings=resolved_settings,
         )
     )

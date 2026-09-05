@@ -1,7 +1,20 @@
 -- Synthetic UI-only data. Do not use these rows for planning or supplier orders.
 -- Supabase runs this file after migrations during local `supabase db reset`.
 
+insert into public.workspaces (
+    id,
+    workspace_name,
+    workspace_kind
+)
+values (
+    '00000000-0000-0000-0000-000000000900',
+    'Synthetic seed workspace',
+    'seed'
+)
+on conflict (id) do nothing;
+
 insert into public.source_imports (
+    workspace_id,
     id,
     dataset_type,
     location_id,
@@ -24,10 +37,11 @@ insert into public.source_imports (
 )
 values
     (
+        '00000000-0000-0000-0000-000000000900',
         '00000000-0000-0000-0000-000000000101',
         'master_data',
         null,
-        'accepted_with_warnings',
+        'validating',
         'demo-master-v1',
         null,
         null,
@@ -45,10 +59,11 @@ values
         '2026-08-28 07:40:00+00'
     ),
     (
+        '00000000-0000-0000-0000-000000000900',
         '00000000-0000-0000-0000-000000000102',
         'planning_input',
         null,
-        'accepted',
+        'validating',
         'demo-planning-v1',
         null,
         '2026-08-31',
@@ -66,10 +81,11 @@ values
         '2026-08-28 07:45:00+00'
     ),
     (
+        '00000000-0000-0000-0000-000000000900',
         '00000000-0000-0000-0000-000000000103',
         'stock',
         'LOC_DEMO_001',
-        'accepted',
+        'validating',
         'demo-stock-v1',
         '2026-08-28 06:00:00+00',
         null,
@@ -87,10 +103,11 @@ values
         '2026-08-28 07:50:00+00'
     ),
     (
+        '00000000-0000-0000-0000-000000000900',
         '00000000-0000-0000-0000-000000000104',
         'purchase_orders',
         'LOC_DEMO_001',
-        'accepted',
+        'validating',
         'demo-po-v1',
         '2026-08-27 12:00:00+00',
         '2026-08-27',
@@ -110,6 +127,7 @@ values
 on conflict (id) do nothing;
 
 insert into public.master_data_versions (
+    workspace_id,
     id,
     environment,
     version_label,
@@ -121,19 +139,21 @@ insert into public.master_data_versions (
     source_import_id
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000201',
     'prototype',
     'demo-master-v1',
-    'active',
+    'draft',
     'demo-config-hash',
     'Synthetic UI seed; proposal values only.',
     '2026-08-28 07:40:00+00',
-    '2026-08-28 07:41:00+00',
+    null,
     '00000000-0000-0000-0000-000000000101'
 )
 on conflict (id) do nothing;
 
 insert into public.locations (
+    workspace_id,
     version_id,
     location_id,
     location_name,
@@ -143,6 +163,7 @@ insert into public.locations (
     source_note
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000201',
     'LOC_DEMO_001',
     'Demo Kitchen',
@@ -154,6 +175,7 @@ values (
 on conflict (version_id, location_id) do nothing;
 
 insert into public.items (
+    workspace_id,
     version_id,
     item_id,
     item_name,
@@ -167,6 +189,7 @@ insert into public.items (
     source_note
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000201',
     'ITEM_DEMO_PASTA',
     'Demo Pasta',
@@ -182,6 +205,7 @@ values (
 on conflict (version_id, item_id) do nothing;
 
 insert into public.item_policy_overrides (
+    workspace_id,
     version_id,
     item_id,
     item_type,
@@ -204,6 +228,7 @@ insert into public.item_policy_overrides (
     source_note
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000201',
     'ITEM_DEMO_PASTA',
     'INGREDIENT',
@@ -228,6 +253,7 @@ values (
 on conflict (version_id, item_id) do nothing;
 
 insert into public.delivery_rules (
+    workspace_id,
     version_id,
     delivery_rule_id,
     location_id,
@@ -246,6 +272,7 @@ insert into public.delivery_rules (
     source_note
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000201',
     'RULE_DEMO_RT',
     'LOC_DEMO_001',
@@ -266,6 +293,7 @@ values (
 on conflict (version_id, delivery_rule_id) do nothing;
 
 insert into public.forecast_daily (
+    workspace_id,
     import_id,
     location_id,
     service_date,
@@ -277,6 +305,7 @@ insert into public.forecast_daily (
     source_note
 )
 select
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000102',
     'LOC_DEMO_001',
     day::date,
@@ -291,6 +320,7 @@ where extract(isodow from day) between 1 and 6
 on conflict (import_id, location_id, service_date, dish_id) do nothing;
 
 insert into public.menu_calendar (
+    workspace_id,
     import_id,
     location_id,
     service_date,
@@ -302,6 +332,7 @@ insert into public.menu_calendar (
     source_note
 )
 select
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000102',
     'LOC_DEMO_001',
     day::date,
@@ -316,6 +347,7 @@ where extract(isodow from day) between 1 and 6
 on conflict (import_id, location_id, service_date, dish_id) do nothing;
 
 insert into public.bom_lines (
+    workspace_id,
     import_id,
     bom_line_id,
     dish_id,
@@ -333,6 +365,7 @@ insert into public.bom_lines (
     source_note
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000102',
     'BOM_DEMO_001',
     'DISH_DEMO_PASTA',
@@ -352,6 +385,7 @@ values (
 on conflict (import_id, bom_line_id) do nothing;
 
 insert into public.inventory_snapshots (
+    workspace_id,
     import_id,
     location_id,
     item_id,
@@ -361,6 +395,7 @@ insert into public.inventory_snapshots (
     provenance
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000103',
     'LOC_DEMO_001',
     'ITEM_DEMO_PASTA',
@@ -372,6 +407,7 @@ values (
 on conflict (import_id, location_id, item_id) do nothing;
 
 insert into public.purchase_order_lines (
+    workspace_id,
     import_id,
     po_line_id,
     po_id,
@@ -393,6 +429,7 @@ insert into public.purchase_order_lines (
     provenance
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     '00000000-0000-0000-0000-000000000104',
     'PO-DEMO-001-L1',
     'PO-DEMO-001',
@@ -416,6 +453,7 @@ values (
 on conflict (import_id, po_line_id) do nothing;
 
 insert into public.planning_runs (
+    workspace_id,
     run_id,
     schema_version,
     policy_profile,
@@ -433,6 +471,7 @@ insert into public.planning_runs (
     failure_summary
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     'demo-run-20260828',
     1,
     'improved_file/v1',
@@ -452,6 +491,7 @@ values (
 on conflict (run_id) do nothing;
 
 insert into public.planning_run_inputs (
+    workspace_id,
     run_id,
     dataset,
     source_version,
@@ -461,18 +501,19 @@ insert into public.planning_run_inputs (
     source_import_id
 )
 values
-    ('demo-run-20260828', 'forecast_daily', 'demo-planning-v1', 'demo-planning-content-hash', 'manual', 30, '00000000-0000-0000-0000-000000000102'),
-    ('demo-run-20260828', 'menu_calendar', 'demo-planning-v1', 'demo-planning-content-hash', 'manual', 30, '00000000-0000-0000-0000-000000000102'),
-    ('demo-run-20260828', 'bom_lines', 'demo-planning-v1', 'demo-planning-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000102'),
-    ('demo-run-20260828', 'items', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101'),
-    ('demo-run-20260828', 'inventory_snapshots', 'demo-stock-v1', 'demo-stock-content-hash', 'observed', 1, '00000000-0000-0000-0000-000000000103'),
-    ('demo-run-20260828', 'purchase_orders', 'demo-po-v1', 'demo-po-content-hash', 'observed', 1, '00000000-0000-0000-0000-000000000104'),
-    ('demo-run-20260828', 'locations', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101'),
-    ('demo-run-20260828', 'item_policies', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101'),
-    ('demo-run-20260828', 'delivery_rules', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101')
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'forecast_daily', 'demo-planning-v1', 'demo-planning-content-hash', 'manual', 30, '00000000-0000-0000-0000-000000000102'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'menu_calendar', 'demo-planning-v1', 'demo-planning-content-hash', 'manual', 30, '00000000-0000-0000-0000-000000000102'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'bom_lines', 'demo-planning-v1', 'demo-planning-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000102'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'items', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'inventory_snapshots', 'demo-stock-v1', 'demo-stock-content-hash', 'observed', 1, '00000000-0000-0000-0000-000000000103'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'purchase_orders', 'demo-po-v1', 'demo-po-content-hash', 'observed', 1, '00000000-0000-0000-0000-000000000104'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'locations', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'item_policies', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101'),
+    ('00000000-0000-0000-0000-000000000900', 'demo-run-20260828', 'delivery_rules', 'demo-master-v1', 'demo-master-content-hash', 'manual', 1, '00000000-0000-0000-0000-000000000101')
 on conflict (run_id, dataset) do nothing;
 
 insert into public.planning_lines (
+    workspace_id,
     planning_line_id,
     run_id,
     location_id,
@@ -504,6 +545,7 @@ insert into public.planning_lines (
     data_status
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     'LINE-DEMO-001',
     'demo-run-20260828',
     'LOC_DEMO_001',
@@ -537,6 +579,7 @@ values (
 on conflict (planning_line_id) do nothing;
 
 insert into public.planning_recommendations (
+    workspace_id,
     recommendation_id,
     planning_line_id,
     run_id,
@@ -548,6 +591,7 @@ insert into public.planning_recommendations (
     proposed_qty_units
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     'REC-DEMO-001',
     'LINE-DEMO-001',
     'demo-run-20260828',
@@ -561,6 +605,7 @@ values (
 on conflict (recommendation_id) do nothing;
 
 insert into public.planning_netting_results (
+    workspace_id,
     run_id,
     location_id,
     item_id,
@@ -580,6 +625,7 @@ insert into public.planning_netting_results (
     unavoidable_pre_candidate_stockout_g
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     'demo-run-20260828',
     'LOC_DEMO_001',
     'ITEM_DEMO_PASTA',
@@ -634,6 +680,7 @@ with daily_flows as (
     from daily_flows
 )
 insert into public.planning_projection_days (
+    workspace_id,
     run_id,
     location_id,
     item_id,
@@ -646,6 +693,7 @@ insert into public.planning_projection_days (
     stockout_g
 )
 select
+    '00000000-0000-0000-0000-000000000900',
     'demo-run-20260828',
     'LOC_DEMO_001',
     'ITEM_DEMO_PASTA',
@@ -660,6 +708,7 @@ from projected
 on conflict (run_id, location_id, item_id, projection_date) do nothing;
 
 insert into public.planning_exceptions (
+    workspace_id,
     exception_id,
     run_id,
     planning_line_id,
@@ -671,6 +720,7 @@ insert into public.planning_exceptions (
     remedy
 )
 values (
+    '00000000-0000-0000-0000-000000000900',
     'EXC-DEMO-001',
     'demo-run-20260828',
     'LINE-DEMO-001',
@@ -682,3 +732,25 @@ values (
     'Refresh the source data and review an earlier feasible receipt.'
 )
 on conflict (exception_id) do nothing;
+
+-- Finalize only after immutable child rows have been loaded. The transaction
+-- helpers enforce the same ordering for real uploads.
+update public.source_imports
+set status = case
+    when id = '00000000-0000-0000-0000-000000000101'
+        then 'accepted_with_warnings'
+    else 'accepted'
+end
+where workspace_id = '00000000-0000-0000-0000-000000000900'
+  and id in (
+      '00000000-0000-0000-0000-000000000101',
+      '00000000-0000-0000-0000-000000000102',
+      '00000000-0000-0000-0000-000000000103',
+      '00000000-0000-0000-0000-000000000104'
+  );
+
+update public.master_data_versions
+set status = 'active',
+    activated_at = '2026-08-28 07:41:00+00'
+where workspace_id = '00000000-0000-0000-0000-000000000900'
+  and id = '00000000-0000-0000-0000-000000000201';
