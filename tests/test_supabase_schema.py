@@ -212,6 +212,47 @@ class SupabaseSchemaTests(unittest.TestCase):
         self.assertIn("actor cannot manage master data in this workspace", schema)
         self.assertIn("and version.status = 'active'", schema)
 
+    def test_workspace_backfill_lifts_and_restores_the_immutability_guards(self) -> None:
+        """
+        Migration 003 makes finalized imports and active-master children
+        immutable, and those triggers fire on migration 008's `workspace_id`
+        backfill even though it changes no planning value. Without a paired
+        disable/enable the migration aborts against any database that already
+        holds accepted imports, which no in-process test would notice because
+        the fake stores have no triggers.
+        """
+        migration = " ".join(
+            Path("supabase/migrations/202609040008_user_workspace_isolation.sql")
+            .read_text(encoding="utf-8")
+            .lower()
+            .split()
+        )
+        guarded = (
+            "'source_imports', 'locations', 'items', 'item_policy_overrides', "
+            "'delivery_rules', 'forecast_daily', 'menu_calendar', 'bom_lines', "
+            "'inventory_snapshots', 'purchase_order_lines'"
+        )
+        disable = "'alter table public.%i disable trigger user'"
+        enable = "'alter table public.%i enable trigger user'"
+
+        self.assertEqual(migration.count(guarded), 2)
+        for statement in (disable, enable):
+            self.assertEqual(migration.count(statement), 1, statement)
+        self.assertLess(
+            migration.index(disable),
+            migration.index("update public.master_data_versions target"),
+        )
+        self.assertLess(
+            migration.index("update public.planning_projection_days child"),
+            migration.index(enable),
+        )
+        self.assertLess(
+            migration.index(enable),
+            migration.index(
+                "alter table public.master_data_versions alter column workspace_id set not null;"
+            ),
+        )
+
     def test_daily_projection_matches_engine_output_contract(self) -> None:
         columns = _table_columns(_schema_sql())
         self.assertEqual(

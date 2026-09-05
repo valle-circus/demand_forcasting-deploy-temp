@@ -173,6 +173,30 @@ alter table public.planning_exceptions add column workspace_id uuid;
 alter table public.planning_netting_results add column workspace_id uuid;
 alter table public.planning_projection_days add column workspace_id uuid;
 
+-- Migration 003 makes finalized imports and active master versions immutable,
+-- and those guards fire on this backfill even though it only stamps the new
+-- workspace discriminator and changes no planning value, actor or timestamp.
+-- Lift them for the backfill and restore them inside the same transaction, so
+-- a failed migration cannot leave the immutability contract switched off.
+-- `disable trigger user` leaves the internal foreign-key triggers in force.
+do $$
+declare
+    guarded_table text;
+begin
+    foreach guarded_table in array array[
+        'source_imports', 'locations', 'items', 'item_policy_overrides',
+        'delivery_rules', 'forecast_daily', 'menu_calendar', 'bom_lines',
+        'inventory_snapshots', 'purchase_order_lines'
+    ]
+    loop
+        execute format(
+            'alter table public.%I disable trigger user',
+            guarded_table
+        );
+    end loop;
+end
+$$;
+
 update public.master_data_versions target
 set workspace_id = membership.workspace_id
 from public.workspace_memberships membership
@@ -268,6 +292,25 @@ update public.planning_projection_days child
 set workspace_id = parent.workspace_id
 from public.planning_runs parent
 where parent.run_id = child.run_id;
+
+-- Restore the migration-003 immutability guards before anything else runs.
+do $$
+declare
+    guarded_table text;
+begin
+    foreach guarded_table in array array[
+        'source_imports', 'locations', 'items', 'item_policy_overrides',
+        'delivery_rules', 'forecast_daily', 'menu_calendar', 'bom_lines',
+        'inventory_snapshots', 'purchase_order_lines'
+    ]
+    loop
+        execute format(
+            'alter table public.%I enable trigger user',
+            guarded_table
+        );
+    end loop;
+end
+$$;
 
 alter table public.master_data_versions alter column workspace_id set not null;
 alter table public.locations alter column workspace_id set not null;

@@ -110,6 +110,39 @@ chain mismatches, and zero stock/PO or planning-result location mismatches. No
 live row was changed. This makes the current backfill eligible to run, but is
 not a substitute for post-migration reconciliation.
 
+## 2026-09-05 migration defect found and fixed
+
+The first real application of migration 008 aborted with
+`P0001: Finalized source imports are immutable; upload a new version.` from
+`reject_accepted_source_import_mutation_v1`. The migration-003 immutability
+triggers fire on the `workspace_id` backfill even though it stamps only the new
+discriminator and changes no planning value, actor or timestamp. Ten triggers
+on `source_imports`, `locations`, `items`, `item_policy_overrides`,
+`delivery_rules`, `forecast_daily`, `menu_calendar`, `bom_lines`,
+`inventory_snapshots` and `purchase_order_lines` block it; the remaining
+relations have no such guard. In-process tests could not catch this because
+their fake stores have no triggers.
+
+Migration 008 now lifts exactly those guards with `disable trigger user`
+immediately before the backfill and restores them with `enable trigger user`
+immediately after, inside the same transaction, so a failed migration cannot
+leave the immutability contract switched off. Internal foreign-key triggers
+stay in force throughout.
+`tests/test_supabase_schema.py` asserts the paired statements and their
+ordering.
+
+The corrected migration was then dry-run in full against the development
+project inside an explicit transaction ending in `rollback`. It reached the end
+of the schema section and produced three workspaces, three owner memberships,
+and all ten existing source imports in exactly one workspace, leaving the two
+colleague workspaces empty. The rollback left no new table, no `workspace_id`
+column and no disabled trigger behind.
+
+Note for whoever applies it: the error
+`42P01: relation "public.master_data_versions" does not exist` means the script
+ran against a database that does not have migrations 001-007, not a defect in
+008. Confirm the target project matches `SUPABASE_URL` in `.env` first.
+
 Approved-domain self-service sign-up intentionally remains available: after
 migration 008, a successful sign-up creates a new empty private workspace.
 Invitation-only admission would be a separate policy decision, not a necessary
